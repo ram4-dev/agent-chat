@@ -18,6 +18,20 @@ Controlling artifacts: `03-prd.md` revision 2 (approved), `04-tdd.md` System Des
 - A slice is complete only when its automated checks pass and its manual check (if any) was
   observed. Otherwise it stays open with the blocker recorded.
 
+## Slice status
+
+| Slice | Status | Commit | Evidence |
+|---|---|---|---|
+| S1 — Walking skeleton and test harness | done | `0b9eeb5` | lint, typecheck, 36 unit, 8 contract, 31 integration, build, 3 Playwright tests all pass; migration ledger and constraint tests observed green |
+| S2 — Human identity, private groups, invitations | pending | — | — |
+| S3 — Realtime human chat | pending | — | — |
+| S4 — OAuth connection, agent identity, consent | pending | — | — |
+| S5 — MCP tool surface and idempotent sending | pending | — | — |
+| S6 — Durable inbox lifecycle | pending | — | — |
+| S7 — Agent receiver WebSocket and live delivery | pending | — | — |
+| S8 — Revocation and activity record | pending | — | — |
+| S9 — Full-loop verification and documentation | pending | — | — |
+
 ## Slice plan
 
 ### S1 — Walking skeleton and test harness
