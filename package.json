@@ -1,0 +1,30 @@
+{
+  "name": "agent-chat",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.10.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "pnpm --filter @agent-chat/contracts build && pnpm -r --if-present typecheck && tsc -p tsconfig.json --noEmit",
+    "build": "pnpm -r build",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:contracts": "vitest run --project contracts",
+    "test:e2e": "playwright test",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test:unit && pnpm test:contracts && pnpm build && pnpm test:integration && pnpm test:e2e"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.63.0",
+    "@types/node": "^26.6.5",
+    "drizzle-orm": "^0.45.4",
+    "eslint": "^10.12.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^5.0.4"
+  }
+}
