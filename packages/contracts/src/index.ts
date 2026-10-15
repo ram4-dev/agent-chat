@@ -11,6 +11,14 @@ export {
   type ParseOk,
   type Parsed,
 } from './domain/auth.js';
+export {
+  GROUP_ROLES,
+  GROUPS_LIMITS,
+  MEMBER_KINDS,
+  type GroupRole,
+  type GroupsLimits,
+  type MemberKind,
+} from './domain/groups.js';
 export { DOMAIN_ERROR_CODES, type DomainErrorCode } from './domain/errors.js';
 export { LIMITS, type Limits } from './domain/limits.js';
 export {
@@ -35,3 +43,22 @@ export {
   type PublicUser,
   type RegisterRequest,
 } from './http/auth.js';
+export {
+  GROUP_PATHS,
+  parseAcceptInvitationRequest,
+  parseCreateGroupRequest,
+  parseGroupDetailResponse,
+  parseGroupListResponse,
+  parseMemberKind,
+  type AcceptedInvitationResponse,
+  type AgentMember,
+  type CreateGroupResponse,
+  type GroupDetail,
+  type GroupDetailResponse,
+  type GroupListResponse,
+  type GroupSummary,
+  type HumanMember,
+  type InvitationResponse,
+  type Member,
+  type OkResponse,
+} from './http/groups.js';

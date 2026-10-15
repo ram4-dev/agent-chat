@@ -3,6 +3,7 @@ import type { RuntimeConfig } from '../../config/index.js';
 import type { DatabaseHandle } from '../../persistence/index.js';
 import { createServices, type ApplicationServices } from '../../services.js';
 import { registerAuthRoutes } from './auth.js';
+import { registerGroupRoutes } from './groups.js';
 import { registerErrorHandler, registerNotFoundHandler } from './error-envelope.js';
 import { registerLivenessRoute } from './liveness.js';
 import { registerOriginGuard } from './origin-guard.js';
@@ -30,6 +31,7 @@ export function registerHttpAdapter(
     auth: services.auth,
     secureCookies: config.nodeEnv === 'production',
   });
+  registerGroupRoutes(app, { auth: services.auth, groups: services.groups });
   registerLivenessRoute(app, database);
   registerWebApp(app, { webDistDir: config.webDistDir });
   registerErrorHandler(app);
