@@ -1,22 +1,51 @@
 import { useEffect, useState } from 'react';
 import { loadLiveness, type LivenessState } from '../shared/liveness';
+import { AuthPanel } from '../features/auth/AuthPanel';
+import {
+  loadSession,
+  loginAccount,
+  logout,
+  registerAccount,
+  type Credentials,
+  type Registration,
+  type SessionState,
+} from '../features/auth/session';
 
 /**
  * Presentational shell. It renders exactly what the container knows: no data
  * fetching, no side effects.
  */
-export function AppShell({ liveness }: { liveness: LivenessState }) {
+export function AppShell({
+  liveness,
+  session,
+  onRegister,
+  onLogin,
+  onLogout,
+}: {
+  liveness: LivenessState;
+  session: SessionState;
+  onRegister(input: Registration): void;
+  onLogin(input: Credentials): void;
+  onLogout(): void;
+}) {
   return (
     <main>
       <h1>Agent Chat</h1>
       <p>{describeLiveness(liveness)}</p>
+      <AuthPanel
+        session={session}
+        onRegister={onRegister}
+        onLogin={onLogin}
+        onLogout={onLogout}
+      />
     </main>
   );
 }
 
-/** Container. Loads the liveness state once and hands it to the shell. */
+/** Container. Loads both server states once and owns every request. */
 export function App() {
   const [liveness, setLiveness] = useState<LivenessState>({ status: 'loading' });
+  const [session, setSession] = useState<SessionState>({ status: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
@@ -26,13 +55,32 @@ export function App() {
         setLiveness(state);
       }
     });
+    void loadSession().then((state) => {
+      if (!cancelled) {
+        setSession(state);
+      }
+    });
 
     return () => {
       cancelled = true;
     };
   }, []);
 
-  return <AppShell liveness={liveness} />;
+  return (
+    <AppShell
+      liveness={liveness}
+      session={session}
+      onRegister={(input) => {
+        void registerAccount(input).then(setSession);
+      }}
+      onLogin={(input) => {
+        void loginAccount(input).then(setSession);
+      }}
+      onLogout={() => {
+        void logout().then(() => setSession({ status: 'anonymous' }));
+      }}
+    />
+  );
 }
 
 export function describeLiveness(liveness: LivenessState): string {

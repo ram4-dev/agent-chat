@@ -24,3 +24,6 @@ export async function createApp({
 
   return app;
 }
+
+/** The instance type the factory returns, for adapters and tests that hold one. */
+export type { FastifyInstance };

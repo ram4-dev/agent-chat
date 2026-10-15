@@ -1,0 +1,158 @@
+import {
+  AUTH_PATHS,
+  parseAuthResponse,
+  parseCurrentUserResponse,
+  type PublicUser,
+} from '@agent-chat/contracts';
+
+/** Minimal structural view of a fetch response, so callers can inject any client. */
+export interface JsonFetchResponse {
+  readonly ok: boolean;
+  readonly status: number;
+  json(): Promise<unknown>;
+}
+
+export interface JsonFetchInit {
+  method?: string;
+  body?: string;
+  headers?: Record<string, string>;
+}
+
+export type JsonFetch = (
+  input: string,
+  init?: JsonFetchInit,
+) => Promise<JsonFetchResponse>;
+
+export type SessionState =
+  | { status: 'loading' }
+  | { status: 'anonymous' }
+  | { status: 'authenticated'; user: PublicUser }
+  | { status: 'rejected'; code: string }
+  | { status: 'error'; httpStatus: number };
+
+export interface Credentials {
+  email: string;
+  password: string;
+}
+
+export interface Registration extends Credentials {
+  displayName: string;
+}
+
+const JSON_HEADERS = { 'content-type': 'application/json' };
+
+/**
+ * Reads the current session.
+ *
+ * The session cookie is HttpOnly, so the browser cannot inspect it: the only
+ * way to know who is signed in is to ask the server. A 401 is an ordinary
+ * answer, not a failure, while any other non-OK status is reported as an error
+ * so the shell does not silently claim the visitor is anonymous.
+ */
+export async function loadSession(fetchImpl: JsonFetch = fetch): Promise<SessionState> {
+  try {
+    const response = await fetchImpl(AUTH_PATHS.me);
+
+    if (response.status === 401) {
+      return { status: 'anonymous' };
+    }
+    if (!response.ok) {
+      return { status: 'error', httpStatus: response.status };
+    }
+
+    const parsed = parseCurrentUserResponse(await response.json());
+    return parsed.ok
+      ? { status: 'authenticated', user: parsed.value.user }
+      : { status: 'error', httpStatus: response.status };
+  } catch {
+    return { status: 'error', httpStatus: 0 };
+  }
+}
+
+/** Registers an account and a session in one call. */
+export function registerAccount(
+  input: Registration,
+  fetchImpl: JsonFetch = fetch,
+): Promise<SessionState> {
+  return postCredentials(AUTH_PATHS.register, input, fetchImpl);
+}
+
+/** Starts a session for an existing account. */
+export function loginAccount(
+  input: Credentials,
+  fetchImpl: JsonFetch = fetch,
+): Promise<SessionState> {
+  return postCredentials(AUTH_PATHS.login, input, fetchImpl);
+}
+
+/**
+ * Ends the session.
+ *
+ * The result is ignored on purpose: logging out must appear to succeed even if
+ * the network failed, because the local state is the visitor's only concern and
+ * the cookie is cleared by a follow-up session read.
+ */
+export async function logout(fetchImpl: JsonFetch = fetch): Promise<void> {
+  try {
+    await fetchImpl(AUTH_PATHS.logout, { method: 'POST', headers: JSON_HEADERS });
+  } catch {
+    // Ignored by design.
+  }
+}
+
+async function postCredentials(
+  path: string,
+  input: Credentials | Registration,
+  fetchImpl: JsonFetch,
+): Promise<SessionState> {
+  try {
+    const response = await fetchImpl(path, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify(input),
+    });
+
+    if (!response.ok) {
+      return failureFrom(response, await response.json());
+    }
+
+    const parsed = parseAuthResponse(await response.json());
+    return parsed.ok
+      ? { status: 'authenticated', user: parsed.value.user }
+      : { status: 'error', httpStatus: response.status };
+  } catch {
+    return { status: 'error', httpStatus: 0 };
+  }
+}
+
+/**
+ * Keeps the server's stable code so the form can explain what happened without
+ * ever repeating a raw message from the response.
+ */
+function failureFrom(response: JsonFetchResponse, body: unknown): SessionState {
+  if (typeof body === 'object' && body !== null) {
+    const error = (body as { error?: { code?: unknown } }).error;
+    if (typeof error?.code === 'string') {
+      return { status: 'rejected', code: error.code };
+    }
+  }
+  return { status: 'error', httpStatus: response.status };
+}
+
+/** Short, human-readable explanation of a rejected attempt. */
+export function describeRejection(code: string): string {
+  switch (code) {
+    case 'conflict':
+      return 'That email address is already registered.';
+    case 'unauthenticated':
+      return 'Those credentials do not match an account.';
+    case 'invalid_input':
+      return 'Check the form: something is missing or too short.';
+    case 'forbidden':
+      return 'The request was refused. Reload the page and try again.';
+    case 'rate_limited':
+      return 'Too many attempts. Wait a moment and try again.';
+    default:
+      return 'The request could not be completed.';
+  }
+}
