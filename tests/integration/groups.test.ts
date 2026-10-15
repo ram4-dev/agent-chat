@@ -362,7 +362,7 @@ describe('group name validation', () => {
     [{ name: '   ' }, 'a blank name'],
     [{ name: 'x'.repeat(81) }, 'a name beyond the shared limit'],
     [{}, 'a missing name'],
-  ])('rejects %j (%s) without creating a group', async (payload) => {
+  ])('rejects %j (%s) without creating a group', async (payload, _label) => {
     const harness = await startHarness();
     const ada = await signUp(harness, 'ada@example.com', 'Ada');
 

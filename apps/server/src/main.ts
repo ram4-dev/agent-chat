@@ -18,10 +18,21 @@ async function main(): Promise<void> {
     path: config.databasePath,
     busyTimeoutMs: config.busyTimeoutMs,
   });
+
+  // Migrations run before the application is composed, not merely before it
+  // listens: repositories prepare their statements while wiring, so a missing
+  // table has to be impossible by then.
+  let migrations;
+  try {
+    migrations = migrateFromDirectory(database.sqlite, config.migrationsDir);
+  } catch (error) {
+    database.close();
+    throw error;
+  }
+
   const app = await createApp({ config, database });
 
   try {
-    const migrations = migrateFromDirectory(database.sqlite, config.migrationsDir);
     app.log.info(
       { applied: migrations.applied, skipped: migrations.skipped },
       'database migrations resolved',

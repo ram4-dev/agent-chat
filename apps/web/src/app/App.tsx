@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { loadLiveness, type LivenessState } from '../shared/liveness';
 import { AuthPanel } from '../features/auth/AuthPanel';
 import {
@@ -10,6 +10,18 @@ import {
   type Registration,
   type SessionState,
 } from '../features/auth/session';
+import { GroupPanel } from '../features/groups/GroupPanel';
+import {
+  acceptInvitation,
+  createGroup,
+  createInvitation,
+  loadGroupDetail,
+  loadGroups,
+  removeMember,
+  type GroupDetailState,
+  type GroupsState,
+  type InvitationState,
+} from '../features/groups/transport';
 
 /**
  * Presentational shell. It renders exactly what the container knows: no data
@@ -18,15 +30,31 @@ import {
 export function AppShell({
   liveness,
   session,
+  groups,
+  detail,
+  invitation,
   onRegister,
   onLogin,
   onLogout,
+  onCreateGroup,
+  onOpenGroup,
+  onInvite,
+  onAcceptInvitation,
+  onRemoveMember,
 }: {
   liveness: LivenessState;
   session: SessionState;
+  groups: GroupsState;
+  detail: GroupDetailState;
+  invitation: InvitationState;
   onRegister(input: Registration): void;
   onLogin(input: Credentials): void;
   onLogout(): void;
+  onCreateGroup(name: string): void;
+  onOpenGroup(groupId: string): void;
+  onInvite(groupId: string): void;
+  onAcceptInvitation(token: string): void;
+  onRemoveMember(groupId: string, memberId: string): void;
 }) {
   return (
     <main>
@@ -38,14 +66,39 @@ export function AppShell({
         onLogin={onLogin}
         onLogout={onLogout}
       />
+      {session.status === 'authenticated' && (
+        <GroupPanel
+          groups={groups}
+          detail={detail}
+          invitation={invitation}
+          onCreateGroup={onCreateGroup}
+          onOpenGroup={onOpenGroup}
+          onInvite={onInvite}
+          onAcceptInvitation={onAcceptInvitation}
+          onRemoveMember={onRemoveMember}
+        />
+      )}
     </main>
   );
 }
 
-/** Container. Loads both server states once and owns every request. */
+/**
+ * Container.
+ *
+ * It owns every request and every piece of server state. Groups are reloaded
+ * whenever the session becomes authenticated, so a signed-out visitor never
+ * sees a stale membership list.
+ */
 export function App() {
   const [liveness, setLiveness] = useState<LivenessState>({ status: 'loading' });
   const [session, setSession] = useState<SessionState>({ status: 'loading' });
+  const [groups, setGroups] = useState<GroupsState>({ status: 'loading' });
+  const [detail, setDetail] = useState<GroupDetailState>({ status: 'loading' });
+  const [invitation, setInvitation] = useState<InvitationState>({ status: 'idle' });
+
+  const refreshGroups = useCallback(async () => {
+    setGroups(await loadGroups());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,10 +119,24 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (session.status !== 'authenticated') {
+      setGroups({ status: 'loading' });
+      setDetail({ status: 'loading' });
+      setInvitation({ status: 'idle' });
+      return;
+    }
+
+    void loadGroups().then(setGroups);
+  }, [session.status]);
+
   return (
     <AppShell
       liveness={liveness}
       session={session}
+      groups={groups}
+      detail={detail}
+      invitation={invitation}
       onRegister={(input) => {
         void registerAccount(input).then(setSession);
       }}
@@ -78,6 +145,25 @@ export function App() {
       }}
       onLogout={() => {
         void logout().then(() => setSession({ status: 'anonymous' }));
+      }}
+      onCreateGroup={(name) => {
+        void createGroup(name).then(refreshGroups);
+      }}
+      onOpenGroup={(groupId) => {
+        setInvitation({ status: 'idle' });
+        setDetail({ status: 'loading' });
+        void loadGroupDetail(groupId).then(setDetail);
+      }}
+      onInvite={(groupId) => {
+        void createInvitation(groupId).then(setInvitation);
+      }}
+      onAcceptInvitation={(token) => {
+        void acceptInvitation(token).then(refreshGroups);
+      }}
+      onRemoveMember={(groupId, memberId) => {
+        void removeMember(groupId, memberId)
+          .then(() => loadGroupDetail(groupId))
+          .then(setDetail);
       }}
     />
   );

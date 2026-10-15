@@ -4,24 +4,15 @@ import {
   parseCurrentUserResponse,
   type PublicUser,
 } from '@agent-chat/contracts';
+import {
+  errorCodeOf,
+  JSON_HEADERS,
+  type JsonFetch,
+  type JsonFetchInit,
+  type JsonFetchResponse,
+} from '../../shared/http';
 
-/** Minimal structural view of a fetch response, so callers can inject any client. */
-export interface JsonFetchResponse {
-  readonly ok: boolean;
-  readonly status: number;
-  json(): Promise<unknown>;
-}
-
-export interface JsonFetchInit {
-  method?: string;
-  body?: string;
-  headers?: Record<string, string>;
-}
-
-export type JsonFetch = (
-  input: string,
-  init?: JsonFetchInit,
-) => Promise<JsonFetchResponse>;
+export type { JsonFetch, JsonFetchInit, JsonFetchResponse };
 
 export type SessionState =
   | { status: 'loading' }
@@ -38,8 +29,6 @@ export interface Credentials {
 export interface Registration extends Credentials {
   displayName: string;
 }
-
-const JSON_HEADERS = { 'content-type': 'application/json' };
 
 /**
  * Reads the current session.
@@ -130,13 +119,8 @@ async function postCredentials(
  * ever repeating a raw message from the response.
  */
 function failureFrom(response: JsonFetchResponse, body: unknown): SessionState {
-  if (typeof body === 'object' && body !== null) {
-    const error = (body as { error?: { code?: unknown } }).error;
-    if (typeof error?.code === 'string') {
-      return { status: 'rejected', code: error.code };
-    }
-  }
-  return { status: 'error', httpStatus: response.status };
+  const code = errorCodeOf(body);
+  return code === undefined ? { status: 'error', httpStatus: response.status } : { status: 'rejected', code };
 }
 
 /** Short, human-readable explanation of a rejected attempt. */
