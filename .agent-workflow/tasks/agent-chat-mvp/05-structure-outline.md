@@ -24,8 +24,8 @@ Controlling artifacts: `03-prd.md` revision 2 (approved), `04-tdd.md` System Des
 |---|---|---|---|
 | S1 — Walking skeleton and test harness | done | `0b9eeb5` | lint, typecheck, 36 unit, 8 contract, 31 integration, build, 3 Playwright tests all pass; migration ledger and constraint tests observed green |
 | S2 — Human identity, private groups, invitations | done | `877b678`, `fd33d28` | 137 unit, 15 contract, 67 integration, 5 Playwright pass; AC2 browser flow observed with two real browser contexts |
-| S3 — Realtime human chat | in progress | — | — |
-| S4 — OAuth connection, agent identity, consent | pending | — | — |
+| S3 — Realtime human chat | done | `e715f03`+ | 147 unit, 79 integration, 8 Playwright pass; AC1 observed with two real browser contexts over the live socket |
+| S4 — OAuth connection, agent identity, consent | in progress | — | — |
 | S5 — MCP tool surface and idempotent sending | pending | — | — |
 | S6 — Durable inbox lifecycle | pending | — | — |
 | S7 — Agent receiver WebSocket and live delivery | pending | — | — |

@@ -44,6 +44,32 @@ export {
   type RegisterRequest,
 } from './http/auth.js';
 export {
+  IDEMPOTENCY_KEY_MAX_LENGTH,
+  MESSAGE_PATHS,
+  parseMessagePage,
+  parseMessageView,
+  parsePageSize,
+  parseSendMessageRequest,
+  validateIdempotencyKey,
+  validateMessageText,
+  type MessageAuthor,
+  type MessagePage,
+  type MessageView,
+  type SendMessageRequest,
+} from './http/messages.js';
+export {
+  AGENT_SOCKET_PATH,
+  BROWSER_EVENT_TYPES,
+  BROWSER_SOCKET_PATH,
+  parseBrowserEvent,
+  type AgentConnectionChangedEvent,
+  type BrowserEvent,
+  type BrowserEventType,
+  type MembershipChangedEvent,
+  type MessageCreatedEvent,
+  type ReadyEvent,
+} from './websocket/events.js';
+export {
   GROUP_PATHS,
   parseAcceptInvitationRequest,
   parseCreateGroupRequest,

@@ -206,8 +206,8 @@ describe('0001_initial_mvp', () => {
   });
 });
 
-describe('0001_initial_mvp ledger behaviour', () => {
-  it('applies to an empty database once and is a no-op on a second run', () => {
+describe('migration ledger behaviour', () => {
+  it('applies every migration to an empty database once and is a no-op after that', () => {
     const directory = mkdtempSync(join(tmpdir(), 'agent-chat-ledger-'));
     temporaryDirectories.push(directory);
     const database = createDatabase({
@@ -219,13 +219,17 @@ describe('0001_initial_mvp ledger behaviour', () => {
     const firstRun = migrateFromDirectory(database.sqlite, MIGRATIONS_PATH);
     const secondRun = migrateFromDirectory(database.sqlite, MIGRATIONS_PATH);
 
-    expect(firstRun).toEqual({ applied: ['0001_initial_mvp'], skipped: [] });
-    expect(secondRun).toEqual({ applied: [], skipped: ['0001_initial_mvp'] });
+    expect(firstRun).toEqual({ applied: ['0001_initial_mvp', '0002_message_sequence'], skipped: [] });
+    expect(secondRun).toEqual({ applied: [], skipped: ['0001_initial_mvp', '0002_message_sequence'] });
     expect(
       database.sqlite.prepare('SELECT id, checksum FROM schema_migrations').all(),
     ).toEqual([
       {
         id: '0001_initial_mvp',
+        checksum: expect.stringMatching(/^[0-9a-f]{64}$/),
+      },
+      {
+        id: '0002_message_sequence',
         checksum: expect.stringMatching(/^[0-9a-f]{64}$/),
       },
     ]);

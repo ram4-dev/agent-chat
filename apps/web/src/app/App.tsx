@@ -11,6 +11,7 @@ import {
   type SessionState,
 } from '../features/auth/session';
 import { GroupPanel } from '../features/groups/GroupPanel';
+import { ChatContainer } from '../features/chat/ChatPanel';
 import {
   acceptInvitation,
   createGroup,
@@ -66,6 +67,12 @@ export function AppShell({
         onLogin={onLogin}
         onLogout={onLogout}
       />
+      {session.status === 'authenticated' && detail.status === 'ready' && (
+        <ChatContainer
+          groupId={detail.detail.group.id}
+          groupName={detail.detail.group.name}
+        />
+      )}
       {session.status === 'authenticated' && (
         <GroupPanel
           groups={groups}
