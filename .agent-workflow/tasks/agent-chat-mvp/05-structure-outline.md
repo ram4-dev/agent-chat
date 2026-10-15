@@ -23,7 +23,7 @@ Controlling artifacts: `03-prd.md` revision 2 (approved), `04-tdd.md` System Des
 | Slice | Status | Commit | Evidence |
 |---|---|---|---|
 | S1 — Walking skeleton and test harness | done | `0b9eeb5` | lint, typecheck, 36 unit, 8 contract, 31 integration, build, 3 Playwright tests all pass; migration ledger and constraint tests observed green |
-| S2 — Human identity, private groups, invitations | pending | — | — |
+| S2 — Human identity, private groups, invitations | partial — S2a and S2b done; group UI and AC2 browser flow pending | `877b678`, `fd33d28` | 126 unit, 15 contract, 67 integration, build all pass; AC2 browser flow not yet observed |
 | S3 — Realtime human chat | pending | — | — |
 | S4 — OAuth connection, agent identity, consent | pending | — | — |
 | S5 — MCP tool surface and idempotent sending | pending | — | — |
