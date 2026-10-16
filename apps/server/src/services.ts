@@ -1,4 +1,5 @@
 import { createAuthModule, createArgon2PasswordHasher } from './modules/auth/index.js';
+import { createAgentsModule } from './modules/agents/index.js';
 import { createGroupsModule } from './modules/groups/index.js';
 import { createMessagingModule } from './modules/messaging/index.js';
 import { createLiveDeliveryHub, type LiveDeliveryHub } from './realtime/hub.js';
@@ -8,8 +9,13 @@ import { createSqliteSessionRepository } from './persistence/session-repository.
 import { createSqliteGroupRepository } from './persistence/groups-repository.js';
 import { createSqliteInvitationRepository } from './persistence/invitations-repository.js';
 import { createSqliteMessageRepository } from './persistence/messages-repository.js';
+import {
+  createSqliteAgentRepository,
+  createSqliteConnectionRepository,
+} from './persistence/agents-repository.js';
 import type { DatabaseHandle } from './persistence/index.js';
 import type { AuthModule } from './modules/auth/index.js';
+import type { AgentsModule } from './modules/agents/index.js';
 import type { GroupsModule } from './modules/groups/index.js';
 import type { MessagingModule } from './modules/messaging/index.js';
 import type { IdentityModule } from './modules/identity/index.js';
@@ -17,6 +23,7 @@ import type { IdentityModule } from './modules/identity/index.js';
 export interface ApplicationServices {
   identity: IdentityModule;
   auth: AuthModule;
+  agents: AgentsModule;
   groups: GroupsModule;
   messaging: MessagingModule;
   hub: LiveDeliveryHub;
@@ -53,6 +60,13 @@ export function createServices(database: DatabaseHandle): ApplicationServices {
     generateId: () => generateUuidV7(),
   });
 
+  const agents = createAgentsModule({
+    agents: createSqliteAgentRepository(database.sqlite),
+    connections: createSqliteConnectionRepository(database.sqlite),
+    clock: SYSTEM_CLOCK,
+    generateId: () => generateUuidV7(),
+  });
+
   const hub = createLiveDeliveryHub();
 
   const messaging = createMessagingModule({
@@ -65,7 +79,7 @@ export function createServices(database: DatabaseHandle): ApplicationServices {
     generateId: () => generateUuidV7(),
   });
 
-  return { identity, auth, groups, messaging, hub };
+  return { identity, auth, agents, groups, messaging, hub };
 }
 
 const SYSTEM_CLOCK = { now: (): Date => new Date() };

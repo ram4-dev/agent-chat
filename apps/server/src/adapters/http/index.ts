@@ -52,5 +52,5 @@ export {
   type ErrorEnvelope,
 } from './error-envelope.js';
 export { clearedSessionCookie, readCookie, serializeSessionCookie } from './cookie.js';
-export { isSameOriginRequest, registerOriginGuard } from './origin-guard.js';
+export { isGuardedPath, isSameOriginRequest, registerOriginGuard } from './origin-guard.js';
 export { contentTypeFor, resolveStaticFile } from './static-assets.js';

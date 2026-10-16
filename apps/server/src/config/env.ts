@@ -28,6 +28,15 @@ export interface RuntimeConfig {
   webDistDir: string;
   /** Bounded wait for the SQLite write lock before a write fails closed. */
   busyTimeoutMs: number;
+  /**
+   * The bare origin the authorization server publishes as its issuer.
+   *
+   * It must carry no path: a path-bearing issuer makes the provider publish
+   * endpoints under that path while still expecting them at the root.
+   */
+  publicOrigin: string;
+  /** Optional JWKS file. Without one, local runs generate signing keys. */
+  oidcJwksPath?: string;
 }
 
 export interface ReadConfigInput {
@@ -95,7 +104,60 @@ export function readConfig({ env, repoRoot }: ReadConfigInput): RuntimeConfig {
       1,
       60_000,
     ),
+    publicOrigin: readPublicOrigin(
+      env['PUBLIC_ORIGIN'],
+      readText('HOST', env['HOST'], CONFIG_DEFAULTS.host),
+      readInteger('PORT', env['PORT'], CONFIG_DEFAULTS.port, 1, 65_535),
+    ),
+    ...optionalText('oidcJwksPath', 'OIDC_JWKS_PATH', env['OIDC_JWKS_PATH']),
   };
+}
+
+/**
+ * Resolves the issuer origin.
+ *
+ * An explicit value wins, and it is validated to be a bare origin so a
+ * misconfiguration fails at startup instead of producing an issuer whose
+ * published endpoints do not resolve.
+ */
+function readPublicOrigin(
+  raw: string | undefined,
+  host: string,
+  port: number,
+): string {
+  if (raw === undefined) {
+    return `http://${host}:${port}`;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new ConfigError(`Invalid PUBLIC_ORIGIN: expected an absolute URL, received ${JSON.stringify(raw)}`);
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new ConfigError(`Invalid PUBLIC_ORIGIN: expected http or https, received ${JSON.stringify(raw)}`);
+  }
+  if (parsed.pathname !== '/' || parsed.search !== '' || parsed.hash !== '') {
+    throw new ConfigError(
+      `Invalid PUBLIC_ORIGIN: the issuer must be a bare origin with no path, received ${JSON.stringify(raw)}`,
+    );
+  }
+
+  return parsed.origin;
+}
+
+/** Omits the key entirely when unset, which keeps optional config honest. */
+function optionalText<K extends string>(
+  field: K,
+  _envName: string,
+  raw: string | undefined,
+): Partial<Record<K, string>> {
+  if (raw === undefined || raw.trim() === '') {
+    return {};
+  }
+  return { [field]: raw.trim() } as Record<K, string>;
 }
 
 function readText(name: string, raw: string | undefined, fallback: string): string {

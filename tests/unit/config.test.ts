@@ -9,6 +9,9 @@ describe('readConfig', () => {
     expect(readConfig({ env: {}, repoRoot })).toEqual({
       nodeEnv: 'development',
       host: '127.0.0.1',
+      // The issuer is derived from host and port when it is not given, because
+      // a path-bearing issuer breaks the authorization server's own endpoints.
+      publicOrigin: 'http://127.0.0.1:4318',
       port: 4318,
       logLevel: 'info',
       databasePath: resolve(repoRoot, '.local-state/agent-chat.db'),
@@ -36,6 +39,7 @@ describe('readConfig', () => {
     expect(config).toEqual({
       nodeEnv: 'test',
       host: '0.0.0.0',
+      publicOrigin: 'http://0.0.0.0:4555',
       port: 4555,
       logLevel: 'silent',
       databasePath: resolve(repoRoot, 'tmp/e2e.db'),

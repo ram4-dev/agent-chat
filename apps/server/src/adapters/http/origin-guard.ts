@@ -55,14 +55,31 @@ export function isSameOriginRequest({
 }
 
 /**
- * Rejects every state-changing request that is not same-origin before routing,
- * so no mutating handler can run without the check.
+ * Paths whose mutations are performed by a browser session cookie.
+ *
+ * The check applies here and nowhere else. OAuth protocol endpoints are used by
+ * native MCP clients that send no `Origin` at all, and they authenticate through
+ * PKCE, a client identifier, and a single-use code; requiring a browser origin
+ * there would reject every legitimate client. The consent screen is included
+ * because it is a browser form that approves agent access, which is exactly the
+ * kind of request CSRF protection exists for.
+ */
+const GUARDED_PREFIXES = ['/api/', '/oauth/interaction/'] as const;
+
+export function isGuardedPath(url: string): boolean {
+  return GUARDED_PREFIXES.some((prefix) => url.startsWith(prefix));
+}
+
+/**
+ * Rejects every guarded state-changing request that is not same-origin, before
+ * routing, so no mutating handler can run without the check.
  *
  * The rejection carries the shared `forbidden` code and says nothing about why.
  */
 export function registerOriginGuard(app: FastifyInstance): void {
   app.addHook('onRequest', async (request, reply) => {
     if (
+      !isGuardedPath(request.url) ||
       isSameOriginRequest({
         method: request.method,
         origin: headerValue(request.headers.origin),

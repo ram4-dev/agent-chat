@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MIGRATIONS_DIRECTORY } from '@agent-chat/contracts';
 import { REPOSITORY_ROOT } from '../../apps/server/src/config/index';
+import { loadMigrations } from '../../apps/server/src/persistence/migrate';
 import {
   createDatabase,
   type DatabaseHandle,
@@ -26,6 +27,7 @@ const MVP_TABLES = [
   'oauth_clients',
   'oauth_grants',
   'oauth_refresh_tokens',
+  'oidc_artifacts',
   'schema_migrations',
   'users',
 ];
@@ -219,19 +221,13 @@ describe('migration ledger behaviour', () => {
     const firstRun = migrateFromDirectory(database.sqlite, MIGRATIONS_PATH);
     const secondRun = migrateFromDirectory(database.sqlite, MIGRATIONS_PATH);
 
-    expect(firstRun).toEqual({ applied: ['0001_initial_mvp', '0002_message_sequence'], skipped: [] });
-    expect(secondRun).toEqual({ applied: [], skipped: ['0001_initial_mvp', '0002_message_sequence'] });
+    // Derived from the migration directory rather than hardcoded, so adding a
+    // migration cannot silently make this test assert a stale list.
+    const allMigrations = loadMigrations(MIGRATIONS_PATH).map((migration) => migration.id);
+    expect(firstRun).toEqual({ applied: allMigrations, skipped: [] });
+    expect(secondRun).toEqual({ applied: [], skipped: allMigrations });
     expect(
       database.sqlite.prepare('SELECT id, checksum FROM schema_migrations').all(),
-    ).toEqual([
-      {
-        id: '0001_initial_mvp',
-        checksum: expect.stringMatching(/^[0-9a-f]{64}$/),
-      },
-      {
-        id: '0002_message_sequence',
-        checksum: expect.stringMatching(/^[0-9a-f]{64}$/),
-      },
-    ]);
+    ).toEqual(allMigrations.map((id) => ({ id, checksum: expect.stringMatching(/^[0-9a-f]{64}$/) })));
   });
 });
