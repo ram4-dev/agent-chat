@@ -56,6 +56,13 @@ export interface AgentsModule {
     avatarUrl?: unknown;
   }): AgentRecord;
   listOwnedAgents(ownerUserId: string): AgentRecord[];
+  /**
+   * Whether an agent exists and is not revoked.
+   *
+   * Deliberately not owner-scoped: deciding who may admit an agent to a group
+   * belongs to the group, not to the agent's owner.
+   */
+  isActiveAgent(agentId: string): boolean;
   /** Owner-scoped read: another person's agent is reported as not found. */
   getOwnedAgent(agentId: string, ownerUserId: string): AgentRecord;
   updateProfile(input: {
@@ -145,6 +152,11 @@ export function createAgentsModule({
 
     listOwnedAgents(ownerUserId) {
       return agents.listAgentsByOwner(ownerUserId);
+    },
+
+    isActiveAgent(agentId) {
+      const agent = agents.findAgentById(agentId);
+      return agent !== undefined && agent.status === 'active';
     },
 
     getOwnedAgent(agentId, ownerUserId) {

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { AUTH_PATHS, MIGRATIONS_DIRECTORY } from '@agent-chat/contracts';
+import { AUTH_PATHS, GROUP_PATHS, MIGRATIONS_DIRECTORY } from '@agent-chat/contracts';
 import type { FastifyInstance } from '../../apps/server/src/app';
 import { createApp } from '../../apps/server/src/app';
 import { readConfig } from '../../apps/server/src/config/env';
@@ -127,10 +127,17 @@ async function call(
       ...(cookie === undefined ? {} : { cookie }),
       ...(options.method === 'POST'
         ? {
-            'content-type':
-              typeof options.payload === 'string'
-                ? 'application/x-www-form-urlencoded'
-                : 'application/json',
+            // A media type is declared only when there is a body: claiming
+            // application/json with no payload is itself an error server-side,
+            // and a request with no body is what an admission call sends.
+            ...(options.payload === undefined
+              ? {}
+              : {
+                  'content-type':
+                    typeof options.payload === 'string'
+                      ? 'application/x-www-form-urlencoded'
+                      : 'application/json',
+                }),
             ...(options.url.startsWith('/api/') || options.url.startsWith('/oauth/interaction/')
               ? { origin: harness.origin }
               : {}),
@@ -229,6 +236,22 @@ async function agentToken(
   return { token: JSON.parse(token.body).access_token as string, jar };
 }
 
+/** Drives the flow for one owner and reports the agent it now owns. */
+async function ownerWithAgent(
+  harness: Harness,
+  email: string,
+  agentName: string,
+): Promise<{ jar: CookieJar; agentId: string; token: string }> {
+  const { token, jar } = await agentToken(harness, email, agentName);
+  const agent = harness.database.sqlite
+    .prepare(
+      `SELECT a.id FROM agents a JOIN users u ON u.id = a.owner_user_id WHERE u.email = ?`,
+    )
+    .get(email) as { id: string };
+
+  return { jar, agentId: agent.id, token };
+}
+
 /** Walks the provider's resume path and collects the issued code. */
 async function codeFrom(harness: Harness, jar: CookieJar, resume: string): Promise<string> {
   let url = resume.startsWith(harness.origin) ? resume.slice(harness.origin.length) : resume;
@@ -310,27 +333,27 @@ describe('MCP tool surface', () => {
 
   it('scopes read and send to groups the agent belongs to', async () => {
     const harness = await startHarness();
-    const { token } = await agentToken(harness, 'chat-owner@example.com', 'Scribe');
+    const { token, jar } = await agentToken(harness, 'chat-owner@example.com', 'Scribe');
 
-    const credential = harness.database.sqlite
+    const agent = harness.database.sqlite
       .prepare('SELECT id FROM agents LIMIT 1')
       .get() as { id: string };
 
-    // Membership is seeded directly because granting it over HTTP belongs to a
-    // later slice; this test covers the MCP surface, not how admission happens.
-    const owner = harness.database.sqlite
-      .prepare(`SELECT id FROM users WHERE email = 'chat-owner@example.com'`)
-      .get() as { id: string };
-    const groupId = 'group-for-mcp';
-    harness.database.sqlite
-      .prepare(`INSERT INTO groups (id, name, creator_user_id) VALUES (?, ?, ?)`)
-      .run(groupId, 'Research', owner.id);
-    harness.database.sqlite
-      .prepare(
-        `INSERT INTO group_agent_memberships (group_id, agent_id, admitted_by_user_id, created_at)
-         VALUES (?, ?, ?, ?)`,
-      )
-      .run(groupId, credential.id, owner.id, new Date().toISOString());
+    // The group is created and the agent admitted through the product's own
+    // routes: no membership is seeded by hand.
+    const created = await call(harness, jar, {
+      method: 'POST',
+      url: GROUP_PATHS.collection,
+      payload: { name: 'Research' },
+    });
+    expect(created.statusCode).toBe(201);
+    const groupId = JSON.parse(created.body).group.id as string;
+
+    const admitted = await call(harness, jar, {
+      method: 'POST',
+      url: GROUP_PATHS.agentMember(groupId, agent.id),
+    });
+    expect([200, 201]).toContain(admitted.statusCode);
 
     const { client, close } = await connect(token, harness);
     try {
@@ -384,5 +407,94 @@ describe('MCP tool surface', () => {
     } finally {
       await close();
     }
+  });
+});
+
+describe('admitting an agent to a private group', () => {
+  it('lets a group admin admit an agent and refuses a plain member and an outsider', async () => {
+    const harness = await startHarness();
+    const { jar: admin, agentId } = await ownerWithAgent(harness, 'admin@example.com', 'Scout');
+    const { jar: member } = await ownerWithAgent(harness, 'member@example.com', 'Member');
+    const { jar: outsider } = await ownerWithAgent(harness, 'outsider@example.com', 'Outsider');
+
+    const created = await call(harness, admin, {
+      method: 'POST',
+      url: GROUP_PATHS.collection,
+      payload: { name: 'Private' },
+    });
+    const groupId = JSON.parse(created.body).group.id as string;
+
+    // A person outside the group is told nothing about it.
+    const fromOutsider = await call(harness, outsider, {
+      method: 'POST',
+      url: GROUP_PATHS.agentMember(groupId, agentId),
+    });
+    expect(fromOutsider.statusCode).toBe(404);
+    expect(fromOutsider.json()).toEqual({ error: { code: 'not_found' } });
+
+    const admitted = await call(harness, admin, {
+      method: 'POST',
+      url: GROUP_PATHS.agentMember(groupId, agentId),
+    });
+    expect(admitted.statusCode).toBe(201);
+
+    const detail = await call(harness, admin, { method: 'GET', url: GROUP_PATHS.one(groupId) });
+    const members = (detail.json().members ?? []) as Array<{ kind: string; displayName: string }>;
+    expect(members.filter((m) => m.kind === 'agent').map((m) => m.displayName)).toEqual(['Scout']);
+
+    // Joining twice adds nothing.
+    const again = await call(harness, admin, {
+      method: 'POST',
+      url: GROUP_PATHS.agentMember(groupId, agentId),
+    });
+    expect(again.statusCode).toBe(200);
+
+    // A member of the group who is not its admin cannot admit anyone.
+    const invited = await call(harness, admin, {
+      method: 'POST',
+      url: GROUP_PATHS.invitations(groupId),
+    });
+    const accepted = await call(harness, member, {
+      method: 'POST',
+      url: GROUP_PATHS.acceptInvitation,
+      payload: { token: JSON.parse(invited.body).token },
+    });
+    expect(accepted.statusCode).toBe(200);
+
+    const fromMember = await call(harness, member, {
+      method: 'POST',
+      url: GROUP_PATHS.agentMember(groupId, agentId),
+    });
+    expect(fromMember.statusCode).toBe(403);
+    expect(fromMember.json()).toEqual({ error: { code: 'forbidden' } });
+  });
+
+  it('refuses an agent that does not exist or is revoked', async () => {
+    const harness = await startHarness();
+    const { jar, agentId } = await ownerWithAgent(harness, 'revoker@example.com', 'Scout');
+
+    const created = await call(harness, jar, {
+      method: 'POST',
+      url: GROUP_PATHS.collection,
+      payload: { name: 'Private' },
+    });
+    const groupId = JSON.parse(created.body).group.id as string;
+
+    const unknown = await call(harness, jar, {
+      method: 'POST',
+      url: GROUP_PATHS.agentMember(groupId, 'no-such-agent'),
+    });
+    expect(unknown.statusCode).toBe(404);
+
+    harness.database.sqlite
+      .prepare(`UPDATE agents SET status = 'revoked', revoked_at = ? WHERE id = ?`)
+      .run(new Date().toISOString(), agentId);
+
+    const revoked = await call(harness, jar, {
+      method: 'POST',
+      url: GROUP_PATHS.agentMember(groupId, agentId),
+    });
+    expect(revoked.statusCode).toBe(404);
+    expect(revoked.json()).toEqual({ error: { code: 'not_found' } });
   });
 });

@@ -120,6 +120,34 @@ export function registerGroupRoutes(
     }),
   );
 
+  app.post<{ Params: { groupId: string; agentId: string } }>(
+    '/api/groups/:groupId/agents/:agentId',
+    (request, reply) =>
+      run(reply, () => {
+        const userId = session(request);
+        const admitted = groups.admitAgent({
+          userId,
+          groupId: request.params.groupId,
+          agentId: request.params.agentId,
+        });
+        return reply.code(admitted.alreadyMember ? 200 : 201).send(admitted);
+      }),
+  );
+
+  app.delete<{ Params: { groupId: string; agentId: string } }>(
+    '/api/groups/:groupId/agents/:agentId',
+    (request, reply) =>
+      run(reply, () => {
+        const userId = session(request);
+        groups.removeAgentMember({
+          userId,
+          groupId: request.params.groupId,
+          agentId: request.params.agentId,
+        });
+        return reply.send({ status: 'ok' } satisfies OkResponse);
+      }),
+  );
+
   app.delete<{ Params: { groupId: string; memberId: string } }>(
     '/api/groups/:groupId/members/:memberId',
     (request, reply) =>

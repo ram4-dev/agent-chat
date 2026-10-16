@@ -13,6 +13,9 @@ export const GROUP_PATHS = {
   removeMember: (groupId: string, memberId: string) =>
     `/api/groups/${groupId}/members/${memberId}`,
   invitations: (groupId: string) => `/api/groups/${groupId}/invitations`,
+  agents: (groupId: string) => `/api/groups/${groupId}/agents`,
+  agentMember: (groupId: string, agentId: string) =>
+    `/api/groups/${groupId}/agents/${agentId}`,
   acceptInvitation: '/api/invitations/accept',
 } as const;
 

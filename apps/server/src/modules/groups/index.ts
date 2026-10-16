@@ -73,6 +73,17 @@ export interface GroupRepository {
   removeHumanMembership(groupId: string, userId: string): void;
   listGroupsForAgent(agentId: string): Array<{ group: GroupRecord; role: GroupRole }>;
   agentRoleFor(groupId: string, agentId: string): GroupRole | undefined;
+  insertAgentMembership(record: AgentMembershipRecord): void;
+  findAgentMembership(groupId: string, agentId: string): boolean;
+  removeAgentMembership(groupId: string, agentId: string): void;
+}
+
+/** One row of agent admission, recording who allowed it. */
+export interface AgentMembershipRecord {
+  groupId: string;
+  agentId: string;
+  admittedByUserId: string;
+  createdAt: string;
 }
 
 export interface InvitationRepository {
@@ -104,6 +115,23 @@ export interface GroupsModule {
     role: GroupRole;
   };
   removeHumanMember(input: { userId: string; groupId: string; memberId: string }): void;
+  /** Adds an agent to a private group. Group-admin authority decides this. */
+  admitAgent(input: { userId: string; groupId: string; agentId: string }): {
+    groupId: string;
+    agentId: string;
+    alreadyMember: boolean;
+  };
+  removeAgentMember(input: { userId: string; groupId: string; agentId: string }): void;
+}
+
+/**
+ * The agent facts admission needs.
+ *
+ * Kept as a port so the group module never learns an agent's profile, owner, or
+ * connection: all it can ask is whether the agent exists and is usable.
+ */
+export interface AgentLookupPort {
+  isActive(agentId: string): boolean;
 }
 
 export interface GroupsModuleDependencies {
@@ -111,6 +139,7 @@ export interface GroupsModuleDependencies {
   invitations: InvitationRepository;
   clock: Clock;
   generateId(): string;
+  agentLookup: AgentLookupPort;
   /** Injectable so a test can pin the value it will accept. */
   createInvitationToken?(): string;
 }
@@ -144,6 +173,7 @@ export function createGroupsModule({
   invitations,
   clock,
   generateId,
+  agentLookup,
   createInvitationToken: mintToken = createInvitationToken,
 }: GroupsModuleDependencies): GroupsModule {
   function requireMembership(groupId: string, userId: string): HumanMembershipRecord {
@@ -282,6 +312,43 @@ export function createGroupsModule({
       }
 
       return { group, role: existing?.role ?? 'member' };
+    },
+
+    admitAgent({ userId, groupId, agentId }) {
+      // Admitting is a group decision: only an admin of this group can do it, and
+      // another person's private group answers as missing rather than forbidden.
+      requireAdmin(groupId, userId);
+
+      if (!agentLookup.isActive(agentId)) {
+        // A revoked or unknown agent is reported as absent; naming it would leak
+        // which agents exist to a group admin who never saw one.
+        throw new GroupNotFoundError('Agent not found');
+      }
+
+      // The repository answers with a boolean, not a record: comparing it to
+      // `undefined` would treat every group as already having this agent.
+      if (groups.findAgentMembership(groupId, agentId)) {
+        return { groupId, agentId, alreadyMember: true };
+      }
+
+      groups.insertAgentMembership({
+        groupId,
+        agentId,
+        admittedByUserId: userId,
+        createdAt: clock.now().toISOString(),
+      });
+
+      return { groupId, agentId, alreadyMember: false };
+    },
+
+    removeAgentMember({ userId, groupId, agentId }) {
+      requireAdmin(groupId, userId);
+
+      if (!groups.findAgentMembership(groupId, agentId)) {
+        throw new GroupNotFoundError();
+      }
+
+      groups.removeAgentMembership(groupId, agentId);
     },
 
     removeHumanMember({ userId, groupId, memberId }) {

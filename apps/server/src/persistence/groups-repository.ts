@@ -90,6 +90,16 @@ export function createSqliteGroupRepository(sqlite: Database.Database): GroupRep
       WHERE m.agent_id = ?
       ORDER BY g.created_at, g.id`,
   );
+  const insertAgentMembership = sqlite.prepare(
+    `INSERT INTO group_agent_memberships (group_id, agent_id, admitted_by_user_id, created_at)
+     VALUES (@groupId, @agentId, @admittedByUserId, @createdAt)`,
+  );
+  const findAgentMembership = sqlite.prepare(
+    'SELECT 1 AS present FROM group_agent_memberships WHERE group_id = ? AND agent_id = ?',
+  );
+  const removeAgentMembership = sqlite.prepare(
+    'DELETE FROM group_agent_memberships WHERE group_id = ? AND agent_id = ?',
+  );
   const agentRole = sqlite.prepare(
     `SELECT 'member' AS role FROM group_agent_memberships WHERE group_id = ? AND agent_id = ?`,
   );
@@ -153,6 +163,14 @@ export function createSqliteGroupRepository(sqlite: Database.Database): GroupRep
         group: toGroup(row)!,
         role: row.role,
       })),
+    insertAgentMembership(record) {
+      insertAgentMembership.run(record);
+    },
+    findAgentMembership: (groupId, agentId) =>
+      findAgentMembership.get(groupId, agentId) !== undefined,
+    removeAgentMembership(groupId, agentId) {
+      removeAgentMembership.run(groupId, agentId);
+    },
     agentRoleFor: (groupId, agentId) =>
       (agentRole.get(groupId, agentId) as { role: GroupRole } | undefined)?.role,
   };

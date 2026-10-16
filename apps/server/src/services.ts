@@ -53,18 +53,22 @@ export function createServices(database: DatabaseHandle): ApplicationServices {
 
   const groupRepository = createSqliteGroupRepository(database.sqlite);
 
-  const groups = createGroupsModule({
-    groups: groupRepository,
-    invitations: createSqliteInvitationRepository(database.sqlite),
-    clock: SYSTEM_CLOCK,
-    generateId: () => generateUuidV7(),
-  });
-
+  // Agents come before groups: admitting an agent asks whether it is active,
+  // and the group module receives that as a port rather than reaching into the
+  // agents module itself.
   const agents = createAgentsModule({
     agents: createSqliteAgentRepository(database.sqlite),
     connections: createSqliteConnectionRepository(database.sqlite),
     clock: SYSTEM_CLOCK,
     generateId: () => generateUuidV7(),
+  });
+
+  const groups = createGroupsModule({
+    groups: groupRepository,
+    invitations: createSqliteInvitationRepository(database.sqlite),
+    clock: SYSTEM_CLOCK,
+    generateId: () => generateUuidV7(),
+    agentLookup: { isActive: (agentId) => agents.isActiveAgent(agentId) },
   });
 
   const hub = createLiveDeliveryHub();
