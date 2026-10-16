@@ -24,7 +24,7 @@ build, integration, and browser E2E.
 | Types | `pnpm typecheck` | pass |
 | Unit | `pnpm test:unit` | pass — 147 tests |
 | Contract | `pnpm test:contracts` | pass — 15 tests |
-| Integration | `pnpm test:integration` | pass — 81 tests, 4 skipped (documented S4 gaps) |
+| Integration | `pnpm test:integration` | pass — 82 tests, 3 skipped (documented S4 gaps) |
 | Build | `pnpm build` | pass |
 | Browser E2E | `pnpm test:e2e` | pass — 8 tests in Chromium |
 
@@ -119,6 +119,24 @@ recorded so the next session does not rediscover them.
 6. Fastify parses request bodies before a handler runs, so the provider would read a drained
    stream. The provider's routes therefore live in an encapsulated scope whose content type
    parser passes the payload through untouched.
+
+### Why the authorization code did not work
+
+Recorded because each cause was observed, not inferred:
+
+1. **Consent never resolved.** The grant recorded the agent scopes as resource scopes while
+   resource indicators were disabled, so the provider considered consent unsatisfied and asked
+   again after every approval. No code was issued at any point in that configuration. Recording
+   them as OIDC scopes is what made the code appear.
+2. **The token request arrived without a `content-type`.** The header had been moved inside the
+   same condition as `Origin` when the same-origin guard was scoped to browser calls, so a native
+   client's request body was never parsed and the provider reported
+   `no client authentication mechanism provided`.
+3. **The test read the code from the wrong response.** Approval redirects to the provider's own
+   resume path, and only that next hop issues the code.
+4. For JWT access tokens: the format is configured per resource server, so it needs
+   `resourceIndicators`, which in turn requires the grant to satisfy resource-scope consent —
+   the interaction that remains open.
 
 Remaining S4 work: make the authorization-code exchange succeed through this mounting, make a
 second consent round trip in one session work, re-enable the three skipped tests, and run an

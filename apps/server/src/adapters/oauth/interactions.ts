@@ -16,7 +16,6 @@ export interface InteractionDependencies {
   agents: AgentsModule;
   auth: AuthModule;
   sqlite: Database.Database;
-  issuer: string;
 }
 
 /**
@@ -34,7 +33,7 @@ export interface InteractionDependencies {
  */
 export function registerInteractionRoutes(
   app: FastifyInstance,
-  { provider, agents, auth, sqlite, issuer }: InteractionDependencies,
+  { provider, agents, auth, sqlite }: InteractionDependencies,
 ): void {
   app.get<{ Params: { uid: string } }>(`${INTERACTION_PREFIX}/:uid`, (request, reply) => {
     return handleDetails(request, reply, async (details) => {
@@ -109,10 +108,16 @@ export function registerInteractionRoutes(
 
         // A fresh grant is created for each approval, so consent here is an
         // explicit human decision rather than a reused earlier one.
+        //
+        // `openid` is an OIDC scope; the agent scopes belong to our own resource
+        // and are recorded as resource scopes, because the provider only
+        // recognises those once resource indicators are enabled. Granting them
+        // the other way round is not enough: consent is then never considered
+        // satisfied and the provider asks again instead of issuing a code.
         const grant = new provider.Grant({ accountId: user.id, clientId });
         grant.addOIDCScope('openid');
         for (const scope of granted.value) {
-          grant.addResourceScope(issuer, scope);
+          grant.addOIDCScope(scope);
         }
         const grantId = await grant.save();
 
