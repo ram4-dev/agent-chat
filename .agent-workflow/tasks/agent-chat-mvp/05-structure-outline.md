@@ -25,7 +25,7 @@ Controlling artifacts: `03-prd.md` revision 2 (approved), `04-tdd.md` System Des
 | S1 — Walking skeleton and test harness | done | `0b9eeb5` | lint, typecheck, 36 unit, 8 contract, 31 integration, build, 3 Playwright tests all pass; migration ledger and constraint tests observed green |
 | S2 — Human identity, private groups, invitations | done | `877b678`, `fd33d28` | 137 unit, 15 contract, 67 integration, 5 Playwright pass; AC2 browser flow observed with two real browser contexts |
 | S3 — Realtime human chat | done | `e715f03`+ | 147 unit, 79 integration, 8 Playwright pass; AC1 observed with two real browser contexts over the live socket |
-| S4 — OAuth connection, agent identity, consent | blocked — not started | — | Provider probed in this runtime; mounting, adapter-factory, and Node-LTS findings recorded in `90-verification.md`. No S4 code committed |
+| S4 — OAuth connection, agent identity, consent | partial | `836be37` | Discovery, dynamic client registration, consent screen, agent creation/ownership/connections verified; 147 unit, 15 contract, 81 integration, 8 Playwright pass. Two consent/token paths recorded as skipped tests |
 | S5 — MCP tool surface and idempotent sending | not started — depends on S4 | — | — |
 | S6 — Durable inbox lifecycle | not started — depends on S4 | — | — |
 | S7 — Agent receiver WebSocket and live delivery | not started — depends on S4 | — | — |

@@ -24,7 +24,7 @@ build, integration, and browser E2E.
 | Types | `pnpm typecheck` | pass |
 | Unit | `pnpm test:unit` | pass — 147 tests |
 | Contract | `pnpm test:contracts` | pass — 15 tests |
-| Integration | `pnpm test:integration` | pass — 79 tests |
+| Integration | `pnpm test:integration` | pass — 81 tests, 4 skipped (documented S4 gaps) |
 | Build | `pnpm build` | pass |
 | Browser E2E | `pnpm test:e2e` | pass — 8 tests in Chromium |
 
@@ -77,15 +77,22 @@ review comment.
 
 ## Blockers and not-run work
 
-- **S4 is not started.** OAuth connection, agent identity, and consent remain unimplemented, so
-  AC3, AC5 (complete), and AC4 cannot pass. No code was committed for S4.
+- **S4 is partial.** Discovery, dynamic client registration, the consent screen, agent creation,
+  immutable ownership, connection recording, and duplicate prevention are implemented and
+  verified. Two paths are not, and are recorded as skipped tests in
+  `tests/integration/oauth-flow.test.ts` rather than being asserted and failing, or silently
+  dropped:
+  - the authorization-code exchange at `/token` does not succeed through this Fastify mounting;
+     no `agent_id`/`connection_id` claims can be asserted until it does; and
+  - a second consent round trip inside one session answers 400, so reconnect and cross-owner
+    refusal are not covered.
 - **S5–S9 are not started**, and each depends on the previous slice.
 - No push, pull request, merge, or release was performed; those remain separate human decisions.
 
-## S4 groundwork recorded before stopping
+## S4 findings
 
-Two empirical findings were established by probing the approved provider in this runtime. They
-are recorded so the next session does not rediscover them.
+Established by running the approved provider, not by reading its documentation. They are
+recorded so the next session does not rediscover them.
 
 1. **The provider's callback cannot be mounted on a prefixed wildcard route.** With an issuer that
    includes a path, the provider expects its own absolute paths and answers `404` for every
@@ -100,12 +107,22 @@ are recorded so the next session does not rediscover them.
    defect: S4 must be developed and verified on Node 22 LTS, and the evidence above was produced
    on a runtime the provider does not support.
 3. The adapter must be supplied as a **factory keyed by model name**, not as a single object.
+   `better-sqlite3` also requires every named parameter to be present, so optional bookkeeping
+   columns must be passed as `null`, not omitted.
+4. `refresh_token` as a grant type is only enabled when the provider issues refresh tokens.
+   Requiring `offline_access` would put a library default in front of a product decision, so the
+   provider is configured to issue them and the product decision stands.
+5. The same-origin guard originally applied to every mutation, which would reject every native
+   MCP client that sends no `Origin`. It is now scoped to `/api/` and the consent form: those are
+   browser-driven and need CSRF protection, while OAuth protocol endpoints authenticate through
+   PKCE, a client identifier, and a single-use code.
+6. Fastify parses request bodies before a handler runs, so the provider would read a drained
+   stream. The provider's routes therefore live in an encapsulated scope whose content type
+   parser passes the payload through untouched.
 
-Remaining S4 work: a SQLite-backed provider adapter, the exact-route mounting above, MCP
-discovery forwarding at the root well-known paths, the consent screen that creates or links an
-agent, the `agent_connections` row that becomes the revocation authority, agent access-token
-claim injection for `agent_id` and `connection_id`, and an E2E run with a real OAuth-capable MCP
-client.
+Remaining S4 work: make the authorization-code exchange succeed through this mounting, make a
+second consent round trip in one session work, re-enable the three skipped tests, and run an
+E2E with a real OAuth-capable MCP client.
 
 ## Not-run checks and why
 
