@@ -16,6 +16,7 @@ export interface InteractionDependencies {
   agents: AgentsModule;
   auth: AuthModule;
   sqlite: Database.Database;
+  issuer: string;
 }
 
 /**
@@ -33,7 +34,7 @@ export interface InteractionDependencies {
  */
 export function registerInteractionRoutes(
   app: FastifyInstance,
-  { provider, agents, auth, sqlite }: InteractionDependencies,
+  { provider, agents, auth, sqlite, issuer }: InteractionDependencies,
 ): void {
   app.get<{ Params: { uid: string } }>(`${INTERACTION_PREFIX}/:uid`, (request, reply) => {
     return handleDetails(request, reply, async (details) => {
@@ -117,7 +118,14 @@ export function registerInteractionRoutes(
         const grant = new provider.Grant({ accountId: user.id, clientId });
         grant.addOIDCScope('openid');
         for (const scope of granted.value) {
+          // Recorded twice on purpose: the consent policy asks two independent
+          // questions. Scopes declared in the provider's own scope list must
+          // appear as OIDC scopes, and the same scopes, being offered by our
+          // resource server, must also appear as resource scopes for its
+          // indicator. Satisfying either alone leaves the other check failing
+          // and consent is prompted again instead of issuing a code.
           grant.addOIDCScope(scope);
+          grant.addResourceScope(issuer, scope);
         }
         const grantId = await grant.save();
 

@@ -89,6 +89,14 @@ export function createSqliteConnectionRepository(
   const byAgent = sqlite.prepare(
     'SELECT * FROM agent_connections WHERE agent_id = ? ORDER BY created_at, id',
   );
+  const activeByClient = sqlite.prepare(
+    `SELECT * FROM agent_connections
+      WHERE agent_id = ? AND oauth_client_id = ? AND revoked_at IS NULL
+      ORDER BY created_at DESC`,
+  );
+  const updateScopes = sqlite.prepare(
+    'UPDATE agent_connections SET scopes = ? WHERE id = ?',
+  );
   const revokeOne = sqlite.prepare(
     'UPDATE agent_connections SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL',
   );
@@ -104,6 +112,11 @@ export function createSqliteConnectionRepository(
       toConnection(byId.get(connectionId) as ConnectionRow | undefined),
     listConnectionsByAgent: (agentId) =>
       (byAgent.all(agentId) as ConnectionRow[]).map((row) => toConnection(row)!),
+    findActiveConnection: (agentId, oauthClientId) =>
+      toConnection(activeByClient.get(agentId, oauthClientId) as ConnectionRow | undefined),
+    updateConnectionScopes(connectionId, scopes) {
+      updateScopes.run(scopes, connectionId);
+    },
     revokeConnection(connectionId, revokedAt) {
       revokeOne.run(revokedAt, connectionId);
     },

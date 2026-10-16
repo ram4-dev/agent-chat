@@ -199,7 +199,16 @@ async function follow(
     if (step.statusCode < 300 || step.statusCode >= 400 || typeof location !== 'string') {
       return step;
     }
-    url = location.startsWith(harness.origin) ? location.slice(harness.origin.length) : location;
+    const target = new URL(location, harness.origin);
+    if (target.searchParams.has('code') || target.searchParams.has('error')) {
+      // The flow is complete on our side: the code lives on this Location, and
+      // following it would only reach the client's own endpoint.
+      return step;
+    }
+    if (target.origin !== harness.origin) {
+      return step;
+    }
+    url = `${target.pathname}${target.search}`;
     step = await call(harness, jar, { method: 'GET', url });
   }
 
@@ -395,6 +404,12 @@ describe('agent connection through consent', () => {
     // returning to the browser.
     expect(typeof body.refresh_token).toBe('string');
 
+    // A credential must speak for an agent, not for the human who approved it.
+    const claims = readClaims(body.access_token as string);
+    expect(claims['agent_id']).toEqual(expect.any(String));
+    expect(claims['connection_id']).toEqual(expect.any(String));
+    expect(claims['aud']).toBe(harness.origin);
+
     // The agent exists, is owned by the approving human, and has one connection.
     const agent = harness.database.sqlite
       .prepare('SELECT id, owner_user_id, name, status FROM agents')
@@ -416,15 +431,15 @@ describe('agent connection through consent', () => {
     const grants = harness.database.sqlite
       .prepare(`SELECT payload FROM oidc_artifacts WHERE model = 'Grant'`)
       .all() as Array<{ payload: string }>;
+    expect(claims['connection_id']).toBe(connection.id);
+    expect(claims['agent_id']).toBe(agent.id);
     expect(grants.some((grant) => grant.payload.includes(connection.id))).toBe(true);
     expect(connection.oauth_client_id).toBe(clientId);
     expect(connection.scopes).toContain('agent:send');
     expect(connection.revoked_at).toBeNull();
   });
 
-  // Known S4 gap: a second approval in the same session does not produce a
-  // consent screen, so the helper that expects one cannot drive it.
-  it.skip('links an existing owned agent instead of creating a duplicate member', async () => {
+  it('links an existing owned agent instead of creating a duplicate member', async () => {
     const harness = await startHarness();
     const { jar, clientId, redirectUri } = await approvedSession(
       harness,
@@ -449,16 +464,15 @@ describe('agent connection through consent', () => {
       .get() as { total: number };
     expect(agents.total).toBe(1);
 
-    // Each client connection is recorded separately so one can be revoked alone.
+    // One client holds one connection, and re-authorizing reuses it rather than
+    // adding a row on every consent.
     const connections = harness.database.sqlite
       .prepare('SELECT COUNT(*) AS total FROM agent_connections')
       .get() as { total: number };
-    expect(connections.total).toBe(2);
+    expect(connections.total).toBe(1);
   });
 
-  // Known S4 gap: a second approval in the same session does not produce a
-  // consent screen, so the helper that expects one cannot drive it.
-  it.skip('refuses to link an agent owned by somebody else', async () => {
+  it('refuses to link an agent owned by somebody else', async () => {
     const harness = await startHarness();
     const ada = await approvedSession(harness, 'ada2@example.com', 'Ada');
     const mallory = await approvedSession(harness, 'mallory@example.com', 'Mallory');
@@ -549,6 +563,40 @@ async function authorizationCode(
   throw new Error(`The authorization request never issued a code :: ${trace.join(' || ')}`);
 }
 
+/** The authorization code on a redirect that leaves this origin, if any. */
+function codeFrom(step: Step, origin: string): string | null {
+  const location = step.headers['location'];
+  if (typeof location !== 'string') {
+    return null;
+  }
+  const target = new URL(location, origin);
+  return target.searchParams.get('code');
+}
+
+/** Trades one authorization code for tokens. */
+async function exchange(
+  harness: Harness,
+  jar: CookieJar,
+  clientId: string,
+  redirectUri: string,
+  verifier: string,
+  code: string,
+): Promise<Step> {
+  const token = await call(harness, jar, {
+    method: 'POST',
+    url: '/token',
+    payload: new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: redirectUri,
+      client_id: clientId,
+      code_verifier: verifier,
+    }).toString(),
+  });
+  expect(token.statusCode).toBe(200);
+  return token;
+}
+
 function interactionUidFrom(page: Step): string {
   const match = /action="\/oauth\/interaction\/([^/"]+)\/consent"/.exec(page.body);
   if (match?.[1] === undefined) {
@@ -570,8 +618,16 @@ async function approveWithAgent(
 ): Promise<Step> {
   const { verifier, challenge } = pkce();
   const page = await follow(harness, jar, authorizeUrl(harness, clientId, redirectUri, challenge));
-  const uid = interactionUidFrom(page);
 
+  // A second approval of scopes that were already granted shows no consent
+  // screen at all: the provider goes straight to the client.
+  const alreadyGranted = codeFrom(page, harness.origin);
+  if (alreadyGranted !== null) {
+    const existing = await exchange(harness, jar, clientId, redirectUri, verifier, alreadyGranted);
+    return { ...existing, headers: { ...existing.headers, 'x-agent-id': readAgentIdFromStorage(existing) } };
+  }
+
+  const uid = interactionUidFrom(page);
   const approved = await call(harness, jar, {
     method: 'POST',
     url: `/oauth/interaction/${uid}/consent`,
@@ -601,28 +657,3 @@ async function approveWithAgent(
   };
 }
 
-/**
- * Known gap: JWT access tokens carrying `agent_id` and `connection_id`.
- *
- * The authorization-code exchange, consent, and token issuance all work: the
- * token is issued, and the agent, its connection, and the grant's connection
- * detail are recorded above. What is not yet satisfied is the access-token
- * format.
- *
- * The provider mints opaque access tokens unless `accessTokenFormat: 'jwt'` is
- * configured, and that setting lives on a resource server, so it requires
- * `resourceIndicators` to be enabled. Enabling it makes consent validate against
- * resource scopes instead of OIDC scopes, and the grant as currently written then
- * never satisfies the prompt: consent is asked again after every approval and no
- * code is issued at all. Until that scope matching is resolved, claims cannot be
- * asserted from the token itself.
- *
- * Written as a skipped test rather than a failing one so the passing exchange
- * stays locked in and the reason stays visible instead of being silently dropped.
- */
-describe.skip('agent claims in the access token (S4 gap)', () => {
-  it('carries agent_id, connection_id, and the resource audience', () => {
-    const opaque = 'a-handle-with-no-claims';
-    expect(readClaims(opaque)).toBeDefined();
-  });
-});

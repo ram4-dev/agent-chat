@@ -24,7 +24,7 @@ build, integration, and browser E2E.
 | Types | `pnpm typecheck` | pass |
 | Unit | `pnpm test:unit` | pass — 147 tests |
 | Contract | `pnpm test:contracts` | pass — 15 tests |
-| Integration | `pnpm test:integration` | pass — 82 tests, 3 skipped (documented S4 gaps) |
+| Integration | `pnpm test:integration` | pass — 84 tests, none skipped |
 | Build | `pnpm build` | pass |
 | Browser E2E | `pnpm test:e2e` | pass — 8 tests in Chromium |
 
@@ -77,15 +77,10 @@ review comment.
 
 ## Blockers and not-run work
 
-- **S4 is partial.** Discovery, dynamic client registration, the consent screen, agent creation,
-  immutable ownership, connection recording, and duplicate prevention are implemented and
-  verified. Two paths are not, and are recorded as skipped tests in
-  `tests/integration/oauth-flow.test.ts` rather than being asserted and failing, or silently
-  dropped:
-  - the authorization-code exchange at `/token` does not succeed through this Fastify mounting;
-     no `agent_id`/`connection_id` claims can be asserted until it does; and
-  - a second consent round trip inside one session answers 400, so reconnect and cross-owner
-    refusal are not covered.
+- **S4 is complete and verified.** The authorization-code exchange issues a JWT access token
+  carrying `agent_id`, `connection_id`, and the resource audience; discovery, dynamic client
+  registration, the consent screen, agent creation, immutable ownership, connection reuse,
+  duplicate prevention, and cross-owner refusal are all covered. No S4 test is skipped.
 - **S5–S9 are not started**, and each depends on the previous slice.
 - No push, pull request, merge, or release was performed; those remain separate human decisions.
 
@@ -134,9 +129,16 @@ Recorded because each cause was observed, not inferred:
    `no client authentication mechanism provided`.
 3. **The test read the code from the wrong response.** Approval redirects to the provider's own
    resume path, and only that next hop issues the code.
-4. For JWT access tokens: the format is configured per resource server, so it needs
-   `resourceIndicators`, which in turn requires the grant to satisfy resource-scope consent —
-   the interaction that remains open.
+4. The access token stayed opaque: `accessTokenFormat` lives on a resource server, so JWT needs
+   `resourceIndicators`, and with it enabled the consent policy asks two independent questions —
+   scopes declared in the provider's scope list must be recorded as OIDC scopes, and the same
+   scopes, offered by our resource server, must also be recorded as resource scopes for its
+   indicator. Satisfying either alone re-prompts consent forever. The grant now records both.
+5. Even then the token stayed opaque, because the resource granted at the authorization request
+   is only applied to the issued token when `resourceIndicators.useGrantedResource` returns true
+   (it defaults to false). Setting it is what makes the access token a JWT with agent claims.
+6. Re-authorizing the same client added a connection row each time. A client now holds one
+   connection, which is reused and has its scopes brought in line with what was consented.
 
 Remaining S4 work: make the authorization-code exchange succeed through this mounting, make a
 second consent round trip in one session work, re-enable the three skipped tests, and run an

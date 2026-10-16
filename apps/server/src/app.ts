@@ -68,6 +68,7 @@ export async function createApp({
     agents: services.agents,
     auth: services.auth,
     sqlite: database.sqlite,
+    issuer: config.publicOrigin,
   });
 
   registerBrowserSocket(app, {

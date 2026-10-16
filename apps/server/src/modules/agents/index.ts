@@ -41,6 +41,8 @@ export interface ConnectionRepository {
   insertConnection(connection: ConnectionRecord): void;
   findConnectionById(connectionId: string): ConnectionRecord | undefined;
   listConnectionsByAgent(agentId: string): ConnectionRecord[];
+  findActiveConnection(agentId: string, oauthClientId: string): ConnectionRecord | undefined;
+  updateConnectionScopes(connectionId: string, scopes: string): void;
   revokeConnection(connectionId: string, revokedAt: string): void;
   /** Used when a whole agent is revoked: every connection stops at once. */
   revokeConnectionsByAgent(agentId: string, revokedAt: string): number;
@@ -196,6 +198,19 @@ export function createAgentsModule({
       const granted = parseRequestedScopes(scopes);
       if (!granted.ok) {
         throw new InvalidAgentInputError(`Rejected scopes (${granted.reason})`);
+      }
+
+      // Re-authorizing the same client must not add a row every time. A client
+      // holds one connection, so an active one is reused and its scopes are
+      // brought in line with what was just consented to.
+      const existing = connections.findActiveConnection(agentId, oauthClientId);
+      if (existing !== undefined) {
+        const grantedScopes = granted.value.join(' ');
+        if (existing.scopes.join(' ') !== grantedScopes) {
+          connections.updateConnectionScopes(existing.id, grantedScopes);
+          return { ...existing, scopes: granted.value };
+        }
+        return existing;
       }
 
       const connection: ConnectionRecord = {

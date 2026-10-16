@@ -85,6 +85,25 @@ export async function createOidcProvider({
       // The provider's built-in screens auto-approve. Consent here has to bind
       // a real human and a real agent identity, so they stay off.
       devInteractions: { enabled: false },
+      // Access tokens are minted as JWTs for our own resource.
+      //
+      // The format is configured per resource server rather than globally, so a
+      // credential can carry the agent it speaks for and a resource can verify
+      // issuer, audience, and expiry locally instead of introspecting every call.
+      resourceIndicators: {
+        enabled: true,
+        defaultResource: () => issuer,
+        // The token request carries no `resource` parameter. Without this the
+        // resource granted at the authorization request is never applied to the
+        // issued access token, so it stays opaque instead of carrying the agent.
+        useGrantedResource: () => true,
+        getResourceServerInfo: (_ctx, resource) => ({
+          scope: [...AGENT_SCOPES].join(' '),
+          audience: resource,
+          accessTokenFormat: 'jwt',
+          jwt: { sign: { alg: 'EdDSA' } },
+        }),
+      },
     },
     // Every client is treated as public, so PKCE is the only proof of
     // possession there is; making it optional would let a client opt out.
