@@ -178,6 +178,17 @@ export async function loadOrGenerateJwks(path?: string): Promise<{ keys: JWK[] }
   return generateJwks();
 }
 
+/**
+ * Public half of each signing key.
+ *
+ * Token verification must never hold the private half: only the fields a
+ * resource needs to check a signature survive here.
+ */
+export function toPublicJwk(jwk: JWK): JWK {
+  const { d: _d, p: _p, q: _q, dp: _dp, dq: _dq, qi: _qi, ...publicPart } = jwk;
+  return publicPart;
+}
+
 async function generateJwks(): Promise<{ keys: JWK[] }> {
   const { privateKey } = await generateKeyPair('EdDSA', {
     crv: 'Ed25519',

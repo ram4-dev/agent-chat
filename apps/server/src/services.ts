@@ -74,6 +74,7 @@ export function createServices(database: DatabaseHandle): ApplicationServices {
     membership: {
       humanRoleFor: (groupId, userId) =>
         groupRepository.findHumanMembership(groupId, userId)?.role,
+      agentRoleFor: (groupId, agentId) => groupRepository.agentRoleFor(groupId, agentId),
     },
     clock: SYSTEM_CLOCK,
     generateId: () => generateUuidV7(),

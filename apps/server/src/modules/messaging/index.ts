@@ -36,6 +36,14 @@ export interface MessageRepository {
 /** The membership facts messaging needs, and nothing more. */
 export interface MembershipReader {
   humanRoleFor(groupId: string, userId: string): GroupRole | undefined;
+  /**
+   * Resolves an agent's standing in a group.
+   *
+   * An agent credential is authorized exactly as a member would be: the same
+   * membership test decides whether it may read or post, so there is no path
+   * that reaches messages by holding a token alone.
+   */
+  agentRoleFor(groupId: string, agentId: string): GroupRole | undefined;
 }
 
 export interface MessagePage {
@@ -75,7 +83,9 @@ export function createMessagingModule({
 }: MessagingModuleDependencies): MessagingModule {
   function requireMembership(author: MessageAuthorRef, groupId: string): GroupRole {
     const role =
-      author.kind === 'human' ? membership.humanRoleFor(groupId, author.id) : undefined;
+      author.kind === 'human'
+        ? membership.humanRoleFor(groupId, author.id)
+        : membership.agentRoleFor(groupId, author.id);
     if (role === undefined) {
       // A non-member and a missing group are indistinguishable on purpose.
       throw new GroupNotFoundError();

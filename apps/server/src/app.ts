@@ -2,7 +2,12 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { LIMITS } from '@agent-chat/contracts';
 import { registerBrowserSocket } from './adapters/browser-ws/index.js';
 import { registerInteractionRoutes } from './adapters/oauth/interactions.js';
-import { createOidcProvider, loadOrGenerateJwks } from './adapters/oauth/provider.js';
+import { registerMcpRoutes } from './adapters/mcp/routes.js';
+import {
+  createOidcProvider,
+  loadOrGenerateJwks,
+  toPublicJwk,
+} from './adapters/oauth/provider.js';
 import { registerOidcRoutes } from './adapters/oauth/routes.js';
 import type { RuntimeConfig } from './config/index.js';
 import type { DatabaseHandle } from './persistence/index.js';
@@ -69,6 +74,15 @@ export async function createApp({
     auth: services.auth,
     sqlite: database.sqlite,
     issuer: config.publicOrigin,
+  });
+
+  // The MCP endpoint is mounted before the static catch-all for the same reason
+  // the OAuth routes are: the catch-all would otherwise answer for it.
+  await registerMcpRoutes(app, {
+    publicJwk: toPublicJwk(jwks.keys[0]),
+    issuer: config.publicOrigin,
+    audience: config.publicOrigin,
+    services,
   });
 
   registerBrowserSocket(app, {

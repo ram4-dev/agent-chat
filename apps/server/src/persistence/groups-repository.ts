@@ -83,6 +83,16 @@ export function createSqliteGroupRepository(sqlite: Database.Database): GroupRep
   const adminCount = sqlite.prepare(
     `SELECT COUNT(*) AS total FROM group_human_memberships WHERE group_id = ? AND role = 'admin'`,
   );
+  const groupsForAgent = sqlite.prepare(
+    `SELECT g.*, 'member' AS role
+       FROM group_agent_memberships m
+       JOIN groups g ON g.id = m.group_id
+      WHERE m.agent_id = ?
+      ORDER BY g.created_at, g.id`,
+  );
+  const agentRole = sqlite.prepare(
+    `SELECT 'member' AS role FROM group_agent_memberships WHERE group_id = ? AND agent_id = ?`,
+  );
   const deleteMembership = sqlite.prepare(
     'DELETE FROM group_human_memberships WHERE group_id = ? AND user_id = ?',
   );
@@ -138,6 +148,13 @@ export function createSqliteGroupRepository(sqlite: Database.Database): GroupRep
     removeHumanMembership(groupId, userId) {
       deleteMembership.run(groupId, userId);
     },
+    listGroupsForAgent: (agentId) =>
+      (groupsForAgent.all(agentId) as Array<GroupRow & { role: GroupRole }>).map((row) => ({
+        group: toGroup(row)!,
+        role: row.role,
+      })),
+    agentRoleFor: (groupId, agentId) =>
+      (agentRole.get(groupId, agentId) as { role: GroupRole } | undefined)?.role,
   };
 }
 

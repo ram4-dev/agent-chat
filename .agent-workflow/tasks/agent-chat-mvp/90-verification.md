@@ -24,7 +24,7 @@ build, integration, and browser E2E.
 | Types | `pnpm typecheck` | pass |
 | Unit | `pnpm test:unit` | pass — 147 tests |
 | Contract | `pnpm test:contracts` | pass — 15 tests |
-| Integration | `pnpm test:integration` | pass — 84 tests, none skipped |
+| Integration | `pnpm test:integration` | pass — 88 tests, none skipped |
 | Build | `pnpm build` | pass |
 | Browser E2E | `pnpm test:e2e` | pass — 8 tests in Chromium |
 
@@ -81,7 +81,11 @@ review comment.
   carrying `agent_id`, `connection_id`, and the resource audience; discovery, dynamic client
   registration, the consent screen, agent creation, immutable ownership, connection reuse,
   duplicate prevention, and cross-owner refusal are all covered. No S4 test is skipped.
-- **S5–S9 are not started**, and each depends on the previous slice.
+- **S5 is partial.** The MCP endpoint verifies the agent JWT on every request and serves all four
+  approved tools through the official SDK client. Agent admission to a group still has no HTTP
+  route: membership is seeded directly in the test that covers the MCP surface, so admitting an
+  agent through the product itself is unimplemented.
+- **S6–S9 are not started**, and each depends on the previous slice.
 - No push, pull request, merge, or release was performed; those remain separate human decisions.
 
 ## S4 findings

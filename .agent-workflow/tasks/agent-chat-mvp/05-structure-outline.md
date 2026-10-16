@@ -26,7 +26,7 @@ Controlling artifacts: `03-prd.md` revision 2 (approved), `04-tdd.md` System Des
 | S2 — Human identity, private groups, invitations | done | `877b678`, `fd33d28` | 137 unit, 15 contract, 67 integration, 5 Playwright pass; AC2 browser flow observed with two real browser contexts |
 | S3 — Realtime human chat | done | `e715f03`+ | 147 unit, 79 integration, 8 Playwright pass; AC1 observed with two real browser contexts over the live socket |
 | S4 — OAuth connection, agent identity, consent | done | `836be37`, `c23e36c`, `+` | Full authorization-code exchange issues a JWT access token carrying `agent_id`, `connection_id`, and the resource audience; discovery, dynamic registration, consent, agent creation, immutable ownership, connection reuse, duplicate prevention, and cross-owner refusal all verified. 147 unit, 15 contract, 84 integration, 8 Playwright pass, zero skipped |
-| S5 — MCP tool surface and idempotent sending | not started — depends on S4 | — | — |
+| S5 — MCP tool surface and idempotent sending | partial | `fd6352c`, `+` | MCP endpoint with agent JWT verification and all four tools verified through the official SDK client: identity, scoping, send with idempotent replay, and reads. 147 unit, 15 contract, 88 integration, 8 Playwright pass. Agent admission still has no HTTP route |
 | S6 — Durable inbox lifecycle | not started — depends on S4 | — | — |
 | S7 — Agent receiver WebSocket and live delivery | not started — depends on S4 | — | — |
 | S8 — Revocation and activity record | not started — depends on S4 | — | — |

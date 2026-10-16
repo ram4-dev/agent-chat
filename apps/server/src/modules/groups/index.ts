@@ -71,6 +71,8 @@ export interface GroupRepository {
   listAgentMembers(groupId: string): AgentMemberView[];
   countAdmins(groupId: string): number;
   removeHumanMembership(groupId: string, userId: string): void;
+  listGroupsForAgent(agentId: string): Array<{ group: GroupRecord; role: GroupRole }>;
+  agentRoleFor(groupId: string, agentId: string): GroupRole | undefined;
 }
 
 export interface InvitationRepository {
@@ -85,6 +87,8 @@ export interface GroupsModule {
     role: GroupRole;
   };
   listGroups(userId: string): Array<{ group: GroupRecord; role: GroupRole }>;
+  /** Groups the agent itself belongs to; this is what `list_groups` exposes. */
+  listGroupsForAgent(agentId: string): Array<{ group: GroupRecord; role: GroupRole }>;
   /** Throws `GroupNotFoundError` when the caller is not a member. */
   getGroupDetail(input: { userId: string; groupId: string }): {
     group: GroupRecord;
@@ -185,6 +189,10 @@ export function createGroupsModule({
 
     listGroups(userId) {
       return groups.listGroupsForUser(userId);
+    },
+
+    listGroupsForAgent(agentId) {
+      return groups.listGroupsForAgent(agentId);
     },
 
     getGroupDetail({ userId, groupId }) {
