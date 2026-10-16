@@ -6,7 +6,12 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { AUTH_PATHS, GROUP_PATHS, MIGRATIONS_DIRECTORY } from '@agent-chat/contracts';
+import {
+  AUTH_PATHS,
+  GROUP_PATHS,
+  MIGRATIONS_DIRECTORY,
+  MESSAGE_PATHS,
+} from '@agent-chat/contracts';
 import type { FastifyInstance } from '../../apps/server/src/app';
 import { createApp } from '../../apps/server/src/app';
 import { readConfig } from '../../apps/server/src/config/env';
@@ -116,7 +121,7 @@ class CookieJar {
 async function call(
   harness: Harness,
   jar: CookieJar,
-  options: { method: 'GET' | 'POST'; url: string; payload?: unknown },
+  options: { method: 'GET' | 'POST' | 'DELETE'; url: string; payload?: unknown },
 ) {
   const cookie = jar.header();
   const response = await harness.app.inject({
@@ -125,7 +130,7 @@ async function call(
     headers: {
       host: new URL(harness.origin).host,
       ...(cookie === undefined ? {} : { cookie }),
-      ...(options.method === 'POST'
+      ...(options.method === 'POST' || options.method === 'DELETE'
         ? {
             // A media type is declared only when there is a body: claiming
             // application/json with no payload is itself an error server-side,
@@ -297,7 +302,9 @@ describe('MCP tool surface', () => {
     try {
       const tools = await client.listTools();
       expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
+        'ack_inbox',
         'get_identity',
+        'get_inbox',
         'list_groups',
         'read_messages',
         'send_message',
@@ -496,5 +503,183 @@ describe('admitting an agent to a private group', () => {
     });
     expect(revoked.statusCode).toBe(404);
     expect(revoked.json()).toEqual({ error: { code: 'not_found' } });
+  });
+});
+
+describe('durable inbox', () => {
+  interface InboxEvent {
+    event_id?: never;
+    eventId: string;
+    sequence: number;
+    groupId: string;
+    message: { text: string; author: { kind: string; displayName: string } };
+  }
+
+  /** Reads the pending events an agent currently sees. */
+  async function readInbox(client: Awaited<ReturnType<typeof connect>>['client']) {
+    const result = await client.callTool({ name: 'get_inbox', arguments: {} });
+    const payload = JSON.parse(String((result.content as Array<{ text: string }>)[0]?.text)) as {
+      events: InboxEvent[];
+      nextCursor?: number;
+    };
+    return payload;
+  }
+
+  it('keeps an event pending until acknowledged, and history never acknowledges it', async () => {
+    const harness = await startHarness();
+    const { token, jar, agentId } = await ownerWithAgent(
+      harness,
+      'inbox-owner@example.com',
+      'Scribe',
+    );
+
+    const created = await call(harness, jar, {
+      method: 'POST',
+      url: GROUP_PATHS.collection,
+      payload: { name: 'Announcements' },
+    });
+    const groupId = JSON.parse(created.body).group.id as string;
+    await call(harness, jar, {
+      method: 'POST',
+      url: GROUP_PATHS.agentMember(groupId, agentId),
+    });
+
+    // A person posts while the agent is not listening: nothing reaches a runtime,
+    // but nothing is lost either.
+    const posted = await call(harness, jar, {
+      method: 'POST',
+      url: MESSAGE_PATHS.collection(groupId),
+      payload: { text: 'A note while nobody is listening', idempotencyKey: 'note-1' },
+    });
+    expect(posted.statusCode).toBe(201);
+
+    const { client, close } = await connect(token, harness);
+    try {
+      // AC10: the event is pending and readable after reconnecting.
+      const first = await readInbox(client);
+      expect(first.events).toHaveLength(1);
+      expect(first.events[0]?.message.text).toBe('A note while nobody is listening');
+      expect(first.events[0]?.groupId).toBe(groupId);
+      expect(first.events[0]?.sequence).toEqual(expect.any(Number));
+
+      // Still pending on a later read: retrieval alone never consumes it.
+      const reread = await readInbox(client);
+      expect(reread.events).toHaveLength(1);
+
+      // AC11: reading message history does not acknowledge the event.
+      await client.callTool({ name: 'read_messages', arguments: { group_id: groupId } });
+      const afterHistory = await readInbox(client);
+      expect(afterHistory.events).toHaveLength(1);
+
+      // Acknowledging clears pending state, exactly once.
+      const eventId = first.events[0]!.eventId;
+      await client.callTool({ name: 'ack_inbox', arguments: { event_id: eventId } });
+      const cleared = await readInbox(client);
+      expect(cleared.events).toEqual([]);
+
+      // Repeating the acknowledgement is safe rather than an error.
+      const repeat = await client.callTool({ name: 'ack_inbox', arguments: { event_id: eventId } });
+      expect(repeat.isError).toBeUndefined();
+      expect((await readInbox(client)).events).toEqual([]);
+    } finally {
+      await close();
+    }
+  });
+
+  it('notifies every other agent in the group and never its own author', async () => {
+    const harness = await startHarness();
+    const { token: authorToken, jar: authorJar, agentId: authorId } = await ownerWithAgent(
+      harness,
+      'author-owner@example.com',
+      'Author',
+    );
+    const { token: listenerToken, agentId: listenerId } = await ownerWithAgent(
+      harness,
+      'listener-owner@example.com',
+      'Listener',
+    );
+
+    const created = await call(harness, authorJar, {
+      method: 'POST',
+      url: GROUP_PATHS.collection,
+      payload: { name: 'Shared' },
+    });
+    const groupId = JSON.parse(created.body).group.id as string;
+    for (const agentId of [authorId, listenerId]) {
+      const admitted = await call(harness, authorJar, {
+        method: 'POST',
+        url: GROUP_PATHS.agentMember(groupId, agentId),
+      });
+      expect([200, 201]).toContain(admitted.statusCode);
+    }
+
+    const author = await connect(authorToken, harness);
+    const listener = await connect(listenerToken, harness);
+    try {
+      await author.client.callTool({
+        name: 'send_message',
+        arguments: { group_id: groupId, text: 'From the author', idempotency_key: 'fan-1' },
+      });
+
+      // The other agent is notified of a message it did not write.
+      const listenerEvents = await readInbox(listener.client);
+      expect(listenerEvents.events).toHaveLength(1);
+      expect(listenerEvents.events[0]?.message.text).toBe('From the author');
+      expect(listenerEvents.events[0]?.message.author.displayName).toBe('Author');
+
+      // An agent is never told about its own message.
+      expect((await readInbox(author.client)).events).toEqual([]);
+    } finally {
+      await author.close();
+      await listener.close();
+    }
+  });
+
+  it('refuses to disclose an event whose group the agent has left', async () => {
+    const harness = await startHarness();
+    const { token, jar, agentId } = await ownerWithAgent(
+      harness,
+      'leaver-owner@example.com',
+      'Leaver',
+    );
+
+    const created = await call(harness, jar, {
+      method: 'POST',
+      url: GROUP_PATHS.collection,
+      payload: { name: 'Temporary' },
+    });
+    const groupId = JSON.parse(created.body).group.id as string;
+    await call(harness, jar, {
+      method: 'POST',
+      url: GROUP_PATHS.agentMember(groupId, agentId),
+    });
+    await call(harness, jar, {
+      method: 'POST',
+      url: MESSAGE_PATHS.collection(groupId),
+      payload: { text: 'Private note', idempotencyKey: 'leave-1' },
+    });
+
+    const { client, close } = await connect(token, harness);
+    try {
+      expect((await readInbox(client)).events).toHaveLength(1);
+
+      // The agent is removed from the group.
+      const removed = await call(harness, jar, {
+        method: 'DELETE',
+        url: GROUP_PATHS.agentMember(groupId, agentId),
+      });
+      expect(removed.statusCode).toBe(200);
+
+      // The event still exists, but confirming it would reveal that the group
+      // holds messages the agent can no longer reach.
+      expect((await readInbox(client)).events).toEqual([]);
+
+      const eventId = 'left-behind';
+      const acked = await client.callTool({ name: 'ack_inbox', arguments: { event_id: eventId } });
+      expect(acked.isError).toBe(true);
+      expect(String((acked.content as Array<{ text: string }>)[0]?.text)).toBe('not_found');
+    } finally {
+      await close();
+    }
   });
 });

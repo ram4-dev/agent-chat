@@ -18,6 +18,13 @@ export interface InsertMessageInput {
   createdAt: string;
   idempotencyKey: string;
   requestDigest: string;
+  /**
+   * Agent members of the group to notify.
+   *
+   * Resolved before the transaction and written inside it, so a message and the
+   * events it creates for agents either both exist or neither does.
+   */
+  eligibleAgentIds: string[];
 }
 
 export type InsertMessageOutcome =
@@ -44,6 +51,8 @@ export interface MembershipReader {
    * that reaches messages by holding a token alone.
    */
   agentRoleFor(groupId: string, agentId: string): GroupRole | undefined;
+  /** Agent members of a group; these are the agents notified of its messages. */
+  agentRecipientsOf(groupId: string): string[];
 }
 
 export interface MessagePage {
@@ -105,6 +114,7 @@ export function createMessagingModule({
         createdAt: clock.now().toISOString(),
         idempotencyKey,
         requestDigest: digestOf(groupId, text),
+        eligibleAgentIds: membership.agentRecipientsOf(groupId),
       });
 
       if (result.outcome === 'conflict') {

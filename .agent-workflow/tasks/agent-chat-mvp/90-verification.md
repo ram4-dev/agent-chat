@@ -24,7 +24,7 @@ build, integration, and browser E2E.
 | Types | `pnpm typecheck` | pass |
 | Unit | `pnpm test:unit` | pass — 147 tests |
 | Contract | `pnpm test:contracts` | pass — 15 tests |
-| Integration | `pnpm test:integration` | pass — 90 tests, none skipped |
+| Integration | `pnpm test:integration` | pass — 93 tests, none skipped |
 | Build | `pnpm build` | pass |
 | Browser E2E | `pnpm test:e2e` | pass — 8 tests in Chromium |
 
@@ -85,7 +85,11 @@ review comment.
   approved tools through the official SDK client. Agent admission and removal are served over
   HTTP, guarded by group-admin authority and agent status, and the MCP tests now admit agents
   through those routes rather than seeding membership by hand.
-- **S6–S9 are not started**, and each depends on the previous slice.
+- **S6 is complete.** Inbox events are written in the same transaction as the message, and
+  `get_inbox`/`ack_inbox` are served over MCP. AC10 and AC11 are observed, along with the rule
+  that reading message history never acknowledges, that repeating an acknowledgement succeeds,
+  and that an event whose group the agent has left is reported as absent rather than confirmed.
+- **S7–S9 are not started**, and each depends on the previous slice.
 - No push, pull request, merge, or release was performed; those remain separate human decisions.
 
 ## S4 findings

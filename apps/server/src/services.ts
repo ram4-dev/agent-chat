@@ -1,6 +1,7 @@
 import { createAuthModule, createArgon2PasswordHasher } from './modules/auth/index.js';
 import { createAgentsModule } from './modules/agents/index.js';
 import { createGroupsModule } from './modules/groups/index.js';
+import { createInboxModule } from './modules/inbox/index.js';
 import { createMessagingModule } from './modules/messaging/index.js';
 import { createLiveDeliveryHub, type LiveDeliveryHub } from './realtime/hub.js';
 import { createIdentityModule, generateUuidV7 } from './modules/identity/index.js';
@@ -8,6 +9,7 @@ import { createSqliteUserRepository } from './persistence/identity-repository.js
 import { createSqliteSessionRepository } from './persistence/session-repository.js';
 import { createSqliteGroupRepository } from './persistence/groups-repository.js';
 import { createSqliteInvitationRepository } from './persistence/invitations-repository.js';
+import { createSqliteInboxRepository } from './persistence/inbox-repository.js';
 import { createSqliteMessageRepository } from './persistence/messages-repository.js';
 import {
   createSqliteAgentRepository,
@@ -17,6 +19,7 @@ import type { DatabaseHandle } from './persistence/index.js';
 import type { AuthModule } from './modules/auth/index.js';
 import type { AgentsModule } from './modules/agents/index.js';
 import type { GroupsModule } from './modules/groups/index.js';
+import type { InboxModule } from './modules/inbox/index.js';
 import type { MessagingModule } from './modules/messaging/index.js';
 import type { IdentityModule } from './modules/identity/index.js';
 
@@ -25,6 +28,7 @@ export interface ApplicationServices {
   auth: AuthModule;
   agents: AgentsModule;
   groups: GroupsModule;
+  inbox: InboxModule;
   messaging: MessagingModule;
   hub: LiveDeliveryHub;
 }
@@ -71,20 +75,32 @@ export function createServices(database: DatabaseHandle): ApplicationServices {
     agentLookup: { isActive: (agentId) => agents.isActiveAgent(agentId) },
   });
 
+  const inbox = createInboxModule({
+    inbox: createSqliteInboxRepository(database.sqlite),
+    // Reading an event re-checks the same membership question as reading a
+    // message, through the same repository.
+    access: {
+      agentRoleFor: (groupId, agentId) => groupRepository.agentRoleFor(groupId, agentId),
+    },
+    clock: SYSTEM_CLOCK,
+  });
+
   const hub = createLiveDeliveryHub();
 
   const messaging = createMessagingModule({
-    messages: createSqliteMessageRepository(database.sqlite),
+    messages: createSqliteMessageRepository(database.sqlite, () => generateUuidV7()),
     membership: {
       humanRoleFor: (groupId, userId) =>
         groupRepository.findHumanMembership(groupId, userId)?.role,
       agentRoleFor: (groupId, agentId) => groupRepository.agentRoleFor(groupId, agentId),
+      agentRecipientsOf: (groupId) =>
+        groupRepository.listAgentMembers(groupId).map((member) => member.agentId),
     },
     clock: SYSTEM_CLOCK,
     generateId: () => generateUuidV7(),
   });
 
-  return { identity, auth, agents, groups, messaging, hub };
+  return { identity, auth, agents, groups, inbox, messaging, hub };
 }
 
 const SYSTEM_CLOCK = { now: (): Date => new Date() };

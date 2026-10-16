@@ -28,7 +28,10 @@ interface IdempotencyRow {
  * concurrent retries cannot both create a message: the second one either reads
  * the first result or reports a conflict.
  */
-export function createSqliteMessageRepository(sqlite: Database.Database): MessageRepository {
+export function createSqliteMessageRepository(
+  sqlite: Database.Database,
+  generateId: () => string,
+): MessageRepository {
   const nextSequence = sqlite.prepare(
     'SELECT COALESCE(MAX(sequence), 0) + 1 AS next FROM messages WHERE group_id = ?',
   );
@@ -43,6 +46,14 @@ export function createSqliteMessageRepository(sqlite: Database.Database): Messag
        (author_kind, human_author_id, agent_author_id, idempotency_key, request_digest, message_id, created_at)
      VALUES
        (@authorKind, @humanAuthorId, @agentAuthorId, @idempotencyKey, @requestDigest, @messageId, @createdAt)`,
+  );
+  const insertInboxEvent = sqlite.prepare(
+    `INSERT INTO inbox_events
+       (id, agent_id, sequence, group_id, message_id, event_type, created_at)
+     VALUES (@id, @agentId, @sequence, @groupId, @messageId, @eventType, @createdAt)`,
+  );
+  const nextInboxSequence = sqlite.prepare(
+    'SELECT COALESCE(MAX(sequence), 0) + 1 AS next FROM inbox_events WHERE agent_id = ?',
   );
   const findIdempotency = sqlite.prepare(
     `SELECT request_digest, message_id
@@ -118,6 +129,25 @@ export function createSqliteMessageRepository(sqlite: Database.Database): Messag
           messageId: input.id,
           createdAt: input.createdAt,
         });
+
+        // One pending event per agent member, in the same transaction as the
+        // message itself. An agent does not get an event for its own message,
+        // which is why the sender is filtered out here rather than at read time.
+        for (const agentId of input.eligibleAgentIds) {
+          if (authorKey === 'agent' && agentId === authorId) {
+            continue;
+          }
+          const sequence = (nextInboxSequence.get(agentId) as { next: number }).next;
+          insertInboxEvent.run({
+            id: generateId(),
+            agentId,
+            sequence,
+            groupId: input.groupId,
+            messageId: input.id,
+            eventType: 'message.created',
+            createdAt: input.createdAt,
+          });
+        }
 
         return { outcome: 'created', messageId: input.id };
       });

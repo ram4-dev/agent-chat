@@ -5,12 +5,14 @@ import type { AgentsModule } from '../../modules/agents/index.js';
 import type { GroupsModule } from '../../modules/groups/index.js';
 import type { MessagingModule } from '../../modules/messaging/index.js';
 import type { IdentityModule } from '../../modules/identity/index.js';
+import type { InboxModule } from '../../modules/inbox/index.js';
 import type { LiveDeliveryHub } from '../../realtime/hub.js';
 import type { AgentCredential } from './auth.js';
 import { McpUnauthenticated } from './auth.js';
 
 export interface McpServices {
   agents: AgentsModule;
+  inbox: InboxModule;
   groups: GroupsModule;
   messaging: MessagingModule;
   identity: IdentityModule;
@@ -27,6 +29,8 @@ export const MCP_TOOL_NAMES = [
   'list_groups',
   'read_messages',
   'send_message',
+  'get_inbox',
+  'ack_inbox',
 ] as const;
 
 type TextResult = {
@@ -55,6 +59,7 @@ function refused(code: string): TextResult {
 export function createMcpServer({
   agents,
   groups,
+  inbox,
   messaging,
   identity,
   hub,
@@ -152,6 +157,43 @@ export function createMcpServer({
 
         return ok({ message, replayed, path: MESSAGE_PATHS.collection(group_id) });
       }),
+  );
+
+  server.registerTool(
+    'get_inbox',
+    {
+      description:
+        'Retrieve pending events for this agent, oldest first. Events stay pending until acknowledged.',
+      inputSchema: {
+        limit: z.number().int().min(1).max(100).optional(),
+        after: z.number().int().min(1).optional(),
+      },
+    },
+    async ({ limit, after }) =>
+      guard(() =>
+        ok(
+          inbox.listPending({
+            agentId: credential().agentId,
+            ...(limit === undefined ? {} : { limit }),
+            ...(after === undefined ? {} : { after }),
+          }),
+        ),
+      ),
+  );
+
+  server.registerTool(
+    'ack_inbox',
+    {
+      description:
+        'Mark a pending inbox event as processed. Repeating it is safe; reading message history does not do this.',
+      inputSchema: { event_id: z.string().min(1) },
+    },
+    async ({ event_id }) =>
+      guard(() =>
+        ok(
+          inbox.acknowledge({ agentId: credential().agentId, eventId: event_id }),
+        ),
+      ),
   );
 
   return server;
