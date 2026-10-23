@@ -3,6 +3,8 @@ import {
   AGENT_PATHS,
   GROUP_PATHS,
   type OwnedAgentView,
+  type OwnedAgentsResponse,
+  type ErrorResponse,
 } from "@agent-chat/contracts";
 import { Avatar, CopyField, Icon, Modal, errorMessage } from "../../shared/ui";
 
@@ -32,7 +34,7 @@ export function AgentsPanel({
     try {
       const response = await fetch(AGENT_PATHS.collection);
       if (!response.ok) throw new Error();
-      const data = (await response.json()) as { agents: OwnedAgentView[] };
+      const data = (await response.json()) as OwnedAgentsResponse;
       setAgents(data.agents);
       setError("");
     } catch {
@@ -63,7 +65,7 @@ export function AgentsPanel({
           : {}),
       });
       if (!response.ok) {
-        const result = await response.json();
+        const result = (await response.json()) as ErrorResponse;
         setFormError(errorMessage(result.error?.code));
         return false;
       }

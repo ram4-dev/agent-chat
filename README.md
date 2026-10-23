@@ -85,23 +85,53 @@ recovery after a crash between them.
 
 ## Verification
 
+Install Chromium once after installing the project dependencies:
+
+```sh
+pnpm exec playwright install chromium
+```
+
+Run the full suite from the repository root with Node.js 22:
+
 ```sh
 pnpm verify
 ```
 
-This runs lint, typecheck, unit and contract tests, build, SQLite/HTTP/OAuth/MCP/
+Individual checks are also available:
+
+| Command | Check |
+|---|---|
+| `pnpm lint` | ESLint |
+| `pnpm typecheck` | TypeScript across packages, apps and tests |
+| `pnpm test:unit` | Unit tests |
+| `pnpm test:contracts` | Shared API and transport contracts |
+| `pnpm build` | Contracts, backend and frontend production builds |
+| `pnpm test:integration` | SQLite and transport integration tests |
+| `pnpm test:e2e` | Browser flows against the production build |
+
+To run only the redesigned UI checks:
+
+```sh
+pnpm test:e2e tests/e2e/ui-redesign.spec.ts
+```
+
+`pnpm verify` runs lint, typecheck, unit and contract tests, build, SQLite/HTTP/OAuth/MCP/
 WebSocket integration tests, then Chromium E2E tests. The browser harness starts
-the production entrypoint against a fresh database. It uses port 4319 because its
-OAuth issuer and redirect URIs must stay fixed for that run. Local interactive
-servers use Portless.
+the production entrypoint against a fresh database under `.local-state/e2e`.
+No manual server or database setup is needed for the default E2E run. The test
+server uses port 4319 because its OAuth issuer and redirect URIs must stay fixed
+for that run. Local interactive servers use Portless.
 
 The combined `tests/e2e/full-loop.spec.ts` exercises browser registration, SDK
 OAuth, agent admission, spontaneous send, idempotent retry, live receipt, offline
 recovery, explicit acknowledgement, identity reuse and whole-agent revocation.
-It also checks the interface at 375 CSS pixels. A separately started disposable
-server can be tested by setting `AGENT_CHAT_E2E_BASE_URL`; this skips starting the
-built-in test server. For Portless HTTPS, Node clients must trust the Portless CA
-through `NODE_EXTRA_CA_CERTS`.
+The redesigned UI checks also exercise mobile navigation at 390 CSS pixels,
+failed sends and retries, expired-invitation errors, and empty agent lists.
+
+A separately started disposable server can be tested by setting `AGENT_CHAT_E2E_BASE_URL`; this skips starting the
+built-in test server. These tests create accounts and change data, so use a
+disposable database for that server. For Portless HTTPS, Node clients must trust
+the Portless CA through `NODE_EXTRA_CA_CERTS`.
 
 Current evidence and acceptance mapping live in
 `.agent-workflow/tasks/agent-chat-mvp/90-verification.md`.

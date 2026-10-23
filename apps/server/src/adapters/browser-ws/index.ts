@@ -3,7 +3,9 @@ import {
   BROWSER_SOCKET_PATH,
   SESSION_COOKIE_NAME,
   type BrowserEvent,
+  type PublicUser,
 } from '@agent-chat/contracts';
+import type { WebSocket } from 'ws';
 import type { AuthModule } from '../../modules/auth/index.js';
 import type { GroupsModule } from '../../modules/groups/index.js';
 import type { LiveDeliveryHub } from '../../realtime/hub.js';
@@ -42,7 +44,7 @@ export function registerBrowserSocket(
   } }, (socket, request) => {
     const token = readCookie(request.headers.cookie, SESSION_COOKIE_NAME);
 
-    let user;
+    let user: PublicUser;
     try {
       user = auth.resolveSession(token);
     } catch {
@@ -101,7 +103,7 @@ export function registerBrowserSocket(
   });
 }
 
-function send(socket: { send(data: string): void; readyState: number }, event: BrowserEvent): void {
+function send(socket: WebSocket, event: BrowserEvent): void {
   // 1 is OPEN; anything else would throw and must not break the fan-out.
   if (socket.readyState === 1) {
     socket.send(JSON.stringify(event));

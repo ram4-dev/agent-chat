@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { JWK } from 'jose';
 import type { WebSocket } from 'ws';
 import { AGENT_SOCKET_PATH, LIMITS, type AgentReceiverEvent } from '@agent-chat/contracts';
@@ -11,7 +11,7 @@ export function registerAgentSocket(app: FastifyInstance, options: {
 }): void {
   const { agents, inbox, hub } = options.services;
   const authorize = createMcpAuthenticator({ ...options, agents });
-  const credentials = new WeakMap<object, AgentCredential>();
+  const credentials = new WeakMap<FastifyRequest, AgentCredential>();
   // Reserve a slot before accepting the upgrade, including concurrent upgrades.
   const reservations = new Map<string, number>();
 
@@ -20,7 +20,7 @@ export function registerAgentSocket(app: FastifyInstance, options: {
     preValidation: async (request, reply) => {
       // This transport accepts credentials only in the Authorization header.
       if (request.url.includes('?')) return sendError(reply, 400, 'invalid_input');
-      let credential;
+      let credential: AgentCredential;
       try { credential = await authorize(request.headers.authorization); }
       catch { return sendError(reply, 401, 'unauthenticated'); }
       if (!credential.scopes.includes('agent:receive')) return sendError(reply, 403, 'forbidden');

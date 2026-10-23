@@ -97,14 +97,19 @@ test("mobile navigation, dialogs, and errors keep the active conversation usable
   await expect(join.getByRole("alert")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByLabel("Mensaje", { exact: true })).toBeVisible();
-  await page.route("**/api/groups/*/messages", (route) =>
-    route.request().method() === "POST"
-      ? route.fulfill({
-          status: 503,
-          json: { error: { code: "temporarily_unavailable" } },
-        })
-      : route.continue(),
-  );
+  const sendKeys: string[] = [];
+  await page.route("**/api/groups/*/messages", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const body = route.request().postDataJSON() as { idempotencyKey: string };
+    sendKeys.push(body.idempotencyKey);
+    if (sendKeys.length === 1) {
+      return route.fulfill({
+        status: 503,
+        json: { error: { code: "temporarily_unavailable" } },
+      });
+    }
+    return route.continue();
+  });
   await page
     .getByLabel("Mensaje", { exact: true })
     .fill("No pierdas este borrador");
@@ -113,9 +118,21 @@ test("mobile navigation, dialogs, and errors keep the active conversation usable
   await expect(page.getByLabel("Mensaje", { exact: true })).toHaveValue(
     "No pierdas este borrador",
   );
+  await page.getByRole("button", { name: "Enviar mensaje" }).click();
+  await expect(page.getByLabel("Mensaje", { exact: true })).toHaveValue("");
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  expect(sendKeys).toHaveLength(2);
+  expect(sendKeys[0]).toBeTruthy();
+  expect(sendKeys[1]).toBe(sendKeys[0]);
+  await page.reload();
+  await expect(
+    page
+      .getByRole("list", { name: "Mensajes" })
+      .getByText("No pierdas este borrador", { exact: true }),
+  ).toHaveCount(1);
 });
 
-test("an invitation link survives signup and joins the intended group", async ({
+test("an invitation link survives signup and an expired-invitation response can be retried", async ({
   browser,
   baseURL,
 }) => {
@@ -138,7 +155,31 @@ test("an invitation link survives signup and joins the intended group", async ({
   await expect(
     join.getByLabel("Enlace o código de invitación"),
   ).not.toHaveValue("");
+  const token = await join
+    .getByLabel("Enlace o código de invitación")
+    .inputValue();
+  // Real expiry and reuse are covered by groups integration tests; both return this 404.
+  await b.route(
+    "**/api/invitations/accept",
+    (route) =>
+      route.fulfill({
+        status: 404,
+        json: { error: { code: "not_found" } },
+      }),
+    { times: 1 },
+  );
   await join.getByRole("button", { name: "Unirme al grupo" }).click();
+  await expect(join.getByRole("alert")).toHaveText(
+    "La invitación venció, ya se usó o no es válida. Pedí una nueva.",
+  );
+  await expect(join.getByLabel("Enlace o código de invitación")).toHaveValue(
+    token,
+  );
+  await expect(
+    b.getByRole("region", { name: "Conversación de Compartido" }),
+  ).toHaveCount(0);
+  await join.getByRole("button", { name: "Unirme al grupo" }).click();
+  await expect(join).toHaveCount(0);
   await expect(
     b.getByRole("region", { name: "Conversación de Compartido" }),
   ).toBeVisible();
@@ -207,4 +248,45 @@ test("chat pages older history and profile editing reports saved changes", async
     path: ".local-state/ui-agents-desktop.png",
     fullPage: true,
   });
+});
+
+test("agents load errors can be retried into an actionable empty list", async ({
+  page,
+}) => {
+  const { signUp, agents } = await import("./helpers/ui");
+  await page.goto("/");
+  await signUp(page, "ui-empty-agents@example.com", "Eva");
+  await page.route(
+    "**/api/agents",
+    (route) =>
+      route.fulfill({
+        status: 503,
+        json: { error: { code: "temporarily_unavailable" } },
+      }),
+    { times: 1 },
+  );
+  await agents(page);
+  await expect(page.getByRole("alert")).toContainText(
+    "No pudimos cargar tus agentes. Volvé a intentar.",
+  );
+  const empty = page.getByRole("heading", {
+    name: "Tu primer agente empieza acá",
+  });
+  await expect(empty).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Volver a intentar", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(empty).toBeVisible();
+  await expect(
+    page.getByRole("list", { name: "Agentes propios" }).getByRole("listitem"),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Conectar cliente", exact: true }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Crear agente", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Crear agente" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Nombre del agente")).toHaveValue("");
 });

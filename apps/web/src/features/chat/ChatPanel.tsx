@@ -315,9 +315,10 @@ export function ChatContainer({
         }
       };
       socket.onmessage = (event: MessageEvent<string>) => {
-        let incoming;
+        let incoming: MessageView | undefined;
         try {
-          incoming = parseIncomingFrame(JSON.parse(event.data));
+          const payload: unknown = JSON.parse(event.data);
+          incoming = parseIncomingFrame(payload);
         } catch {
           return;
         }

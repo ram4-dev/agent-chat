@@ -20,3 +20,7 @@ export interface OwnedAgentView {
     createdAt: string;
   }[];
 }
+
+export interface OwnedAgentsResponse {
+  agents: OwnedAgentView[];
+}

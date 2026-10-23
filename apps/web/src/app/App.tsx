@@ -5,6 +5,10 @@ import {
   GROUP_PATHS,
   parseBrowserEvent,
   type PublicUser,
+  type BrowserEvent,
+  type CreateGroupResponse,
+  type AcceptedInvitationResponse,
+  type ErrorResponse,
 } from "@agent-chat/contracts";
 import { AuthPanel } from "../features/auth/AuthPanel";
 import {
@@ -126,9 +130,10 @@ export function App() {
         `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${BROWSER_SOCKET_PATH}`,
       );
       socket.onmessage = (event: MessageEvent<string>) => {
-        let frame;
+        let frame: BrowserEvent | undefined;
         try {
-          frame = parseBrowserEvent(JSON.parse(event.data));
+          const payload: unknown = JSON.parse(event.data);
+          frame = parseBrowserEvent(payload);
         } catch {
           return;
         }
@@ -190,12 +195,13 @@ export function App() {
           body: JSON.stringify(joining ? { token } : { name: input }),
         },
       );
-      const body = await response.json();
+      const body: unknown = await response.json();
       if (!response.ok) {
+        const failure = body as ErrorResponse;
         setActionError(
-          joining && body.error?.code === "not_found"
+          joining && failure.error?.code === "not_found"
             ? "La invitación venció, ya se usó o no es válida. Pedí una nueva."
-            : errorMessage(body.error?.code),
+            : errorMessage(failure.error?.code),
         );
         return;
       }
@@ -206,7 +212,8 @@ export function App() {
       history.replaceState(null, "", url);
       setJoinValue("");
       setModal(undefined);
-      openGroup(body.group.id);
+      const result = body as CreateGroupResponse | AcceptedInvitationResponse;
+      openGroup(result.group.id);
     } catch {
       setActionError("No pudimos conectar. Intentá de nuevo.");
     } finally {

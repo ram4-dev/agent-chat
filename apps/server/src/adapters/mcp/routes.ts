@@ -1,9 +1,10 @@
+import type { ServerResponse } from 'node:http';
 import type { FastifyInstance } from 'fastify';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { DOMAIN_ERROR_CODES } from '@agent-chat/contracts';
 import type { JWK } from 'jose';
 import { AGENT_SCOPES } from '../../modules/agents/index.js';
-import { createMcpAuthenticator, McpUnauthenticated } from './auth.js';
+import { createMcpAuthenticator, McpUnauthenticated, type AgentCredential } from './auth.js';
 import { createMcpServer, type McpServices } from './server.js';
 
 export const MCP_PATH = '/mcp';
@@ -42,7 +43,8 @@ export async function registerMcpRoutes(app: FastifyInstance, options: McpRoutes
     scope.removeAllContentTypeParsers();
     scope.addContentTypeParser('application/json', { parseAs: 'string' }, (_request, body, done) => {
       try {
-        done(null, JSON.parse(body as string));
+        const parsed: unknown = JSON.parse(body as string);
+        done(null, parsed);
       } catch (error) {
         done(error as Error, undefined);
       }
@@ -54,7 +56,7 @@ export async function registerMcpRoutes(app: FastifyInstance, options: McpRoutes
       handler: async (request, reply) => {
         reply.hijack();
 
-        let credential;
+        let credential: AgentCredential;
         try {
           credential = await authorize(request.headers.authorization);
         } catch (error) {
@@ -86,12 +88,10 @@ export async function registerMcpRoutes(app: FastifyInstance, options: McpRoutes
   });
 }
 
-function write(res: unknown, status: number, payload: unknown): void {
-  const raw = res as {
-    statusCode?: number;
-    setHeader(name: string, value: string): void;
-    end(chunk: string): void;
-  };
+function write(raw: ServerResponse, status: number, payload: {
+  jsonrpc: '2.0';
+  error: { code: number; message: string };
+}): void {
   raw.statusCode = status;
   raw.setHeader('content-type', 'application/json');
   raw.end(JSON.stringify(payload));

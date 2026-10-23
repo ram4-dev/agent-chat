@@ -4,6 +4,8 @@ import {
   GROUP_PATHS,
   type GroupDetailResponse,
   type OwnedAgentView,
+  type OwnedAgentsResponse,
+  type ErrorResponse,
   type PublicUser,
 } from "@agent-chat/contracts";
 import type { GroupsState } from "./transport";
@@ -394,7 +396,7 @@ export function GroupDetails({
                 )
                   .then(async (response) => {
                     if (!response.ok) {
-                      const body = await response.json();
+                      const body = (await response.json()) as ErrorResponse;
                       setError(errorMessage(body.error?.code));
                       return;
                     }
@@ -436,7 +438,7 @@ function AgentPicker({
     void fetch(AGENT_PATHS.collection)
       .then(async (response) => {
         if (!response.ok) throw new Error();
-        const body = await response.json();
+        const body = (await response.json()) as OwnedAgentsResponse;
         if (active) setOwned(body.agents);
       })
       .catch(() => {
@@ -466,7 +468,7 @@ function AgentPicker({
           )
             .then(async (response) => {
               if (!response.ok) {
-                const body = await response.json();
+                const body = (await response.json()) as ErrorResponse;
                 setError(errorMessage(body.error?.code));
                 return;
               }

@@ -1,9 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { DOMAIN_ERROR_CODES, type DomainErrorCode } from '@agent-chat/contracts';
+import { DOMAIN_ERROR_CODES, type DomainErrorCode, type ErrorResponse } from '@agent-chat/contracts';
 
-export interface ErrorEnvelope {
-  error: { code: DomainErrorCode };
-}
+export type ErrorEnvelope = ErrorResponse;
 
 /**
  * The server's HTTP error codes are the shared contract object itself, never a
