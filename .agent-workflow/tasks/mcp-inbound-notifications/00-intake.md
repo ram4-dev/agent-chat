@@ -1,3 +1,9 @@
+Estado actual (actualización posterior): receptor local implementado y probado con
+modelo real, supervisor y dos grupos. Servicios de usuario activos. La instrucción
+«Usa algun modelo y probalo ... deja todo funcionando e2e» reemplazó el stop anterior
+de S0. Ver 10-live-e2e-receipt.md y 91-live-e2e-verification.md para el estado vigente.
+El resto de este intake conserva la secuencia histórica de aprobaciones.
+
 # Recepción de mensajes y activación de agentes mediante MCP
 
 Fecha: 2026-10-23. Revisión: r3. Estado: diseño r3 aprobado; outline r3 aprobado; S0 produjo diagnóstico parcial y bloquea activación.

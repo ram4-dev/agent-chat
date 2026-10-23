@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "doctor": "node dist/doctor.js"
+    "doctor": "node dist/doctor.js",
+    "start": "node dist/supervisor.js"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

@@ -1,3 +1,6 @@
+Snapshot histórico de S0. La implementación local posterior y su prueba real
+se documentan en 91-live-e2e-verification.md; este documento no es el estado vigente.
+
 # Verificación de implementación: S0 parcial, activación bloqueada
 
 Fecha: 2026-10-23. Rama feat/mcp-inbound-notifications.

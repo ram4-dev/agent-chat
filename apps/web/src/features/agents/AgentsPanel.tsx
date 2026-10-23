@@ -8,6 +8,8 @@ import {
 } from "@agent-chat/contracts";
 import { Avatar, CopyField, Icon, Modal, errorMessage } from "../../shared/ui";
 
+import { AutomationPanel } from "./AutomationPanel";
+
 type Confirmation = { path: string; label: string; wholeAgent: boolean };
 export function AgentsPanel({
   groupId,
@@ -234,6 +236,7 @@ export function AgentsPanel({
                   </span>
                 </div>
               </div>
+              {groupId && groupAgentIds.includes(agent.id) && agent.status === "active" && <AutomationPanel agentId={agent.id} groupId={groupId} name={agent.name} />}
               <details className="agent-connections">
                 <summary>
                   <span>Conexiones de {agent.name}</span>

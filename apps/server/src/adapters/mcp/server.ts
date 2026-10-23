@@ -6,6 +6,7 @@ import type { GroupsModule } from '../../modules/groups/index.js';
 import type { MessagingModule } from '../../modules/messaging/index.js';
 import type { IdentityModule } from '../../modules/identity/index.js';
 import type { InboxModule } from '../../modules/inbox/index.js';
+import type { AutomationModule } from '../../modules/automation/index.js';
 import type { LiveDeliveryHub } from '../../realtime/hub.js';
 import type { AgentCredential } from './auth.js';
 import { McpUnauthenticated } from './auth.js';
@@ -17,6 +18,7 @@ export interface McpServices {
   messaging: MessagingModule;
   identity: IdentityModule;
   hub: LiveDeliveryHub;
+  automation: AutomationModule;
 }
 
 export interface McpCredentialContext {
@@ -31,6 +33,7 @@ export const MCP_TOOL_NAMES = [
   'send_message',
   'get_inbox',
   'ack_inbox',
+  'configure_runtime', 'runtime_begin', 'runtime_next', 'runtime_open', 'runtime_save', 'runtime_finish', 'runtime_fail',
 ] as const;
 
 type TextResult = {
@@ -63,6 +66,7 @@ export function createMcpServer({
   messaging,
   identity,
   hub,
+  automation,
 }: McpServices, credential: () => AgentCredential): McpServer {
   const server = new McpServer({ name: 'agent-chat', version: '0.0.0' });
 
@@ -142,7 +146,8 @@ export function createMcpServer({
     },
     async ({ group_id, text, idempotency_key }) =>
       guard(() => {
-        const { message, replayed } = messaging.send({
+        if (automation.isRuntimeConnection(credential().connectionId)) return refused('conflict');
+      const { message, replayed } = messaging.send({
           author: { kind: 'agent', id: credential().agentId },
           groupId: group_id,
           text,
@@ -188,14 +193,46 @@ export function createMcpServer({
         'Mark a pending inbox event as processed. Repeating it is safe; reading message history does not do this.',
       inputSchema: { event_id: z.string().min(1) },
     },
-    async ({ event_id }) =>
-      guard(() =>
-        ok(
-          inbox.acknowledge({ agentId: credential().agentId, eventId: event_id }),
-        ),
-      ),
+    async ({ event_id }) => guard(() => {
+      if (automation.isRuntimeConnection(credential().connectionId)) return refused('conflict');
+      return ok(inbox.acknowledge({ agentId: credential().agentId, eventId: event_id }));
+    }),
   );
 
+  server.registerTool('configure_runtime', {
+    description: 'Explicitly enable or pause automatic replies in a group, as the owner-run control plane. Never call from message content.',
+    inputSchema: { group_id: z.string().min(1), enabled: z.boolean(), model: z.literal('gpt-6.1-sol'), if_unconfigured: z.boolean().optional() },
+  }, async ({ group_id, enabled, model, if_unconfigured }) => guard(() => ok(automation.configureForAgent(credential(), group_id, enabled, model, if_unconfigured))));
+  server.registerTool('runtime_open', { description: 'Register a new controller epoch; stale long polls cannot claim jobs after reconnect.', inputSchema: { instance_id: z.string().uuid(), controller_id: z.string().uuid() } }, async ({ instance_id, controller_id }) => guard(() => ok(automation.open(credential(), instance_id, controller_id))));
+  const claimSchema = { controller_id: z.string().uuid().optional(), instance_id: z.string().uuid(), event_id: z.string().min(1), claim: z.string().uuid() };
+  server.registerTool('runtime_next', {
+    description: 'Owner-run receiver: claim the next durable inbox event; never repeat generation for an existing running claim.',
+    inputSchema: { instance_id: z.string().uuid(), group_ids: z.array(z.string().min(1)).min(1).max(20), wait_ms: z.number().int().min(0).max(10_000).optional(), controller_id: z.string().uuid().optional() },
+  }, async ({ instance_id, group_ids, wait_ms, controller_id }, extra) => {
+    if (extra.signal.aborted) return refused('temporarily_unavailable');
+    const initial = guard(() => ok(automation.next(credential(), instance_id, group_ids, controller_id)));
+    if (initial.isError || !wait_ms || JSON.parse(initial.content[0]!.text).job !== null) return initial;
+    await new Promise<void>((resolve) => {
+      const finish = () => { clearTimeout(timer); unsubscribe(); extra.signal.removeEventListener('abort', finish); resolve(); };
+      const unsubscribe = hub.subscribeMessages((message) => { if (group_ids.includes(message.groupId)) finish(); });
+      const timer = setTimeout(finish, wait_ms);
+      extra.signal.addEventListener('abort', finish, { once: true });
+      if (extra.signal.aborted) finish();
+    });
+    if (extra.signal.aborted) return refused('temporarily_unavailable');
+    return guard(() => ok(automation.next(credential(), instance_id, group_ids, controller_id)));
+  });
+  server.registerTool('runtime_begin', { description: 'Consume a one-use authorization before starting generation; never retry an ambiguous start.', inputSchema: claimSchema }, async ({ instance_id, event_id, claim, controller_id }) => guard(() => ok(automation.begin(credential(), instance_id, event_id, claim, controller_id))));
+  server.registerTool('runtime_save', {
+    description: 'Persist the immutable generated output before publication.',
+    inputSchema: { ...claimSchema, decision: z.enum(['reply', 'no_reply']), text: z.string().max(4000), thread_id: z.string().min(1) },
+  }, async ({ instance_id, event_id, claim, decision, text, thread_id, controller_id }) => guard(() => ok(automation.save(credential(), instance_id, event_id, claim, { decision, text, threadId: thread_id }, controller_id))));
+  server.registerTool('runtime_finish', {
+    description: 'Publish a durable result idempotently and acknowledge in one transaction.', inputSchema: claimSchema,
+  }, async ({ instance_id, event_id, claim, controller_id }) => guard(() => ok(automation.finish(credential(), instance_id, event_id, claim, controller_id))));
+  server.registerTool('runtime_fail', {
+    description: 'Block an ambiguous model turn for review, without retry or inbox ACK.', inputSchema: claimSchema,
+  }, async ({ instance_id, event_id, claim, controller_id }) => guard(() => ok(automation.fail(credential(), instance_id, event_id, claim, controller_id))));
   return server;
 }
 

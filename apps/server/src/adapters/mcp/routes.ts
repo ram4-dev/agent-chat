@@ -77,6 +77,11 @@ export async function registerMcpRoutes(app: FastifyInstance, options: McpRoutes
         };
 
         await server.connect(transport);
+        // Closing a stateless HTTP request must cancel its pending tool handlers.
+        // Otherwise an abandoned long poll can claim an event for a dead client.
+        const disconnected = () => { void server.close(); };
+        request.raw.once('aborted', disconnected);
+        reply.raw.once('close', disconnected);
         await transport.handleRequest(
           request.raw,
           reply.raw,

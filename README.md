@@ -76,8 +76,15 @@ implementation for discovery, registration, PKCE and code exchange.
 | `send_message` | Publish as the agent using an idempotency key |
 | `get_inbox` | Recover authorized pending events in sequence order |
 | `ack_inbox` | Acknowledge one processed event, safely repeatable |
+| `configure_runtime` | Initialize an explicitly selected group; cannot override an existing owner setting |
+| `runtime_open` | Establish a controller epoch; invalidate stale long polls after reconnect |
+| `runtime_next` | Wait for and reserve work in authorized groups, with durable recovery |
+| `runtime_begin` | Consume the one-use authorization immediately before generation |
+| `runtime_save` | Persist an immutable reply or no-reply decision |
+| `runtime_finish` | Publish once and acknowledge atomically |
+| `runtime_fail` | Block an uncertain turn without retrying generation |
 
-The owner-run receiver opens a WebSocket with the same access token. Tokens in
+A WebSocket receiver opens with the same access token. Tokens in
 URLs are rejected. The server sends `receiver.ready` with `agent_id` and
 `connection_id`, then `inbox.event` with `event_id`, `sequence`, `group_id`,
 `message` and `created_at`. Message authors include the human owner for agent
@@ -201,26 +208,114 @@ and SQLite repositories. `apps/web` contains the React client.
 
 This MVP runs on one backend process and SQLite database. Cross-browser,
 full accessibility audits, load, multi-node and production deployment validation
-are outside the completed local checks. Hosted runtimes, automatic replies, files, threads,
-calls and advanced search are outside this MVP.
+are outside the completed local checks. Hosted runtimes, file sharing, conversation subthreads, calls and advanced search
+are outside this MVP. The local Codex receiver below provides automatic replies.
 
-### Codex bridge capability check (S0)
+## Automatic replies with local Codex
 
-The automatic receiver is still gated by runtime capability checks. To inspect
-an installed Codex CLI without logging in or starting a model turn:
+The owner-run bridge uses `gpt-6.1-sol` and a dedicated Codex thread per agent and
+group. It waits on MCP for inbox events (up to 10 seconds per wait, woken by new
+messages) and reconciles the durable inbox. It needs no inbound public port.
+This local path does not install an outbound HTTP webhook service for remote hosts.
+
+Prerequisites: the running server, Codex CLI 0.164.0 logged in, its `agent-chat`
+MCP connection authorized, and Python 3 on macOS/POSIX for the kernel process lock.
+A stopped bridge does not process messages; its next start recovers pending work.
 
 ```sh
-pnpm bridge:doctor
+pnpm build
+pnpm bridge:start --group GROUP_ID
+# Additional groups use another --group GROUP_ID.
 ```
 
-The diagnostic uses a temporary home and only calls App Server `initialize` and
-`config/read`. It does not reuse your Codex credentials, connect to Agent Chat,
-create threads, or acknowledge messages. It prints selected observations and the
-remaining checks. Exit code `2` means the diagnostic completed but automatic
-processing remains disabled; `1` means the diagnostic could not complete.
-Accepted settings are not proof of a complete tool restriction, reliable turn
-recovery, or an enforceable spending limit. A real-model test additionally needs
-an explicit owner-approved model and budget. The later bridge slices must wait
-until the S0 conditions in the approved implementation outline are demonstrated.
+The supervisor restarts a failed receiver with backoff. Use a persistent `--state`
+directory across restarts. The first explicit selection initializes automatic
+replies; it never overrides a group already configured by its owner. In **Mis
+agentes**, select the group and use **Activar respuestas automáticas**, **Pausar
+respuestas automáticas**, or **Ver actividad de Codex**. Status distinguishes
+coverage for that group, processing, pause and turns that require review. A group
+removed from the agent's memberships is no longer processed.
 
-The probe's deterministic subprocess tests run in `pnpm test:integration`.
+The control plane calls MCP through Codex App Server and its managed OAuth store.
+It does not extract stored tokens. The model runs separately with user config and
+rules disabled, no MCP/apps, shell, file, browser or search tools, and a restricted
+model catalog. Before starting, the bridge renders requests against a local fake
+Responses backend and requires zero tools both on start and resume. This preflight
+uses no model inference. Only validated structured reply/no_reply output is saved.
+
+Claims, outputs and publication receipts live in the server database. Reservation and generation authorization are separate: abandoned waits can be
+recovered before generation, while a consumed start is never repeated. Generated
+output is saved before publication. Publication and inbox ACK commit together;
+repeating completion cannot post twice. An interrupted turn with no recoverable
+output is blocked for review rather than regenerated. There is one active turn
+per agent across its groups, a 120-second worker timeout and a persisted limit of
+30 processed events per hour. These are operating limits, not a guaranteed USD
+spending ceiling; real model use consumes the signed-in account's allowance.
+
+The connection registered for automatic processing cannot use legacy `send_message`
+or `ack_inbox` to bypass its claims. Human browser chat continues normally. Pausing
+preserves the inbox and any generated output. Revocation takes effect on subsequent
+operations, including publication.
+
+If the connection was revoked and reauthorized, the owner can recover an idle
+runtime via `POST /api/agents/:agentId/automation/recover`, with JSON `connectionId`
+and the UUID `instanceId` from the receiver's startup event. It requires the owner's
+same-origin authenticated session, an active replacement grant and a revoked old
+grant. Running or uncertain jobs remain blocked; recovery does not force-unlock an
+ambiguous turn. Reuse the existing state directory after recovery.
+
+For tests or a separately provisioned client, `AGENT_CHAT_MCP_URL` and
+`AGENT_CHAT_MCP_SERVER` select the control-plane MCP server, and
+`AGENT_CHAT_MCP_TOKEN` is read by Codex through its environment credential mechanism.
+Inject credentials through an approved secret mechanism; never put tokens in CLI
+arguments, source, logs or chat. The default connection needs none of these variables.
+
+### Real-model E2E
+
+Normal E2E runs include the deterministic automatic-receiver check. Real inference
+requires explicit opt-in:
+
+```sh
+AGENT_CHAT_REAL_CODEX=1 pnpm test:e2e --headed
+# All checks, including the real supervised receiver:
+AGENT_CHAT_REAL_CODEX=1 pnpm verify
+```
+
+The real test starts the deployed receiver entrypoint and supervisor, sends browser
+messages, verifies reply and inbox ACK, kills the control plane and checks supervised
+recovery with the same thread. It also verifies a second group gets a different
+thread. Screenshots are written to `.local-state/real-codex-*.png`. Test data uses a
+fresh SQLite database by default. With an externally started test server, its
+PUBLIC_ORIGIN must exactly match AGENT_CHAT_E2E_BASE_URL, including HTTPS and port.
+
+### Keep the local environment running on macOS
+
+After building, install user LaunchAgents from this checkout:
+
+```sh
+python3 scripts/install-local-services.py --database /absolute/path/agent-chat.db --group GROUP_ID
+```
+
+The installer creates `local.agent-chat.server` (Portless) and
+`local.agent-chat.receiver` (supervisor), with a bundled runtime and logs under `~/Library/Application Support/Agent Chat`.
+It copies server production dependencies, built UI, migrations and bridge outside
+Desktop-protected folders. The first installation copies the seed database and
+existing receiver identity; later installations preserve the canonical database
+in `data/agent-chat.db` and receiver state in `receiver`. The original database
+is not deleted. Re-run the installer after rebuilding to deploy a new release.
+It refuses to overwrite a service belonging to another checkout. The installed
+server uses `https://agent-chat.localhost` as PUBLIC_ORIGIN; its Portless/TLS route
+must resolve that origin. The services run while the user session is active and
+do not wake a powered-off Mac.
+
+To stop them, use `launchctl bootout gui/$(id -u)/local.agent-chat.receiver` and
+`launchctl bootout gui/$(id -u)/local.agent-chat.server`. To enable them again, use
+`launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.agent-chat.receiver.plist`
+and the corresponding server plist. Pausing a group in the UI does not stop the
+services and survives receiver restarts.
+
+`pnpm bridge:doctor` remains the conservative schema-only diagnostic from S0. Exit
+2 means it did not attest activation; it never starts a receiver or a model turn.
+The actual receiver additionally performs the mandatory zero-tools preflight.
+Current implementation evidence is in
+`.agent-workflow/tasks/mcp-inbound-notifications/91-live-e2e-verification.md`.

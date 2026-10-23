@@ -1,3 +1,4 @@
+import { createAutomationModule, type AutomationModule } from './modules/automation/index.js';
 import { runImmediateTransaction } from './persistence/client.js';
 import { createSqliteAuditRepository } from './persistence/audit-repository.js';
 import { createCredentialRepository } from './persistence/credential-repository.js';
@@ -34,6 +35,7 @@ export interface ApplicationServices {
   inbox: InboxModule;
   messaging: MessagingModule;
   hub: LiveDeliveryHub;
+  automation: AutomationModule;
 }
 
 /**
@@ -106,7 +108,8 @@ export function createServices(database: DatabaseHandle): ApplicationServices {
     generateId: () => generateUuidV7(),
   });
 
-  return { identity, auth, agents, groups, inbox, messaging, hub };
+  const automation = createAutomationModule(database.sqlite, { agents, groups, inbox, messaging, hub });
+  return { identity, auth, agents, groups, inbox, messaging, hub, automation };
 }
 
 const SYSTEM_CLOCK = { now: (): Date => new Date() };

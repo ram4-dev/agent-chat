@@ -13,7 +13,10 @@ import { migrateFromDirectory } from '../../apps/server/src/persistence/migrate'
 
 const MIGRATIONS_PATH = join(REPOSITORY_ROOT, MIGRATIONS_DIRECTORY);
 const MVP_TABLES = [
+  'agent_automation_bindings',
+  'agent_automation_jobs',
   'agent_connections',
+  'agent_runtimes',
   'agents',
   'audit_events',
   'group_agent_memberships',

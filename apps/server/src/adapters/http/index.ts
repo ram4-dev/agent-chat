@@ -34,7 +34,7 @@ export function registerHttpAdapter(
     secureCookies: config.nodeEnv === 'production',
   });
   registerAgentRoutes(app, services);
-  registerGroupRoutes(app, { auth: services.auth, groups: services.groups, hub: services.hub });
+  registerGroupRoutes(app, { auth: services.auth, groups: services.groups, hub: services.hub, automation: services.automation });
   registerMessageRoutes(app, {
     auth: services.auth,
     messaging: services.messaging,

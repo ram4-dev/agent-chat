@@ -1,3 +1,6 @@
+Snapshot histórico de S0. La implementación local posterior y su prueba real
+se documentan en 91-live-e2e-verification.md; este documento no es el estado vigente.
+
 # S0: auditoría del presupuesto de Codex 0.164.0
 
 Fecha: 2026-10-23. Sin inferencia, credenciales, hilos ni turnos de prueba.

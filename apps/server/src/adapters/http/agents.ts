@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { SESSION_COOKIE_NAME, isPlainObject, AGENT_PATHS, type OwnedAgentView, type OwnedAgentsResponse } from '@agent-chat/contracts';
 import type { AgentRecord, ConnectionRecord } from '../../modules/agents/index.js';
@@ -6,14 +7,25 @@ import { DomainError } from '../../modules/errors.js';
 import { readCookie } from './cookie.js';
 import { sendError } from './error-envelope.js';
 
-export function registerAgentRoutes(app: FastifyInstance, { auth, agents, hub }: ApplicationServices): void {
+export function registerAgentRoutes(app: FastifyInstance, { auth, agents, hub, automation }: ApplicationServices): void {
   const owner = (cookie?: string) => auth.resolveSession(readCookie(cookie, SESSION_COOKIE_NAME)).id;
   app.get(AGENT_PATHS.collection, (req, reply) => run(reply, () => {
     const ownerUserId = owner(req.headers.cookie);
     return { agents: agents.listOwnedAgents(ownerUserId).map((agent) => ({
-      ...agent, receiverConnected: hub.receiverIsConnected(agent.id),
+      ...agent, receiverConnected: hub.receiverIsConnected(agent.id) || automation.agentConnected(agent.id),
       connections: agents.listConnections(agent.id, ownerUserId),
     } satisfies OwnedAgentView)) } satisfies OwnedAgentsResponse;
+  }));
+  app.get<{ Params: { agentId: string; groupId: string } }>('/api/agents/:agentId/automation/:groupId', (req, reply) => run(reply, () =>
+    automation.ownerState(owner(req.headers.cookie), req.params.agentId, req.params.groupId)));
+  app.patch<{ Params: { agentId: string; groupId: string } }>('/api/agents/:agentId/automation/:groupId', (req, reply) => run(reply, () => {
+    if (!isPlainObject(req.body) || typeof req.body['enabled'] !== 'boolean') return sendError(reply, 400, 'invalid_input');
+    return { binding: automation.configureForOwner(owner(req.headers.cookie), req.params.agentId, req.params.groupId, req.body['enabled']) };
+  }));
+  app.post<{ Params: { agentId: string } }>('/api/agents/:agentId/automation/recover', (req, reply) => run(reply, () => {
+    if (!isPlainObject(req.body) || typeof req.body['connectionId'] !== 'string' || typeof req.body['instanceId'] !== 'string' ||
+        !z.string().uuid().safeParse(req.body['instanceId']).success) return sendError(reply, 400, 'invalid_input');
+    return automation.recoverForOwner(owner(req.headers.cookie), req.params.agentId, req.body['connectionId'], req.body['instanceId']);
   }));
   app.post(AGENT_PATHS.collection, (req, reply) => run(reply, () => {
     const ownerUserId = owner(req.headers.cookie);

@@ -12,7 +12,7 @@ describe('MCP tool surface', () => {
     await expect(connect(undefined, harness)).rejects.toThrow('unauthenticated');
   });
 
-  it('advertises the four approved tools to an authenticated agent', async () => {
+  it('advertises messaging and owner-run receiver tools to an authenticated agent', async () => {
     const harness = await startHarness();
     const { token } = await agentToken(harness, 'tools-owner@example.com', 'Roster');
 
@@ -21,10 +21,17 @@ describe('MCP tool surface', () => {
       const tools = await client.listTools();
       expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
         'ack_inbox',
+        'configure_runtime',
         'get_identity',
         'get_inbox',
         'list_groups',
         'read_messages',
+        'runtime_begin',
+        'runtime_fail',
+        'runtime_finish',
+        'runtime_next',
+        'runtime_open',
+        'runtime_save',
         'send_message',
       ]);
     } finally {

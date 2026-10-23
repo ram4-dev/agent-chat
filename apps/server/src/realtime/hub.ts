@@ -18,6 +18,7 @@ export interface LiveDeliveryHub {
    */
   publishMessage(message: MessageView): void;
   subscribeMessages(listener: MessageListener): () => void;
+  notifyAgentState(agentId: string): void;
   subscribeAgentState(listener: (agentId: string) => void): () => void;
   receiverCount(connectionId: string): number;
   receiverIsConnected(agentId: string): boolean;
@@ -44,6 +45,7 @@ export function createLiveDeliveryHub(): LiveDeliveryHub {
   };
 
   return {
+    notifyAgentState: changed,
     subscribeMessages(listener) {
       allMessages.add(listener);
       return () => { allMessages.delete(listener); };
