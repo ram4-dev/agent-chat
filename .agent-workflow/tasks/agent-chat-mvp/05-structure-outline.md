@@ -28,7 +28,7 @@ Controlling artifacts: `03-prd.md` revision 2 (approved), `04-tdd.md` System Des
 | S4 — OAuth connection, agent identity, consent | done | `836be37`, `c23e36c`, `+` | Full authorization-code exchange issues a JWT access token carrying `agent_id`, `connection_id`, and the resource audience; discovery, dynamic registration, consent, agent creation, immutable ownership, connection reuse, duplicate prevention, and cross-owner refusal all verified. 147 unit, 15 contract, 84 integration, 8 Playwright pass, zero skipped |
 | S5 — MCP tool surface and idempotent sending | done | `fd6352c`, `24f46b4`, `+` | MCP endpoint with agent JWT verification and all four tools through the official SDK client; agent admission and removal over HTTP with admin/agent-status guards, so no test seeds membership by hand. 147 unit, 15 contract, 90 integration, 8 Playwright pass |
 | S6 — Durable inbox lifecycle | done | `78aeb6b`, `+` | Inbox events written in the same transaction as the message, get_inbox and ack_inbox as MCP tools; AC10 and AC11 observed, including that a history read never acknowledges and that an event whose group the agent left is never confirmed. 147 unit, 15 contract, 93 integration, 8 Playwright pass |
-| S7 — Agent receiver WebSocket and live delivery | not started — depends on S6 | — | — |
+| S7 — Agent receiver WebSocket and live delivery | done | this slice commit | Node 22: 147 unit, 15 contract, 101 integration, 9 browser E2E; receiver state and owner labels visually inspected |
 | S8 — Revocation and activity record | not started — depends on S4 | — | — |
 | S9 — Full-loop verification and documentation | not started — depends on S4 | — | — |
 

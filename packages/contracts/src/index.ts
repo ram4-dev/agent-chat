@@ -64,6 +64,7 @@ export {
   parseBrowserEvent,
   type AgentConnectionChangedEvent,
   type BrowserEvent,
+  type AgentReceiverEvent,
   type BrowserEventType,
   type MembershipChangedEvent,
   type MessageCreatedEvent,

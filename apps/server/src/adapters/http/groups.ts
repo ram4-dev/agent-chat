@@ -12,6 +12,7 @@ import {
   type OkResponse,
 } from '@agent-chat/contracts';
 import type { AuthModule } from '../../modules/auth/index.js';
+import type { LiveDeliveryHub } from '../../realtime/hub.js';
 import type { GroupsModule } from '../../modules/groups/index.js';
 import { DomainError } from '../../modules/errors.js';
 import { readCookie } from './cookie.js';
@@ -21,6 +22,7 @@ import { SESSION_COOKIE_NAME } from '@agent-chat/contracts';
 export interface GroupRoutesDependencies {
   auth: AuthModule;
   groups: GroupsModule;
+  hub: LiveDeliveryHub;
 }
 
 /**
@@ -32,7 +34,7 @@ export interface GroupRoutesDependencies {
  */
 export function registerGroupRoutes(
   app: FastifyInstance,
-  { auth, groups }: GroupRoutesDependencies,
+  { auth, groups, hub }: GroupRoutesDependencies,
 ): void {
   const session = (request: { headers: { cookie?: string } }): string =>
     auth.resolveSession(readCookie(request.headers.cookie, SESSION_COOKIE_NAME)).id;
@@ -82,7 +84,8 @@ export function registerGroupRoutes(
             name: detail.group.name,
             createdAt: detail.group.createdAt,
           },
-          members: detail.members,
+          members: detail.members.map((member) => member.kind === 'agent'
+            ? { ...member, receiverConnected: hub.receiverIsConnected(member.id) } : member),
           role: detail.role,
         } satisfies GroupDetailResponse);
       }),

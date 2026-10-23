@@ -1,4 +1,4 @@
-import { DOMAIN_ERROR_CODES, LIMITS } from '@agent-chat/contracts';
+import { DOMAIN_ERROR_CODES, LIMITS, type MessageView } from '@agent-chat/contracts';
 import { DomainError } from '../errors.js';
 import type { Clock } from '../identity/index.js';
 
@@ -8,12 +8,7 @@ export interface InboxEventView {
   sequence: number;
   groupId: string;
   createdAt: string;
-  message: {
-    id: string;
-    text: string;
-    createdAt: string;
-    author: { kind: 'human' | 'agent'; id: string; displayName: string };
-  };
+  message: MessageView;
 }
 
 export interface InboxPage {
@@ -24,6 +19,7 @@ export interface InboxPage {
 export interface InboxRepository {
   /** Pending events only, oldest first. `after` is an exclusive sequence cursor. */
   listPending(agentId: string, limit: number, after?: number): InboxEventView[];
+  findForMessage(messageId: string, agentId: string): InboxEventView | undefined;
   findPending(eventId: string, agentId: string): InboxEventView | undefined;
   /**
    * Looks an event up regardless of whether it was acknowledged.
@@ -41,6 +37,7 @@ export interface InboxAccessPort {
 }
 
 export interface InboxModule {
+  eventForMessage(agentId: string, messageId: string): InboxEventView | undefined;
   listPending(input: { agentId: string; limit?: number; after?: number }): InboxPage;
   acknowledge(input: { agentId: string; eventId: string }): { status: 'acknowledged' };
 }
@@ -72,6 +69,10 @@ export function createInboxModule({
   }
 
   return {
+    eventForMessage(agentId, messageId) {
+      const event = inbox.findForMessage(messageId, agentId);
+      return event !== undefined && visible(agentId, event) ? event : undefined;
+    },
     listPending({ agentId, limit, after }) {
       const bounded = Math.max(1, Math.min(limit ?? LIMITS.PAGE_SIZE_DEFAULT, LIMITS.PAGE_SIZE_MAX));
       // One extra row tells the caller whether an older page exists without a count.

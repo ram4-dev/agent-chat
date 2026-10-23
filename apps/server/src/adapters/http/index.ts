@@ -32,7 +32,7 @@ export function registerHttpAdapter(
     auth: services.auth,
     secureCookies: config.nodeEnv === 'production',
   });
-  registerGroupRoutes(app, { auth: services.auth, groups: services.groups });
+  registerGroupRoutes(app, { auth: services.auth, groups: services.groups, hub: services.hub });
   registerMessageRoutes(app, {
     auth: services.auth,
     messaging: services.messaging,

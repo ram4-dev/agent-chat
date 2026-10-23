@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react';
-import type { GroupSummary } from '@agent-chat/contracts';
+import { useEffect, useState, type FormEvent } from 'react';
+import { BROWSER_SOCKET_PATH, parseBrowserEvent, type GroupSummary } from '@agent-chat/contracts';
 import { describeMember } from './transport';
 import type { GroupDetailState, GroupsState, InvitationState } from './transport';
 
@@ -33,6 +33,19 @@ export function GroupPanel({
 }: GroupPanelProps) {
   const [groupName, setGroupName] = useState('');
   const [inviteToken, setInviteToken] = useState('');
+
+  const selectedId = detail.status === 'ready' ? detail.detail.group.id : undefined;
+  useEffect(() => {
+    if (selectedId === undefined) return;
+    const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${BROWSER_SOCKET_PATH}`);
+    socket.onmessage = (event: MessageEvent<string>) => {
+      let frame;
+      try { frame = parseBrowserEvent(JSON.parse(event.data)); } catch { return; }
+      if (frame?.type === 'agent.connection.changed') onOpenGroup(selectedId);
+    };
+    return () => socket.close();
+    // The selected group owns the socket; callback identity changes on each render.
+  }, [selectedId]);
 
   return (
     <section aria-label="Groups">
@@ -77,6 +90,9 @@ export function GroupPanel({
             {detail.detail.members.map((member) => (
               <li key={member.id}>
                 {describeMember(member)}{' '}
+                {member.kind === 'agent' && <span>
+                  {member.receiverConnected ? 'Receiver connected. Replies depend on the owner-run runtime.' : 'Receiver disconnected. Pending events can be recovered when the runtime reconnects.'}
+                </span>}{' '}
                 {detail.detail.role === 'admin' && <button
                   type="button"
                   onClick={() => onRemoveMember(detail.detail.group.id, member.id)}

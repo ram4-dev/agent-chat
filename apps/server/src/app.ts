@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { LIMITS } from '@agent-chat/contracts';
+import { registerAgentSocket } from './adapters/agent-ws/index.js';
 import { registerBrowserSocket } from './adapters/browser-ws/index.js';
 import { registerInteractionRoutes } from './adapters/oauth/interactions.js';
 import { registerMcpRoutes } from './adapters/mcp/routes.js';
@@ -83,6 +84,11 @@ export async function createApp({
     issuer: config.publicOrigin,
     audience: config.publicOrigin,
     services,
+  });
+
+  registerAgentSocket(app, {
+    publicJwk: toPublicJwk(jwks.keys[0]), issuer: config.publicOrigin,
+    audience: config.publicOrigin, services,
   });
 
   registerBrowserSocket(app, {

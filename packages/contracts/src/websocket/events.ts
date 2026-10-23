@@ -73,3 +73,7 @@ export function parseBrowserEvent(raw: unknown): BrowserEvent | undefined {
       return undefined;
   }
 }
+
+export type AgentReceiverEvent =
+  | { type: 'receiver.ready'; agent_id: string; connection_id: string }
+  | { type: 'inbox.event'; event_id: string; sequence: number; group_id: string; message: MessageView; created_at: string };

@@ -158,7 +158,6 @@ export function App() {
       }}
       onOpenGroup={(groupId) => {
         setInvitation({ status: 'idle' });
-        setDetail({ status: 'loading' });
         void loadGroupDetail(groupId).then(setDetail);
       }}
       onInvite={(groupId) => {

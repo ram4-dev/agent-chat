@@ -6,6 +6,7 @@ export interface AgentCredential {
   agentId: string;
   connectionId: string;
   scopes: AgentScope[];
+  expiresAt: number;
 }
 
 export class McpUnauthenticated extends Error {
@@ -51,7 +52,7 @@ export function createMcpAuthenticator({
 
     let payload;
     try {
-      ({ payload } = await jwtVerify(authorization.slice(7), key, { issuer, audience }));
+      ({ payload } = await jwtVerify(authorization.slice(7), key, { issuer, audience, algorithms: ['EdDSA'], requiredClaims: ['exp', 'iat'] }));
     } catch {
       // The reason a token is rejected is never reported to the caller: an
       // expired, forged, and wrong-audience credential all get one answer.
@@ -80,7 +81,10 @@ export function createMcpAuthenticator({
     return {
       agentId,
       connectionId,
-      scopes: resolved.connection.scopes as AgentScope[],
+      scopes: resolved.connection.scopes.filter((scope) =>
+        typeof payload.scope === 'string' && payload.scope.split(' ').includes(scope),
+      ) as AgentScope[],
+      expiresAt: payload.exp! * 1000,
     };
   };
 }

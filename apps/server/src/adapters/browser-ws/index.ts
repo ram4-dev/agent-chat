@@ -46,30 +46,46 @@ export function registerBrowserSocket(
       return;
     }
 
-    const open = openSockets.get(user.id) ?? 0;
+    const open = openSockets.get(token!) ?? 0;
     if (open >= maxSocketsPerSession) {
       socket.close(4429, 'too many sockets');
       return;
     }
-    openSockets.set(user.id, open + 1);
+    openSockets.set(token!, open + 1);
 
     const memberships = groups.listGroups(user.id);
     const groupIds = memberships.map(({ group }) => group.id);
-    const unsubscribers = groupIds.map((groupId) =>
-      hub.subscribe(groupId, (message) => {
-        send(socket, { type: 'message.created', message });
+    const authorized = (groupId: string) => {
+      try {
+        auth.resolveSession(token);
+        groups.getGroupDetail({ userId: user.id, groupId });
+        return true;
+      } catch { return false; }
+    };
+    const unsubscribers = [
+      hub.subscribeMessages((message) => {
+        if (authorized(message.groupId)) send(socket, { type: 'message.created', message });
       }),
-    );
+      hub.subscribeAgentState((agentId) => {
+        for (const { group } of groups.listGroups(user.id)) {
+          if (authorized(group.id) && groups.getGroupDetail({ userId: user.id, groupId: group.id })
+            .members.some((member) => member.kind === 'agent' && member.id === agentId)) {
+            send(socket, { type: 'agent.connection.changed', agentId });
+            break;
+          }
+        }
+      }),
+    ];
 
     socket.on('close', () => {
       for (const unsubscribe of unsubscribers) {
         unsubscribe();
       }
-      const remaining = (openSockets.get(user.id) ?? 1) - 1;
+      const remaining = (openSockets.get(token!) ?? 1) - 1;
       if (remaining <= 0) {
-        openSockets.delete(user.id);
+        openSockets.delete(token!);
       } else {
-        openSockets.set(user.id, remaining);
+        openSockets.set(token!, remaining);
       }
     });
 
