@@ -24,6 +24,9 @@ test("a new account can create a conversation immediately and agents have a sepa
     page.getByRole("region", { name: "Conversación de Diseño de producto" }),
   ).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(
+    page.getByText("1 integrante · Grupo privado", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByLabel("Mensaje", { exact: true })).toBeVisible();
   for (let i = 0; i < 2; i++) {
     await page.getByLabel("Mensaje", { exact: true }).fill("Hola equipo");
@@ -149,6 +152,9 @@ test("an invitation link survives signup and an expired-invitation response can 
     .getByRole("textbox", { name: "Enlace de invitación", exact: true })
     .inputValue();
   expect(new URL(link).origin).toBe(baseURL);
+  await expect(
+    a.getByRole("dialog", { name: "Invitar personas" }).locator("p.field-hint"),
+  ).not.toHaveText(/\.\.$/);
   await b.goto(link);
   await signUp(b, "ui-invite-guest@example.com", "Sol");
   const join = b.getByRole("dialog", { name: "Unirme a un grupo" });
@@ -289,4 +295,42 @@ test("agents load errors can be retried into an actionable empty list", async ({
     page.getByRole("dialog", { name: "Crear agente" }),
   ).toBeVisible();
   await expect(page.getByLabel("Nombre del agente")).toHaveValue("");
+});
+
+test("agent management identifies existing group membership after adding and reloading", async ({
+  page,
+}) => {
+  const { signUp, createGroup, agents } = await import("./helpers/ui");
+  await page.goto("/");
+  await signUp(page, "ui-agent-membership@example.com", "Ada");
+  await createGroup(page, "Equipo");
+  await agents(page);
+  await page.getByRole("button", { name: "Crear agente", exact: true }).click();
+  await page.getByLabel("Nombre del agente").fill("Scout");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Crear agente", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Agregar a Equipo", exact: true })
+    .click();
+  const member = page.getByRole("button", {
+    name: "Ya está en Equipo",
+    exact: true,
+  });
+  await expect(member).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Agregar a Equipo", exact: true }),
+  ).toHaveCount(0);
+  await page.reload();
+  await agents(page);
+  await expect(member).toBeDisabled();
+  await page.getByRole("button", { name: "Equipo", exact: true }).click();
+  await page.getByRole("button", { name: "Ver miembros" }).click();
+  await expect(
+    page.getByRole("list", { name: "Agentes del grupo" }).getByRole("listitem"),
+  ).toHaveCount(1);
+  await expect(
+    page.getByText("2 integrantes · Grupo privado", { exact: true }),
+  ).toBeVisible();
 });

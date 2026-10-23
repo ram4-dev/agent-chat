@@ -12,6 +12,7 @@ type Confirmation = { path: string; label: string; wholeAgent: boolean };
 export function AgentsPanel({
   groupId,
   groupName,
+  groupAgentIds = [],
   onChanged,
   onMenu,
   revision,
@@ -19,6 +20,7 @@ export function AgentsPanel({
   revision: number;
   groupId?: string;
   groupName?: string;
+  groupAgentIds?: readonly string[];
   onChanged(): void;
   onMenu(): void;
 }) {
@@ -291,7 +293,7 @@ export function AgentsPanel({
                 <div className="agent-card-actions">
                   {groupId && (
                     <button
-                      disabled={busy}
+                      disabled={busy || groupAgentIds.includes(agent.id)}
                       className="button secondary compact"
                       onClick={() => {
                         void mutate(
@@ -309,8 +311,15 @@ export function AgentsPanel({
                         });
                       }}
                     >
-                      <Icon name="plus" />
-                      Agregar a {groupName}
+                      <Icon
+                        name={
+                          groupAgentIds.includes(agent.id) ? "check" : "plus"
+                        }
+                      />
+                      {groupAgentIds.includes(agent.id)
+                        ? "Ya está en"
+                        : "Agregar a"}{" "}
+                      {groupName}
                     </button>
                   )}
                   <button

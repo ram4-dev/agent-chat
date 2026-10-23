@@ -290,7 +290,13 @@ export function App() {
           <AgentsPanel
             revision={agentRevision}
             {...(current?.role === "admin"
-              ? { groupId: current.group.id, groupName: current.group.name }
+              ? {
+                  groupId: current.group.id,
+                  groupName: current.group.name,
+                  groupAgentIds: current.members
+                    .filter((member) => member.kind === "agent")
+                    .map((member) => member.id),
+                }
               : {})}
             onChanged={() => {
               if (selectedId) void refreshDetail(selectedId);
@@ -319,7 +325,7 @@ export function App() {
                   <span>
                     <Icon name="lock" />
                     {current
-                      ? `${current.members.length} integrantes · Grupo privado`
+                      ? `${current.members.length} ${current.members.length === 1 ? "integrante" : "integrantes"} · Grupo privado`
                       : "Tu espacio para trabajar juntos"}
                   </span>
                 </div>
@@ -541,7 +547,6 @@ export function App() {
                   "es-AR",
                   { dateStyle: "medium", timeStyle: "short" },
                 )}
-                .
               </p>
               <details className="technical-details">
                 <summary>Usar un código de invitación</summary>
