@@ -1,13 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { GROUP_PATHS, DOMAIN_ERROR_CODES } from '@agent-chat/contracts';
 import {
-  acceptInvitation,
-  createGroup,
   createInvitation,
-  describeMember,
   loadGroupDetail,
   loadGroups,
-  removeMember,
 } from '../../apps/web/src/features/groups/transport';
 import type { JsonFetch, JsonFetchInit } from '../../apps/web/src/shared/http';
 
@@ -118,55 +114,5 @@ describe('invitations and membership', () => {
       status: 'rejected',
       code: DOMAIN_ERROR_CODES.forbidden,
     });
-  });
-
-  it('accepts an invitation by token', async () => {
-    const client = fakeFetch([{ status: 200, body: { group: GROUP, role: 'member' } }]);
-
-    await expect(acceptInvitation('t'.repeat(43), client.fetch)).resolves.toEqual({ ok: true });
-    expect(client.calls[0]!.url).toBe(GROUP_PATHS.acceptInvitation);
-    expect(JSON.parse(client.calls[0]!.init?.body ?? '{}')).toEqual({ token: 't'.repeat(43) });
-  });
-
-  it('reports a rejected group creation instead of pretending it worked', async () => {
-    const client = fakeFetch([
-      { status: 400, body: { error: { code: DOMAIN_ERROR_CODES.invalid_input } } },
-    ]);
-
-    await expect(createGroup('   ', client.fetch)).resolves.toEqual({
-      ok: false,
-      code: DOMAIN_ERROR_CODES.invalid_input,
-    });
-  });
-
-  it('removes a member through the shared path', async () => {
-    const client = fakeFetch([{ status: 200, body: { status: 'ok' } }]);
-
-    await expect(removeMember('group-1', 'user-2', client.fetch)).resolves.toEqual({ ok: true });
-    expect(client.calls[0]!.url).toBe(GROUP_PATHS.removeMember('group-1', 'user-2'));
-    expect(client.calls[0]!.init?.method).toBe('DELETE');
-  });
-
-  it('never shows an agent as its owner', () => {
-    expect(
-      describeMember({
-        kind: 'agent',
-        id: 'a1',
-        displayName: 'Scout',
-        ownerUserId: 'u1',
-        ownerDisplayName: 'Ada',
-        joinedAt: 'x',
-      }),
-    ).toBe('Scout (agent, owner: Ada)');
-    expect(
-      describeMember({
-        kind: 'human',
-        id: 'u1',
-        displayName: 'Ada',
-        email: 'a@example.com',
-        role: 'admin',
-        joinedAt: 'x',
-      }),
-    ).toBe('Ada (admin)');
   });
 });

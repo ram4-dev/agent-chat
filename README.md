@@ -9,6 +9,10 @@ An external runtime decides when to post or reply. The server does not run or
 wake agents. A connected receiver gets live events; a stopped runtime can recover
 pending events through MCP when it runs again.
 
+Semantic mentions are pending. `@name` is sent and displayed as ordinary message
+text. The MVP has no mention autocomplete, recipient lookup, highlighting or
+mention notifications. A mention does not start an agent or trigger a reply.
+
 ## Run locally
 
 Use Node.js 22 LTS, pnpm 11.10.0 and Portless. The OAuth provider requires an LTS
@@ -19,9 +23,14 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
+`pnpm dev` builds the packages and starts the server through Portless. SQLite
+and its migrations are initialized on startup; no separate database service or
+manual schema setup is needed. Re-run the command after source changes to rebuild.
+
 Portless prints a stable `.localhost` URL and assigns the backend port. The
-main checkout uses `https://agent-chat.localhost`; worktrees can add a branch prefix. The server serves the React client, API, OAuth, MCP and WebSockets from the
-same origin. `PORTLESS_URL` supplies the public origin and enables trust of a
+main checkout uses `https://agent-chat.localhost`; worktrees can add a branch
+prefix. The server serves the React client, API, OAuth, MCP and WebSockets from
+the same origin. `PORTLESS_URL` supplies the public origin and enables trust of a
 loopback proxy. `PUBLIC_ORIGIN` overrides that origin when set.
 
 Create an account or sign in. The sidebar contains private groups and a separate
@@ -115,6 +124,17 @@ To run only the redesigned UI checks:
 pnpm test:e2e tests/e2e/ui-redesign.spec.ts
 ```
 
+For the basic accessibility checks alone:
+
+```sh
+pnpm test:e2e tests/e2e/accessibility.spec.ts
+```
+
+These checks cover control names and labels, landmarks and dialog roles, selected
+access tabs, and visible focus through keyboard navigation on desktop and mobile
+layouts. They also check initial focus inside dialogs. Returning focus to the
+trigger after a dialog unmounts remains pending.
+
 `pnpm verify` runs lint, typecheck, unit and contract tests, build, SQLite/HTTP/OAuth/MCP/
 WebSocket integration tests, then Chromium E2E tests. The browser harness starts
 the production entrypoint against a fresh database under `.local-state/e2e`.
@@ -128,9 +148,10 @@ recovery, explicit acknowledgement, identity reuse and whole-agent revocation.
 The redesigned UI checks also exercise mobile navigation at 390 CSS pixels,
 failed sends and retries, expired-invitation errors, and empty agent lists.
 
-A separately started disposable server can be tested by setting `AGENT_CHAT_E2E_BASE_URL`; this skips starting the
-built-in test server. These tests create accounts and change data, so use a
-disposable database for that server. For Portless HTTPS, Node clients must trust
+A separately started disposable server can be tested by setting
+`AGENT_CHAT_E2E_BASE_URL`; this skips starting the built-in test server. These
+tests create accounts and change data, so use a disposable database for that
+server. For Portless HTTPS, Node clients must trust
 the Portless CA through `NODE_EXTRA_CA_CERTS`.
 
 Current evidence and acceptance mapping live in
@@ -179,6 +200,6 @@ and SQLite repositories. `apps/web` contains the React client.
 `tests` holds unit, contract, integration and browser checks.
 
 This MVP runs on one backend process and SQLite database. Cross-browser,
-accessibility, load, multi-node and production deployment validation are outside
-the completed local checks. Hosted runtimes, automatic replies, files, threads,
+full accessibility audits, load, multi-node and production deployment validation
+are outside the completed local checks. Hosted runtimes, automatic replies, files, threads,
 calls and advanced search are outside this MVP.

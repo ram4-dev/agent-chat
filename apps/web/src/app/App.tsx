@@ -289,6 +289,7 @@ export function App() {
         {view === "agents" ? (
           <AgentsPanel
             revision={agentRevision}
+            navigationOpen={navOpen}
             {...(current?.role === "admin"
               ? {
                   groupId: current.group.id,
@@ -309,6 +310,8 @@ export function App() {
               <button
                 className="icon-button mobile-only"
                 aria-label="Abrir navegación"
+                aria-expanded={navOpen}
+                aria-controls="workspace-navigation"
                 onClick={() => setNavOpen(true)}
               >
                 <Icon name="menu" />
@@ -356,6 +359,7 @@ export function App() {
                     className={`icon-button ${detailsOpen ? "is-active" : ""}`}
                     aria-label="Ver miembros"
                     aria-expanded={detailsOpen}
+                    aria-controls={detailsOpen ? "group-details" : undefined}
                     onClick={() => setDetailsOpen(!detailsOpen)}
                   >
                     <Icon name="people" />

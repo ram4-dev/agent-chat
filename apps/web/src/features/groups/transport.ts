@@ -5,9 +5,8 @@ import {
   type GroupDetailResponse,
   type GroupSummary,
   type InvitationResponse,
-  type Member,
 } from '@agent-chat/contracts';
-import { errorCodeOf, JSON_HEADERS, type JsonFetch } from '../../shared/http';
+import { errorCodeOf, type JsonFetch } from '../../shared/http';
 
 export type GroupsState =
   | { status: 'loading' }
@@ -25,9 +24,6 @@ export type InvitationState =
   | { status: 'ready'; invitation: InvitationResponse }
   | { status: 'rejected'; code: string }
   | { status: 'error'; httpStatus: number };
-
-/** Action results carry the shared code so the UI can explain the refusal. */
-export type ActionResult = { ok: true } | { ok: false; code: string };
 
 export async function loadGroups(fetchImpl: JsonFetch = fetch): Promise<GroupsState> {
   try {
@@ -72,13 +68,6 @@ export async function loadGroupDetail(
   }
 }
 
-export async function createGroup(
-  name: string,
-  fetchImpl: JsonFetch = fetch,
-): Promise<ActionResult> {
-  return post(GROUP_PATHS.collection, { name }, fetchImpl);
-}
-
 export async function createInvitation(
   groupId: string,
   fetchImpl: JsonFetch = fetch,
@@ -107,60 +96,5 @@ export async function createInvitation(
     };
   } catch {
     return { status: 'error', httpStatus: 0 };
-  }
-}
-
-export async function acceptInvitation(
-  token: string,
-  fetchImpl: JsonFetch = fetch,
-): Promise<ActionResult> {
-  return post(GROUP_PATHS.acceptInvitation, { token }, fetchImpl);
-}
-
-export async function removeMember(
-  groupId: string,
-  memberId: string,
-  fetchImpl: JsonFetch = fetch,
-): Promise<ActionResult> {
-  try {
-    const response = await fetchImpl(GROUP_PATHS.removeMember(groupId, memberId), {
-      method: 'DELETE',
-    });
-
-    if (response.ok) {
-      return { ok: true };
-    }
-    return { ok: false, code: errorCodeOf(await response.json()) ?? 'unknown' };
-  } catch {
-    return { ok: false, code: 'unreachable' };
-  }
-}
-
-/** Honest label for a member row: an agent is never shown as its owner. */
-export function describeMember(member: Member): string {
-  if (member.kind === 'agent') {
-    return `${member.displayName} (agent, owner: ${member.ownerDisplayName})`;
-  }
-  return `${member.displayName} (${member.role})`;
-}
-
-async function post(
-  path: string,
-  payload: unknown,
-  fetchImpl: JsonFetch,
-): Promise<ActionResult> {
-  try {
-    const response = await fetchImpl(path, {
-      method: 'POST',
-      headers: JSON_HEADERS,
-      body: JSON.stringify(payload),
-    });
-
-    if (response.ok) {
-      return { ok: true };
-    }
-    return { ok: false, code: errorCodeOf(await response.json()) ?? 'unknown' };
-  } catch {
-    return { ok: false, code: 'unreachable' };
   }
 }

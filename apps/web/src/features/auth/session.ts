@@ -8,11 +8,8 @@ import {
   errorCodeOf,
   JSON_HEADERS,
   type JsonFetch,
-  type JsonFetchInit,
   type JsonFetchResponse,
 } from "../../shared/http";
-
-export type { JsonFetch, JsonFetchInit, JsonFetchResponse };
 
 export type SessionState =
   | { status: "loading" }
@@ -74,24 +71,6 @@ export function loginAccount(
   fetchImpl: JsonFetch = fetch,
 ): Promise<SessionState> {
   return postCredentials(AUTH_PATHS.login, input, fetchImpl);
-}
-
-/**
- * Ends the session.
- *
- * The result is ignored on purpose: logging out must appear to succeed even if
- * the network failed, because the local state is the visitor's only concern and
- * the cookie is cleared by a follow-up session read.
- */
-export async function logout(fetchImpl: JsonFetch = fetch): Promise<void> {
-  try {
-    await fetchImpl(AUTH_PATHS.logout, {
-      method: "POST",
-      headers: JSON_HEADERS,
-    });
-  } catch {
-    // Ignored by design.
-  }
 }
 
 async function postCredentials(

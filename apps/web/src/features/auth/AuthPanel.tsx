@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import {
   describeRejection,
   type Credentials,
@@ -16,6 +16,7 @@ export function AuthPanel({
   onRegister(input: Registration): Promise<void>;
   onLogin(input: Credentials): Promise<void>;
 }) {
+  const accessId = useId();
   const [mode, setMode] = useState<"register" | "login">("register");
   const [busy, setBusy] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -92,6 +93,9 @@ export function AuthPanel({
           <div className="segmented" role="tablist" aria-label="Tipo de acceso">
             <button
               role="tab"
+              id={`${accessId}-register`}
+              aria-selected={mode === "register"}
+              aria-controls={`${accessId}-panel`}
               type="button"
               className={mode === "register" ? "selected" : ""}
               onClick={() => setMode("register")}
@@ -100,6 +104,9 @@ export function AuthPanel({
             </button>
             <button
               role="tab"
+              id={`${accessId}-login`}
+              aria-selected={mode === "login"}
+              aria-controls={`${accessId}-panel`}
               type="button"
               className={mode === "login" ? "selected" : ""}
               onClick={() => setMode("login")}
@@ -108,6 +115,9 @@ export function AuthPanel({
             </button>
           </div>
           <form
+            id={`${accessId}-panel`}
+            role="tabpanel"
+            aria-labelledby={`${accessId}-${mode}`}
             onSubmit={(event) => {
               void submit(event);
             }}

@@ -152,12 +152,10 @@ export function Modal({
   title,
   children,
   onClose,
-  wide = false,
 }: {
   title: string;
   children: ReactNode;
   onClose(): void;
-  wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const id = useId();
@@ -170,7 +168,8 @@ export function Modal({
     <dialog
       ref={ref}
       aria-labelledby={id}
-      className={`modal ${wide ? "modal-wide" : ""}`}
+      aria-modal="true"
+      className="modal"
       onCancel={(event) => {
         event.preventDefault();
         onClose();
@@ -245,8 +244,6 @@ export function errorMessage(code?: string): string {
   switch (code) {
     case "not_found":
       return "No encontramos ese recurso o ya no tenés acceso.";
-    case "invitation_invalid":
-      return "La invitación venció, ya se usó o no es válida. Pedí una nueva.";
     case "forbidden":
       return "No tenés permiso para hacer este cambio.";
     case "conflict":
@@ -255,8 +252,6 @@ export function errorMessage(code?: string): string {
       return "Revisá los datos e intentá de nuevo.";
     case "unauthenticated":
       return "Tu sesión venció. Volvé a ingresar.";
-    case "last_admin":
-      return "El grupo debe conservar al menos una persona administradora.";
     case "rate_limited":
       return "Hiciste muchos intentos. Esperá un momento y volvé a probar.";
     default:

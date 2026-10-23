@@ -16,8 +16,10 @@ export function AgentsPanel({
   onChanged,
   onMenu,
   revision,
+  navigationOpen,
 }: {
   revision: number;
+  navigationOpen: boolean;
   groupId?: string;
   groupName?: string;
   groupAgentIds?: readonly string[];
@@ -91,32 +93,37 @@ export function AgentsPanel({
   }
   return (
     <section className="agents-view" aria-label="Mis agentes">
-      <header className="page-header">
-        <button
-          className="icon-button mobile-only"
-          aria-label="Abrir navegación"
-          onClick={onMenu}
-        >
-          <Icon name="menu" />
-        </button>
-        <div>
-          <span className="eyebrow">TU EQUIPO EXTENDIDO</span>
-          <h1>Mis agentes</h1>
-        </div>
-        <div className="page-actions">
-          <button className="button secondary" onClick={() => edit("new")}>
-            <Icon name="plus" />
-            Nuevo agente
-          </button>
+      {/* Keep the header's intrinsic height inside the scrollable flex column. */}
+      <div>
+        <header className="page-header">
           <button
-            className="button primary"
-            onClick={() => setConnecting(true)}
+            className="icon-button mobile-only"
+            aria-label="Abrir navegación"
+            aria-expanded={navigationOpen}
+            aria-controls="workspace-navigation"
+            onClick={onMenu}
           >
-            <Icon name="link" />
-            Conectar cliente
+            <Icon name="menu" />
           </button>
-        </div>
-      </header>
+          <div>
+            <span className="eyebrow">TU EQUIPO EXTENDIDO</span>
+            <h1>Mis agentes</h1>
+          </div>
+          <div className="page-actions">
+            <button className="button secondary" onClick={() => edit("new")}>
+              <Icon name="plus" />
+              Nuevo agente
+            </button>
+            <button
+              className="button primary"
+              onClick={() => setConnecting(true)}
+            >
+              <Icon name="link" />
+              Conectar cliente
+            </button>
+          </div>
+        </header>
+      </div>
       <div className="agents-content">
         <div className="section-intro">
           <div>

@@ -14,7 +14,6 @@
   --green: #2c6248;
   --light-green: #edf5ee;
   --sidebar: #172e25;
-  --radius: 12px;
 }
 * {
   box-sizing: border-box;
@@ -1885,9 +1884,6 @@ button {
 .modal::backdrop {
   background: #11261e66;
   backdrop-filter: blur(3px);
-}
-.modal-wide {
-  max-width: 580px;
 }
 .modal-inner {
   padding: 26px;

@@ -47,6 +47,7 @@ export function GroupPanel({
         />
       )}
       <aside
+        id="workspace-navigation"
         className={`sidebar ${open ? "sidebar-open" : ""}`}
         aria-label="Navegación principal"
       >
@@ -218,7 +219,11 @@ export function GroupDetails({
   const agents = detail.members.filter((m) => m.kind === "agent");
   const isAdmin = detail.role === "admin";
   return (
-    <aside className="group-details" aria-label="Detalles del grupo">
+    <aside
+      id="group-details"
+      className="group-details"
+      aria-label="Detalles del grupo"
+    >
       <header className="details-header">
         <span>Detalles del grupo</span>
         <button

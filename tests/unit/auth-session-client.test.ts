@@ -6,11 +6,9 @@ import {
 import {
   loadSession,
   loginAccount,
-  logout,
   registerAccount,
-  type JsonFetch,
-  type JsonFetchInit,
 } from '../../apps/web/src/features/auth/session';
+import type { JsonFetch, JsonFetchInit } from '../../apps/web/src/shared/http';
 
 const USER = {
   id: 'user-1',
@@ -135,22 +133,5 @@ describe('registerAccount and loginAccount', () => {
     await expect(
       loginAccount({ email: USER.email, password: 'a-long-password' }, fetchImpl),
     ).resolves.toEqual({ status: 'error', httpStatus: 0 });
-  });
-});
-
-describe('logout', () => {
-  it('posts to the shared logout path', async () => {
-    const client = fakeFetch([{ status: 200, body: { status: 'ok' } }]);
-
-    await logout(client.fetch);
-
-    expect(client.calls[0]!.url).toBe(AUTH_PATHS.logout);
-    expect(client.calls[0]!.init?.method).toBe('POST');
-  });
-
-  it('swallows a transport failure so signing out never appears to fail', async () => {
-    const fetchImpl: JsonFetch = () => Promise.reject(new Error('offline'));
-
-    await expect(logout(fetchImpl)).resolves.toBeUndefined();
   });
 });
