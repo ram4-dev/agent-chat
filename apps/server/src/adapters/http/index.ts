@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { RuntimeConfig } from '../../config/index.js';
 import type { DatabaseHandle } from '../../persistence/index.js';
 import { createServices, type ApplicationServices } from '../../services.js';
+import { registerAgentRoutes } from './agents.js';
 import { registerAuthRoutes } from './auth.js';
 import { registerGroupRoutes } from './groups.js';
 import { registerMessageRoutes } from './messages.js';
@@ -32,6 +33,7 @@ export function registerHttpAdapter(
     auth: services.auth,
     secureCookies: config.nodeEnv === 'production',
   });
+  registerAgentRoutes(app, services);
   registerGroupRoutes(app, { auth: services.auth, groups: services.groups, hub: services.hub });
   registerMessageRoutes(app, {
     auth: services.auth,

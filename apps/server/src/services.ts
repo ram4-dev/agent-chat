@@ -1,3 +1,6 @@
+import { runImmediateTransaction } from './persistence/client.js';
+import { createSqliteAuditRepository } from './persistence/audit-repository.js';
+import { createCredentialRepository } from './persistence/credential-repository.js';
 import { createAuthModule, createArgon2PasswordHasher } from './modules/auth/index.js';
 import { createAgentsModule } from './modules/agents/index.js';
 import { createGroupsModule } from './modules/groups/index.js';
@@ -60,7 +63,12 @@ export function createServices(database: DatabaseHandle): ApplicationServices {
   // Agents come before groups: admitting an agent asks whether it is active,
   // and the group module receives that as a port rather than reaching into the
   // agents module itself.
+  const hub = createLiveDeliveryHub();
+  const audit = createSqliteAuditRepository(database.sqlite);
   const agents = createAgentsModule({
+    transaction: (operation) => runImmediateTransaction(database.sqlite, operation),
+    audit, credentials: createCredentialRepository(database.sqlite),
+    closeReceivers: (target) => hub.closeReceivers(target),
     agents: createSqliteAgentRepository(database.sqlite),
     connections: createSqliteConnectionRepository(database.sqlite),
     clock: SYSTEM_CLOCK,
@@ -85,10 +93,8 @@ export function createServices(database: DatabaseHandle): ApplicationServices {
     clock: SYSTEM_CLOCK,
   });
 
-  const hub = createLiveDeliveryHub();
-
   const messaging = createMessagingModule({
-    messages: createSqliteMessageRepository(database.sqlite, () => generateUuidV7()),
+    messages: createSqliteMessageRepository(database.sqlite, () => generateUuidV7(), audit),
     membership: {
       humanRoleFor: (groupId, userId) =>
         groupRepository.findHumanMembership(groupId, userId)?.role,

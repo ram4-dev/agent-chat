@@ -1,3 +1,4 @@
+import { AgentsPanel } from '../features/agents/AgentsPanel';
 import { useCallback, useEffect, useState } from 'react';
 import { loadLiveness, type LivenessState } from '../shared/liveness';
 import { AuthPanel } from '../features/auth/AuthPanel';
@@ -73,6 +74,10 @@ export function AppShell({
           groupName={detail.detail.group.name}
         />
       )}
+      {session.status === 'authenticated' && <AgentsPanel
+        {...(detail.status === 'ready' && detail.detail.role === 'admin' ? { groupId: detail.detail.group.id } : {})}
+        onChanged={() => { if (detail.status === 'ready') onOpenGroup(detail.detail.group.id); }}
+      />}
       {session.status === 'authenticated' && (
         <GroupPanel
           groups={groups}
@@ -167,7 +172,9 @@ export function App() {
         void acceptInvitation(token).then(refreshGroups);
       }}
       onRemoveMember={(groupId, memberId) => {
-        void removeMember(groupId, memberId)
+        void (detail.status === 'ready' && detail.detail.members.find((member) => member.id === memberId)?.kind === 'agent'
+          ? fetch(`/api/groups/${groupId}/agents/${memberId}`, { method: 'DELETE' })
+          : removeMember(groupId, memberId))
           .then(() => loadGroupDetail(groupId))
           .then(setDetail);
       }}

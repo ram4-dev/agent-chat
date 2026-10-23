@@ -1,3 +1,4 @@
+import type { AuditPort } from '../audit/index.js';
 import type { Clock } from '../identity/index.js';
 import { AgentNotFoundError, AgentRevokedError, InvalidAgentInputError } from './errors.js';
 import { parseAgentProfile, parseRequestedScopes } from './contracts.js';
@@ -80,6 +81,7 @@ export interface AgentsModule {
   }): ConnectionRecord;
   listConnections(agentId: string, ownerUserId: string): ConnectionRecord[];
   revokeConnection(connectionId: string, ownerUserId: string): ConnectionRecord;
+  revokeCompromisedConnection(connectionId: string): void;
   /**
    * Resolves a connection that may still act.
    *
@@ -90,6 +92,10 @@ export interface AgentsModule {
 }
 
 export interface AgentsModuleDependencies {
+  transaction<T>(operation: () => T): T;
+  audit: AuditPort;
+  credentials: { revokeConnection(connectionId: string): void };
+  closeReceivers(target: { agentId?: string; connectionId?: string }): void;
   agents: AgentRepository;
   connections: ConnectionRepository;
   clock: Clock;
@@ -109,7 +115,7 @@ export function createAgentsModule({
   agents,
   connections,
   clock,
-  generateId,
+  generateId, transaction, audit, credentials, closeReceivers,
 }: AgentsModuleDependencies): AgentsModule {
   function requireOwnedAgent(agentId: string, ownerUserId: string): AgentRecord {
     const agent = agents.findAgentById(agentId);
@@ -190,10 +196,14 @@ export function createAgentsModule({
       const agent = requireOwnedAgent(agentId, ownerUserId);
       const revokedAt = clock.now().toISOString();
 
-      // Revoking the agent must also stop every client it was connected
-      // through; leaving one connection alive would leave a usable credential.
-      connections.revokeConnectionsByAgent(agentId, revokedAt);
-      agents.revokeAgent(agentId, revokedAt);
+      if (agent.status === 'revoked') return agent;
+      transaction(() => {
+        for (const connection of connections.listConnectionsByAgent(agentId)) credentials.revokeConnection(connection.id);
+        connections.revokeConnectionsByAgent(agentId, revokedAt);
+        agents.revokeAgent(agentId, revokedAt);
+        audit.record({ actorKind: 'human', actorId: ownerUserId, action: 'agent.revoked', targetKind: 'agent', targetId: agentId, outcome: 'allowed', createdAt: revokedAt });
+      });
+      closeReceivers({ agentId });
 
       return { ...agent, status: 'revoked', revokedAt };
     },
@@ -246,8 +256,26 @@ export function createAgentsModule({
     revokeConnection(connectionId, ownerUserId) {
       const connection = requireOwnedConnection(connectionId, ownerUserId);
       const revokedAt = clock.now().toISOString();
-      connections.revokeConnection(connectionId, revokedAt);
+      if (connection.revokedAt !== null) return connection;
+      transaction(() => {
+        connections.revokeConnection(connectionId, revokedAt);
+        credentials.revokeConnection(connectionId);
+        audit.record({ actorKind: 'human', actorId: ownerUserId, action: 'connection.revoked', targetKind: 'connection', targetId: connectionId, outcome: 'allowed', createdAt: revokedAt });
+      });
+      closeReceivers({ connectionId });
       return { ...connection, revokedAt };
+    },
+
+    revokeCompromisedConnection(connectionId) {
+      const connection = connections.findConnectionById(connectionId);
+      if (connection === undefined || connection.revokedAt !== null) return;
+      const at = clock.now().toISOString();
+      transaction(() => {
+        connections.revokeConnection(connectionId, at);
+        credentials.revokeConnection(connectionId);
+        audit.record({ actorKind: 'system', actorId: null, action: 'refresh.reused', targetKind: 'connection', targetId: connectionId, outcome: 'denied', createdAt: at });
+      });
+      closeReceivers({ connectionId });
     },
 
     resolveActiveConnection(connectionId) {

@@ -25,6 +25,21 @@ pending state, rejects inbound commands, and caps concurrent connections.
 Inbox pagination filters inaccessible groups before applying the SQL limit.
 Browser fan-out also rechecks the current human session and group membership.
 
+## S8
+
+Observed failing tests for public revocation routes, plaintext refresh storage,
+missing message audit transaction, and browser-session-bound refresh before fixes.
+Owner-scoped HTTP and UI now manage agents and revoke connections or whole agents.
+Revocation commits database state, provider artifact invalidation and audit together,
+then closes receivers. Message audit is atomic with message and inbox inserts.
+Refresh tokens are stored as SHA-256 hashes; provider reads consumed markers to
+revoke reused families and their agent connection. Family expiry is bounded to
+30 days from initial issuance, independent of the browser session.
+Legacy provider refresh rows are converted at provider startup.
+No credentials or message bodies enter audit records.
+Full pnpm verify: lint, types, build, 147 unit, 15 contract, 109 integration,
+10 Chromium E2E pass. The UI confirmation screenshot was inspected.
+
 ## Remaining
 
-S8 and S9 in progress.
+S9: combined reconnect/recovery E2E, security matrix, responsive review and docs.

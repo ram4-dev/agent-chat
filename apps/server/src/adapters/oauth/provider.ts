@@ -67,7 +67,15 @@ export async function createOidcProvider({
   logLevel,
 }: OidcProviderOptions): Promise<Provider> {
   const provider = new Provider(issuer, {
-    adapter: createOidcAdapterFactory(sqlite) as never,
+    adapter: createOidcAdapterFactory(sqlite, (grantId) => {
+      const claims = readConnectionClaims(sqlite, agents, grantId);
+      if (claims) agents.revokeCompromisedConnection(claims.connectionId);
+    }) as never,
+    findAccount: async (_ctx, accountId, token) => {
+      if (token?.grantId && readConnectionClaims(sqlite, agents, token.grantId) === undefined) return undefined;
+      const user = sqlite.prepare('SELECT id FROM users WHERE id = ?').get(accountId);
+      return user ? { accountId, claims: async () => ({ sub: accountId }) } : undefined;
+    },
     clients: [],
     jwks: jwks ?? (await generateJwks()),
     cookies: {
@@ -117,6 +125,7 @@ export async function createOidcProvider({
     // lifetime. Without this, refresh tokens would require the `offline_access`
     // scope, which would put a library default in front of a product decision.
     issueRefreshToken: () => true,
+    expiresWithSession: () => false,
     scopes: ['openid', ...AGENT_SCOPES],
     claims: { openid: ['sub'] },
     interactions: {

@@ -89,3 +89,4 @@ export {
   type Member,
   type OkResponse,
 } from './http/groups.js';
+export { AGENT_PATHS, type OwnedAgentView } from './http/agents.js';

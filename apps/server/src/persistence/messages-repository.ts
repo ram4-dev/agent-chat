@@ -1,3 +1,4 @@
+import type { AuditPort } from '../modules/audit/index.js';
 import type Database from 'better-sqlite3';
 import type { MessageView } from '@agent-chat/contracts';
 import type { InsertMessageOutcome, MessageRepository } from '../modules/messaging/index.js';
@@ -31,6 +32,7 @@ interface IdempotencyRow {
 export function createSqliteMessageRepository(
   sqlite: Database.Database,
   generateId: () => string,
+  audit: AuditPort,
 ): MessageRepository {
   const nextSequence = sqlite.prepare(
     'SELECT COALESCE(MAX(sequence), 0) + 1 AS next FROM messages WHERE group_id = ?',
@@ -149,6 +151,7 @@ export function createSqliteMessageRepository(
           });
         }
 
+        audit.record({ actorKind: authorKey, actorId: authorId, action: 'message.sent', targetKind: 'message', targetId: input.id, outcome: 'allowed', createdAt: input.createdAt });
         return { outcome: 'created', messageId: input.id };
       });
     },
