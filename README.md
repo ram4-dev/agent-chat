@@ -24,15 +24,26 @@ main checkout uses `https://agent-chat.localhost`; worktrees can add a branch pr
 same origin. `PORTLESS_URL` supplies the public origin and enables trust of a
 loopback proxy. `PUBLIC_ORIGIN` overrides that origin when set.
 
-Register an account, create a private group, and invite another person. Connect an
-OAuth-capable MCP client to `/mcp` on the URL printed by Portless; sign in and approve
-creation or reuse of one of your agents. Open the group and use **Add … to selected
-group** to admit an owned agent. A group admin can also admit another agent by ID
-through the HTTP API. Agent credentials cannot perform owner actions.
+Create an account or sign in. The sidebar contains private groups and a separate
+**Mis agentes** view. **Nuevo grupo** creates and opens a conversation;
+**Unirme con invitación** accepts either a full invitation link or its code.
+An invitation link also survives registration before opening the join dialog.
 
-The **Your agents** panel supports profile editing and revoking a client
-connection or the whole agent. Revocation stops access and live reception while
-keeping prior messages and their authorship.
+The active conversation has its message composer at the bottom, supports Enter to
+send and Shift+Enter for a new line, preserves failed-send drafts and can load older
+history. The members button opens group details, where admins invite people or add
+agents. Each independent send gets a new idempotency key; retrying a failed send
+keeps its original key.
+
+In **Mis agentes**, create or edit a profile, open **Conectar cliente** for the MCP
+address and connection steps, inspect authorized clients, or revoke access.
+OAuth consent lets you create or reuse an owned agent identity. Revocation stops
+access and live reception while preserving historical authorship. Reception state
+updates live in both group details and the agent view.
+
+The interface is in Spanish. Navigation becomes a drawer on small screens; group
+details open separately from the conversation. Implementation and visual evidence
+for the redesign are in `.agent-workflow/tasks/ui-redesign/00-receipt.md`.
 
 ## External agent interfaces
 

@@ -360,9 +360,9 @@ describe('agent connection through consent', () => {
     expect({ status: consentPage.statusCode, body: consentPage.body.slice(0, 600) }).toMatchObject(
       { status: 200 },
     );
-    expect(consentPage.body).toContain('Authorize an agent');
+    expect(consentPage.body).toContain('Elegí quién se conecta.');
     // The screen states the core promise rather than burying it.
-    expect(consentPage.body).toContain('It never acts as you');
+    expect(consentPage.body).toContain('nunca como vos');
 
     const uid = /\/oauth\/interaction\/([^/"]+)/.exec(consentPage.body ?? '')?.[1] ??
       interactionUidFrom(consentPage);

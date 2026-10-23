@@ -1,108 +1,190 @@
-import { useState, type FormEvent } from 'react';
-import type { PublicUser } from '@agent-chat/contracts';
-import { describeRejection, type Credentials, type Registration, type SessionState } from './session';
+import { useState, type FormEvent } from "react";
+import {
+  describeRejection,
+  type Credentials,
+  type Registration,
+  type SessionState,
+} from "./session";
+import { Brand, Icon } from "../../shared/ui";
 
-export interface AuthPanelProps {
+export function AuthPanel({
+  session,
+  onRegister,
+  onLogin,
+}: {
   session: SessionState;
-  onRegister(input: Registration): void;
-  onLogin(input: Credentials): void;
-  onLogout(): void;
-}
-
-const EMPTY_FORM = {
-  email: '',
-  displayName: '',
-  password: '',
-};
-
-/**
- * Presentational session form.
- *
- * It owns only the draft values in the inputs; every request and every decision
- * about what the response means lives in the container. The password never
- * leaves the form except as the argument of a single submit.
- */
-export function AuthPanel({ session, onRegister, onLogin, onLogout }: AuthPanelProps) {
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [mode, setMode] = useState<'register' | 'login'>('register');
-
-  if (session.status === 'authenticated') {
-    return (
-      <section aria-label="Session">
-        <p>Signed in as {session.user.displayName}.</p>
-        <button type="button" onClick={onLogout}>
-          Sign out
-        </button>
-      </section>
-    );
-  }
-
-  function submit(event: FormEvent<HTMLFormElement>): void {
+  onRegister(input: Registration): Promise<void>;
+  onLogin(input: Credentials): Promise<void>;
+}) {
+  const [mode, setMode] = useState<"register" | "login">("register");
+  const [busy, setBusy] = useState(false);
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const values = { email: form.email, password: form.password };
-    if (mode === 'register') {
-      onRegister({ ...values, displayName: form.displayName });
-    } else {
-      onLogin(values);
+    if (busy) return;
+    const data = new FormData(event.currentTarget);
+    const input = {
+      email: String(data.get("email")),
+      password: String(data.get("password")),
+    };
+    setBusy(true);
+    try {
+      if (mode === "register")
+        await onRegister({
+          ...input,
+          displayName: String(data.get("displayName")),
+        });
+      else await onLogin(input);
+    } finally {
+      setBusy(false);
     }
   }
-
   return (
-    <section aria-label="Session">
-      <h2>{mode === 'register' ? 'Create an account' : 'Sign in'}</h2>
-      <form onSubmit={submit}>
-        <label htmlFor="email">Email</label>
-        <input
-          id="email"
-          type="email"
-          autoComplete="email"
-          value={form.email}
-          onChange={(event) => setForm({ ...form, email: event.target.value })}
-        />
-        {mode === 'register' && (
-          <>
-            <label htmlFor="displayName">Display name</label>
-            <input
-              id="displayName"
-              type="text"
-              autoComplete="name"
-              value={form.displayName}
-              onChange={(event) => setForm({ ...form, displayName: event.target.value })}
-            />
-          </>
-        )}
-        <label htmlFor="password">Password</label>
-        <input
-          id="password"
-          type="password"
-          autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-          value={form.password}
-          onChange={(event) => setForm({ ...form, password: event.target.value })}
-        />
-        <button type="submit">{mode === 'register' ? 'Create account' : 'Sign in'}</button>
-      </form>
-      <button type="button" onClick={() => setMode(mode === 'register' ? 'login' : 'register')}>
-        {mode === 'register' ? 'I already have an account' : 'Create an account instead'}
-      </button>
-      <p role="status">{describeSession(session)}</p>
-    </section>
+    <main className="auth-page">
+      <section className="auth-story" aria-label="Agent Chat">
+        <Brand />
+        <div className="auth-pitch">
+          <span className="eyebrow">PERSONAS + AGENTES</span>
+          <h1>
+            El equipo completo.
+            <br />
+            En la misma
+            <br />
+            <em>conversación.</em>
+          </h1>
+          <p>
+            Un espacio privado para conversar con tu equipo y sumar los agentes
+            que vos elegís.
+          </p>
+          <div className="orbit" aria-hidden="true">
+            <span className="orbit-line" />
+            <span className="orbit-person">VOS</span>
+            <span className="orbit-center">
+              <Icon name="chat" />
+            </span>
+            <span className="orbit-agent">
+              <Icon name="bot" /> TUS AGENTES
+            </span>
+            <span className="orbit-team">
+              <Icon name="people" /> TU EQUIPO
+            </span>
+          </div>
+        </div>
+        <p className="auth-footnote">
+          <Icon name="lock" /> Grupos privados. Identidades claras.
+        </p>
+      </section>
+      <section className="auth-form-side" aria-label="Acceso">
+        <div className="auth-mobile-brand">
+          <Brand />
+        </div>
+        <div className="auth-card">
+          <span className="eyebrow">BIENVENIDO A AGENT CHAT</span>
+          <h2>
+            {mode === "register"
+              ? "Hacé lugar a tu equipo."
+              : "Qué bueno verte de nuevo."}
+          </h2>
+          <p className="muted">
+            {mode === "register"
+              ? "Creá tu cuenta para empezar una conversación."
+              : "Ingresá para volver a tus conversaciones."}
+          </p>
+          <div className="segmented" role="tablist" aria-label="Tipo de acceso">
+            <button
+              role="tab"
+              type="button"
+              className={mode === "register" ? "selected" : ""}
+              onClick={() => setMode("register")}
+            >
+              Crear cuenta
+            </button>
+            <button
+              role="tab"
+              type="button"
+              className={mode === "login" ? "selected" : ""}
+              onClick={() => setMode("login")}
+            >
+              Ingresar
+            </button>
+          </div>
+          <form
+            onSubmit={(event) => {
+              void submit(event);
+            }}
+            className="form-stack"
+            key={mode}
+          >
+            {mode === "register" && (
+              <label>
+                Nombre
+                <input
+                  name="displayName"
+                  placeholder="Cómo te llama tu equipo"
+                  autoComplete="name"
+                  required
+                  maxLength={80}
+                />
+              </label>
+            )}
+            <label>
+              Correo electrónico
+              <input
+                name="email"
+                type="email"
+                placeholder="vos@equipo.com"
+                autoComplete="email"
+                required
+              />
+            </label>
+            <label>
+              Contraseña
+              <input
+                name="password"
+                type="password"
+                placeholder={
+                  mode === "register"
+                    ? "Al menos 12 caracteres"
+                    : "Tu contraseña"
+                }
+                autoComplete={
+                  mode === "register" ? "new-password" : "current-password"
+                }
+                required
+                minLength={mode === "register" ? 12 : 1}
+                maxLength={128}
+              />
+            </label>
+            {session.status === "rejected" && (
+              <p className="error-box" role="alert">
+                {describeRejection(session.code)}
+              </p>
+            )}
+            {session.status === "error" && (
+              <p className="error-box" role="alert">
+                No pudimos conectar. Revisá tu conexión e intentá de nuevo.
+              </p>
+            )}
+            <button
+              className="button primary full"
+              type="submit"
+              disabled={busy}
+            >
+              {busy
+                ? "Un momento…"
+                : mode === "register"
+                  ? "Crear cuenta"
+                  : "Ingresar"}
+              <Icon name="arrow" />
+            </button>
+          </form>
+          <p className="auth-note">
+            Tus agentes siempre tienen su propia identidad.
+            <br />
+            Vos decidís a qué grupos pueden entrar.
+          </p>
+        </div>
+        <p className="auth-bottom">Un lugar para trabajar juntos.</p>
+      </section>
+    </main>
   );
 }
-
-/** One truthful sentence for whatever the container knows right now. */
-export function describeSession(session: SessionState): string {
-  switch (session.status) {
-    case 'loading':
-      return 'Checking your session…';
-    case 'anonymous':
-      return 'You are not signed in.';
-    case 'authenticated':
-      return `Signed in as ${session.user.displayName}.`;
-    case 'rejected':
-      return describeRejection(session.code);
-    case 'error':
-      return 'The server did not answer. Your session is unknown.';
-  }
-}
-
-export type { PublicUser };

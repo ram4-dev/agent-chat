@@ -1,161 +1,414 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { BROWSER_SOCKET_PATH, type MessageView } from '@agent-chat/contracts';
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  BROWSER_SOCKET_PATH,
+  type MessageView,
+  type PublicUser,
+} from "@agent-chat/contracts";
 import {
   loadMessages,
   mergeMessage,
   parseIncomingFrame,
   sendMessage,
   type ChatState,
-} from './transport';
+} from "./transport";
+import { Avatar, Icon } from "../../shared/ui";
 
-export interface ChatPanelProps {
+export function ChatPanel({
+  groupId,
+  groupName,
+  user,
+  chat,
+  live,
+  onSend,
+  onRetry,
+  onOlder,
+}: {
   groupId: string;
   groupName: string;
+  user: PublicUser;
   chat: ChatState;
-  onSend(text: string): void;
-}
-
-/**
- * Presentational chat surface for one group.
- *
- * It renders the messages it is given and owns only the draft text. Ordering,
- * merging, and the socket live in the container.
- */
-export function ChatPanel({ groupId, groupName, chat, onSend }: ChatPanelProps) {
-  const [draft, setDraft] = useState('');
-
+  live: boolean;
+  onSend(text: string): Promise<boolean>;
+  onRetry(): void;
+  onOlder(): Promise<void>;
+}) {
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [older, setOlder] = useState(false);
+  const [error, setError] = useState("");
+  const list = useRef<HTMLDivElement>(null);
+  const stick = useRef(true);
+  useEffect(() => {
+    if (stick.current && list.current)
+      list.current.scrollTop = list.current.scrollHeight;
+  }, [chat]);
+  async function submit(event?: FormEvent) {
+    event?.preventDefault();
+    if (!draft.trim() || sending) return;
+    setSending(true);
+    setError("");
+    const text = draft;
+    try {
+      const sent = await onSend(text);
+      if (sent) {
+        setDraft("");
+        stick.current = true;
+      } else
+        setError(
+          "No pudimos enviar el mensaje. Tu borrador sigue acá; volvé a intentar.",
+        );
+    } finally {
+      setSending(false);
+    }
+  }
+  const messages = chat.status === "ready" ? [...chat.messages].reverse() : [];
   return (
-    <section aria-label={`Chat in ${groupName}`} data-group-id={groupId}>
-      <h3>{groupName}</h3>
-      <p role="status">{describeChat(chat)}</p>
-      {chat.status === 'ready' && (
-        <ul aria-label="Messages">
-          {chat.messages.map((message) => (
-            <li key={message.id} data-message-id={message.id}>
-              <strong>{describeAuthor(message)}</strong>: {message.text}
-            </li>
-          ))}
-        </ul>
-      )}
-      <form
-        onSubmit={(event: FormEvent<HTMLFormElement>) => {
-          event.preventDefault();
-          onSend(draft);
-          setDraft('');
+    <section
+      className="chat-area"
+      aria-label={`Conversación de ${groupName}`}
+      data-group-id={groupId}
+    >
+      <div
+        className="message-scroll"
+        ref={list}
+        onScroll={() => {
+          if (list.current)
+            stick.current =
+              list.current.scrollHeight -
+                list.current.scrollTop -
+                list.current.clientHeight <
+              120;
         }}
       >
-        <label htmlFor="chatMessage">Message</label>
-        <input
-          id="chatMessage"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-        />
-        <button type="submit">Send</button>
-      </form>
+        <div className="conversation-start">
+          <span className="start-group">#</span>
+          <h2>Este es el comienzo de {groupName}</h2>
+          <p>Compartí una idea, una pregunta o el próximo paso del equipo.</p>
+          <span className="subtle-tag">
+            <Icon name="lock" />
+            Conversación privada
+          </span>
+        </div>
+        {chat.status === "loading" && (
+          <p className="chat-notice" role="status">
+            Cargando mensajes…
+          </p>
+        )}
+        {chat.status === "error" && (
+          <div className="error-box" role="alert">
+            No pudimos cargar los mensajes.
+            <button className="text-button" onClick={onRetry}>
+              Volver a intentar
+            </button>
+          </div>
+        )}
+        {chat.status === "ready" && chat.nextCursor && (
+          <button
+            className="older-button"
+            disabled={older}
+            onClick={() => {
+              setOlder(true);
+              stick.current = false;
+              void onOlder().finally(() => setOlder(false));
+            }}
+          >
+            {older ? "Cargando…" : "Ver mensajes anteriores"}
+          </button>
+        )}
+        <ul
+          className="messages"
+          aria-label="Mensajes"
+          aria-live="polite"
+          aria-relevant="additions"
+        >
+          {messages.map((message, index) => {
+            const date = new Date(message.createdAt);
+            const previous = messages[index - 1];
+            const newDay =
+              !previous ||
+              new Date(previous.createdAt).toDateString() !==
+                date.toDateString();
+            return (
+              <li key={message.id} data-message-id={message.id}>
+                {newDay && (
+                  <div className="date-divider">
+                    <span>
+                      {date.toLocaleDateString("es-AR", {
+                        day: "numeric",
+                        month: "long",
+                      })}
+                    </span>
+                  </div>
+                )}
+                <article
+                  className={`message ${message.author.kind === "agent" ? "message-agent" : ""}`}
+                  aria-label={describeAuthor(message)}
+                >
+                  <Avatar
+                    name={message.author.displayName}
+                    bot={message.author.kind === "agent"}
+                  />
+                  <div className="message-content">
+                    <div className="message-meta">
+                      <strong>{message.author.displayName}</strong>
+                      {message.author.kind === "agent" ? (
+                        <>
+                          <span className="mini-badge">AGENTE</span>
+                          <span className="owner-label">
+                            de {message.author.ownerDisplayName}
+                          </span>
+                        </>
+                      ) : (
+                        message.author.id === user.id && (
+                          <span className="self-label">vos</span>
+                        )
+                      )}
+                      <time
+                        dateTime={message.createdAt}
+                        title={date.toLocaleString("es-AR")}
+                      >
+                        {date.toLocaleTimeString("es-AR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </time>
+                    </div>
+                    <p>{message.text}</p>
+                  </div>
+                </article>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+      <div className="composer-area">
+        {error && (
+          <p className="error-box" role="alert">
+            {error}
+          </p>
+        )}
+        <form
+          className="composer"
+          onSubmit={(event) => {
+            void submit(event);
+          }}
+        >
+          <label className="sr-only" htmlFor="message">
+            Mensaje
+          </label>
+          <textarea
+            id="message"
+            name="message"
+            placeholder={`Escribí en ${groupName}…`}
+            rows={2}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            disabled={chat.status !== "ready" || sending}
+            onKeyDown={(event) => {
+              if (
+                event.key === "Enter" &&
+                !event.shiftKey &&
+                !event.nativeEvent.isComposing
+              ) {
+                event.preventDefault();
+                void submit();
+              }
+            }}
+          />
+          <div className="composer-tools">
+            <span>
+              <Icon name="lock" />
+              Solo para este grupo
+            </span>
+            <button
+              className="send-button"
+              type="submit"
+              aria-label="Enviar mensaje"
+              disabled={!draft.trim() || sending || chat.status !== "ready"}
+            >
+              <span>{sending ? "Enviando…" : "Enviar"}</span>
+              <Icon name="send" />
+            </button>
+          </div>
+        </form>
+        <div className="composer-footer">
+          <span className={live ? "live-status" : "muted"}>
+            <i />
+            {live ? "En vivo" : "Reconectando…"}
+          </span>
+          <span>
+            Enter para enviar{" "}
+            <span className="desktop-only">
+              · Shift + Enter para una nueva línea
+            </span>
+          </span>
+        </div>
+      </div>
     </section>
   );
 }
 
-/**
- * Container for one group's conversation.
- *
- * It opens the browser socket, merges live frames into the list, and re-reads
- * the durable HTTP list on every (re)connect. That is what makes the socket an
- * optimization: a frame that never arrived is recovered from storage instead of
- * being silently lost.
- */
-export function ChatContainer({ groupId, groupName }: { groupId: string; groupName: string }) {
-  const [chat, setChat] = useState<ChatState>({ status: 'loading' });
-
+export function ChatContainer({
+  groupId,
+  groupName,
+  user,
+}: {
+  groupId: string;
+  groupName: string;
+  user: PublicUser;
+}) {
+  const [chat, setChat] = useState<ChatState>({ status: "loading" });
+  const [live, setLive] = useState(false);
+  const pending = useRef<{ text: string; key: string } | undefined>(undefined);
+  const alive = useRef(true);
+  const refreshRef = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
+    alive.current = true;
     let cancelled = false;
-
-    const refresh = async (): Promise<void> => {
-      const state = await loadMessages(groupId);
-      if (!cancelled && state.status === 'ready') {
-        setChat(state);
-      }
+    let socket: WebSocket;
+    let reconnect: ReturnType<typeof setTimeout>;
+    const inFlight = new Set<Map<string, MessageView>>();
+    const refresh = async () => {
+      const received = new Map<string, MessageView>();
+      inFlight.add(received);
+      const result = await loadMessages(groupId);
+      inFlight.delete(received);
+      if (cancelled) return;
+      setChat((current) => {
+        if (result.status !== "ready" || current.status !== "ready")
+          return result;
+        const ids = new Set(result.messages.map((m) => m.id));
+        const firstOverlap = current.messages.findIndex((message) =>
+          ids.has(message.id),
+        );
+        if (firstOverlap === -1)
+          return {
+            ...result,
+            messages: [...received.values()]
+              .reverse()
+              .filter((message) => !ids.has(message.id))
+              .concat(result.messages),
+          };
+        const newer = current.messages
+          .slice(0, firstOverlap)
+          .filter((message) => !ids.has(message.id));
+        const older = current.messages
+          .slice(firstOverlap)
+          .filter((message) => !ids.has(message.id));
+        const cursor = older.length ? current.nextCursor : result.nextCursor;
+        return {
+          status: "ready",
+          messages: [...newer, ...result.messages, ...older],
+          ...(cursor ? { nextCursor: cursor } : {}),
+        };
+      });
     };
-
-    void refresh();
-
-    const socket = new WebSocket(
-      `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}${BROWSER_SOCKET_PATH}`,
-    );
-
-    socket.addEventListener('open', () => {
-      void refresh();
-    });
-
-    socket.addEventListener('message', (event: MessageEvent<string>) => {
-      const incoming = parseIncomingFrame(safeJson(event.data));
-      if (incoming === undefined || incoming.groupId !== groupId || cancelled) {
-        return;
-      }
-      setChat((current) =>
-        current.status === 'ready'
-          ? { ...current, messages: mergeMessage(current.messages, incoming) }
-          : current,
+    refreshRef.current = refresh;
+    const connect = () => {
+      socket = new WebSocket(
+        `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${BROWSER_SOCKET_PATH}`,
       );
-    });
-
+      socket.onopen = () => {
+        if (!cancelled) {
+          setLive(true);
+          void refresh();
+        }
+      };
+      socket.onmessage = (event: MessageEvent<string>) => {
+        let incoming;
+        try {
+          incoming = parseIncomingFrame(JSON.parse(event.data));
+        } catch {
+          return;
+        }
+        if (!incoming || incoming.groupId !== groupId || cancelled) return;
+        const message = incoming;
+        for (const received of inFlight) received.set(message.id, message);
+        setChat((current) =>
+          current.status === "ready"
+            ? { ...current, messages: mergeMessage(current.messages, message) }
+            : current,
+        );
+      };
+      socket.onclose = () => {
+        if (!cancelled) {
+          setLive(false);
+          reconnect = setTimeout(connect, 2000);
+        }
+      };
+    };
+    void refresh();
+    connect();
     return () => {
       cancelled = true;
+      alive.current = false;
+      clearTimeout(reconnect);
       socket.close();
     };
   }, [groupId]);
-
   return (
     <ChatPanel
       groupId={groupId}
       groupName={groupName}
+      user={user}
       chat={chat}
-      onSend={(text) => {
-        if (text.trim() === '') {
-          return;
-        }
-        // The socket normally delivers the committed message; re-reading covers
-        // the case where it was sent while the socket was down.
-        void sendMessage(groupId, text).then((outcome) => {
-          if (outcome.ok) {
-            void loadMessages(groupId).then((state) => {
-              if (state.status === 'ready') {
-                setChat(state);
-              }
-            });
-          }
-        });
+      live={live}
+      onRetry={() => refreshRef.current()}
+      onOlder={async () => {
+        if (chat.status !== "ready" || !chat.nextCursor) return;
+        const page = await loadMessages(groupId, fetch, chat.nextCursor);
+        if (page.status === "ready" && alive.current)
+          setChat((current) =>
+            current.status === "ready"
+              ? {
+                  ...page,
+                  messages: [
+                    ...current.messages,
+                    ...page.messages.filter(
+                      (m) =>
+                        !current.messages.some(
+                          (existing) => existing.id === m.id,
+                        ),
+                    ),
+                  ],
+                }
+              : current,
+          );
+      }}
+      onSend={async (text) => {
+        if (!pending.current || pending.current.text !== text)
+          pending.current = { text, key: crypto.randomUUID() };
+        const outcome = await sendMessage(
+          groupId,
+          text,
+          fetch,
+          pending.current.key,
+        );
+        if (!outcome.ok) return false;
+        pending.current = undefined;
+        await refreshRef.current();
+        return true;
       }}
     />
   );
 }
 
-function safeJson(raw: string): unknown {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-}
-
-/** An agent is always shown with its owner, never as its owner. */
 export function describeAuthor(message: MessageView): string {
-  return message.author.kind === 'agent'
-    ? `${message.author.displayName} (agent of ${message.author.ownerDisplayName})`
+  return message.author.kind === "agent"
+    ? `${message.author.displayName} (agente de ${message.author.ownerDisplayName})`
     : message.author.displayName;
 }
-
 export function describeChat(chat: ChatState): string {
   switch (chat.status) {
-    case 'idle':
-      return 'Select a group to read its messages.';
-    case 'loading':
-      return 'Loading messages…';
-    case 'ready':
+    case "idle":
+      return "Elegí un grupo para leer sus mensajes.";
+    case "loading":
+      return "Cargando mensajes…";
+    case "ready":
       return chat.messages.length === 0
-        ? 'No messages yet.'
-        : `${chat.messages.length} message(s).`;
-    case 'error':
-      return 'Messages could not be loaded.';
+        ? "Todavía no hay mensajes."
+        : `${chat.messages.length} mensaje(s).`;
+    case "error":
+      return "No pudimos cargar los mensajes.";
   }
 }

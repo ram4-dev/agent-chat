@@ -3,23 +3,23 @@ import {
   parseAuthResponse,
   parseCurrentUserResponse,
   type PublicUser,
-} from '@agent-chat/contracts';
+} from "@agent-chat/contracts";
 import {
   errorCodeOf,
   JSON_HEADERS,
   type JsonFetch,
   type JsonFetchInit,
   type JsonFetchResponse,
-} from '../../shared/http';
+} from "../../shared/http";
 
 export type { JsonFetch, JsonFetchInit, JsonFetchResponse };
 
 export type SessionState =
-  | { status: 'loading' }
-  | { status: 'anonymous' }
-  | { status: 'authenticated'; user: PublicUser }
-  | { status: 'rejected'; code: string }
-  | { status: 'error'; httpStatus: number };
+  | { status: "loading" }
+  | { status: "anonymous" }
+  | { status: "authenticated"; user: PublicUser }
+  | { status: "rejected"; code: string }
+  | { status: "error"; httpStatus: number };
 
 export interface Credentials {
   email: string;
@@ -38,23 +38,25 @@ export interface Registration extends Credentials {
  * answer, not a failure, while any other non-OK status is reported as an error
  * so the shell does not silently claim the visitor is anonymous.
  */
-export async function loadSession(fetchImpl: JsonFetch = fetch): Promise<SessionState> {
+export async function loadSession(
+  fetchImpl: JsonFetch = fetch,
+): Promise<SessionState> {
   try {
     const response = await fetchImpl(AUTH_PATHS.me);
 
     if (response.status === 401) {
-      return { status: 'anonymous' };
+      return { status: "anonymous" };
     }
     if (!response.ok) {
-      return { status: 'error', httpStatus: response.status };
+      return { status: "error", httpStatus: response.status };
     }
 
     const parsed = parseCurrentUserResponse(await response.json());
     return parsed.ok
-      ? { status: 'authenticated', user: parsed.value.user }
-      : { status: 'error', httpStatus: response.status };
+      ? { status: "authenticated", user: parsed.value.user }
+      : { status: "error", httpStatus: response.status };
   } catch {
-    return { status: 'error', httpStatus: 0 };
+    return { status: "error", httpStatus: 0 };
   }
 }
 
@@ -83,7 +85,10 @@ export function loginAccount(
  */
 export async function logout(fetchImpl: JsonFetch = fetch): Promise<void> {
   try {
-    await fetchImpl(AUTH_PATHS.logout, { method: 'POST', headers: JSON_HEADERS });
+    await fetchImpl(AUTH_PATHS.logout, {
+      method: "POST",
+      headers: JSON_HEADERS,
+    });
   } catch {
     // Ignored by design.
   }
@@ -96,7 +101,7 @@ async function postCredentials(
 ): Promise<SessionState> {
   try {
     const response = await fetchImpl(path, {
-      method: 'POST',
+      method: "POST",
       headers: JSON_HEADERS,
       body: JSON.stringify(input),
     });
@@ -107,10 +112,10 @@ async function postCredentials(
 
     const parsed = parseAuthResponse(await response.json());
     return parsed.ok
-      ? { status: 'authenticated', user: parsed.value.user }
-      : { status: 'error', httpStatus: response.status };
+      ? { status: "authenticated", user: parsed.value.user }
+      : { status: "error", httpStatus: response.status };
   } catch {
-    return { status: 'error', httpStatus: 0 };
+    return { status: "error", httpStatus: 0 };
   }
 }
 
@@ -120,23 +125,25 @@ async function postCredentials(
  */
 function failureFrom(response: JsonFetchResponse, body: unknown): SessionState {
   const code = errorCodeOf(body);
-  return code === undefined ? { status: 'error', httpStatus: response.status } : { status: 'rejected', code };
+  return code === undefined
+    ? { status: "error", httpStatus: response.status }
+    : { status: "rejected", code };
 }
 
 /** Short, human-readable explanation of a rejected attempt. */
 export function describeRejection(code: string): string {
   switch (code) {
-    case 'conflict':
-      return 'That email address is already registered.';
-    case 'unauthenticated':
-      return 'Those credentials do not match an account.';
-    case 'invalid_input':
-      return 'Check the form: something is missing or too short.';
-    case 'forbidden':
-      return 'The request was refused. Reload the page and try again.';
-    case 'rate_limited':
-      return 'Too many attempts. Wait a moment and try again.';
+    case "conflict":
+      return "Ese correo ya tiene una cuenta. Elegí Ingresar.";
+    case "unauthenticated":
+      return "El correo o la contraseña no coinciden.";
+    case "invalid_input":
+      return "Revisá los datos. La contraseña debe tener al menos 12 caracteres.";
+    case "forbidden":
+      return "No pudimos validar la solicitud. Recargá e intentá de nuevo.";
+    case "rate_limited":
+      return "Hiciste muchos intentos. Esperá un momento y volvé a probar.";
     default:
-      return 'The request could not be completed.';
+      return "No pudimos completar la solicitud. Intentá de nuevo.";
   }
 }
