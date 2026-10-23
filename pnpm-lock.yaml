@@ -42,6 +42,15 @@ importers:
         specifier: ^8.22.0
         version: 8.22.0
 
+  apps/bridge:
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   apps/server:
     dependencies:
       '@agent-chat/contracts':

@@ -16,7 +16,8 @@
     "test:contracts": "vitest run --project contracts",
     "test:e2e": "playwright test",
     "verify": "pnpm lint && pnpm typecheck && pnpm test:unit && pnpm test:contracts && pnpm build && pnpm test:integration && pnpm test:e2e",
-    "dev": "pnpm build && portless agent-chat pnpm --filter @agent-chat/server start"
+    "dev": "pnpm build && portless agent-chat pnpm --filter @agent-chat/server start",
+    "bridge:doctor": "pnpm --filter @agent-chat/bridge build && node apps/bridge/dist/doctor.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

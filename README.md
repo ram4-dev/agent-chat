@@ -203,3 +203,24 @@ This MVP runs on one backend process and SQLite database. Cross-browser,
 full accessibility audits, load, multi-node and production deployment validation
 are outside the completed local checks. Hosted runtimes, automatic replies, files, threads,
 calls and advanced search are outside this MVP.
+
+### Codex bridge capability check (S0)
+
+The automatic receiver is still gated by runtime capability checks. To inspect
+an installed Codex CLI without logging in or starting a model turn:
+
+```sh
+pnpm bridge:doctor
+```
+
+The diagnostic uses a temporary home and only calls App Server `initialize` and
+`config/read`. It does not reuse your Codex credentials, connect to Agent Chat,
+create threads, or acknowledge messages. It prints selected observations and the
+remaining checks. Exit code `2` means the diagnostic completed but automatic
+processing remains disabled; `1` means the diagnostic could not complete.
+Accepted settings are not proof of a complete tool restriction, reliable turn
+recovery, or an enforceable spending limit. A real-model test additionally needs
+an explicit owner-approved model and budget. The later bridge slices must wait
+until the S0 conditions in the approved implementation outline are demonstrated.
+
+The probe's deterministic subprocess tests run in `pnpm test:integration`.
