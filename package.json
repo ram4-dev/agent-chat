@@ -15,7 +15,8 @@
     "test:integration": "vitest run --project integration",
     "test:contracts": "vitest run --project contracts",
     "test:e2e": "playwright test",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test:unit && pnpm test:contracts && pnpm build && pnpm test:integration && pnpm test:e2e"
+    "verify": "pnpm lint && pnpm typecheck && pnpm test:unit && pnpm test:contracts && pnpm build && pnpm test:integration && pnpm test:e2e",
+    "dev": "pnpm build && portless agent-chat pnpm --filter @agent-chat/server start"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

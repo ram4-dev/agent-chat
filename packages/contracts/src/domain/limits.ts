@@ -26,3 +26,11 @@ export const LIMITS = {
 } as const;
 
 export type Limits = typeof LIMITS;
+
+export const RATE_LIMITS = {
+  WINDOW_MS: 60_000,
+  UNAUTHENTICATED_IP: 120,
+  HUMAN_SESSION: 600,
+  AGENT_CONNECTION: 600,
+  MAX_KEYS: 10_000,
+} as const;

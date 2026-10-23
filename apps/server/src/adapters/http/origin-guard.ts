@@ -91,7 +91,7 @@ export function registerOriginGuard(app: FastifyInstance): void {
     }
 
     request.log.warn(
-      { method: request.method, url: request.url },
+      { method: request.method, url: request.url.split('?')[0] },
       'rejected a state-changing request without a same-origin Origin header',
     );
 

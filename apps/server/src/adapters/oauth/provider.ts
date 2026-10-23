@@ -38,6 +38,7 @@ export interface OidcProviderOptions {
    * while still expecting them at the root, and every request then answers 404.
    */
   issuer: string;
+  trustProxy?: boolean;
   sqlite: Database.Database;
   agents: AgentsModule;
   /** Signing material; generated for local use when omitted. */
@@ -59,6 +60,7 @@ export interface OidcProviderOptions {
  */
 export async function createOidcProvider({
   issuer,
+  trustProxy = false,
   sqlite,
   agents,
   jwks,
@@ -162,9 +164,9 @@ export async function createOidcProvider({
     },
   });
 
-  // Behind the Fastify server the provider is reached through the same origin,
-  // so it must not try to infer a different one from forwarded headers.
-  provider.proxy = false;
+  // Forwarded headers are trusted only when explicitly configured. The route
+  // adapter removes them from requests that did not arrive over loopback.
+  provider.proxy = trustProxy;
 
   return provider;
 }

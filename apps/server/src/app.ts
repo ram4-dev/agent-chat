@@ -1,5 +1,10 @@
 import Fastify, { type FastifyInstance } from 'fastify';
-import { LIMITS } from '@agent-chat/contracts';
+import { createHash } from 'node:crypto';
+import { createRequestLimiter } from './modules/rate-limit/index.js';
+import { createMcpAuthenticator } from './adapters/mcp/auth.js';
+import { readCookie } from './adapters/http/cookie.js';
+import { sendError } from './adapters/http/error-envelope.js';
+import { LIMITS, RATE_LIMITS, SESSION_COOKIE_NAME } from '@agent-chat/contracts';
 import { registerAgentSocket } from './adapters/agent-ws/index.js';
 import { registerBrowserSocket } from './adapters/browser-ws/index.js';
 import { registerInteractionRoutes } from './adapters/oauth/interactions.js';
@@ -36,7 +41,13 @@ export async function createApp({
   services = createServices(database),
 }: AppDependencies): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: config.logLevel === 'silent' ? false : { level: config.logLevel },
+    trustProxy: config.trustProxy ?? false,
+    logger: config.logLevel === 'silent' ? false : {
+      level: config.logLevel,
+      // OAuth callback query strings may contain single-use credentials.
+      serializers: { req: (req) => ({ method: req.method, url: req.url?.split('?')[0], hostname: req.hostname, remoteAddress: req.ip }) },
+      redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers.set-cookie'],
+    },
   });
 
   const sockets = await import('@fastify/websocket');
@@ -47,11 +58,36 @@ export async function createApp({
   const jwks = await loadOrGenerateJwks(config.oidcJwksPath);
   const provider = await createOidcProvider({
     issuer: config.publicOrigin,
+    trustProxy: config.trustProxy === 'loopback',
     sqlite: database.sqlite,
     agents: services.agents,
     jwks,
     interactionsUrl: (uid) => `${interactionPrefix}/${uid}`,
     ...(providerLogLevelOf(config) === undefined ? {} : { logLevel: providerLogLevelOf(config) }),
+  });
+
+  const limiter = createRequestLimiter();
+  const authorize = createMcpAuthenticator({ publicJwk: toPublicJwk(jwks.keys[0]), issuer: config.publicOrigin, audience: config.publicOrigin, agents: services.agents });
+  app.addHook('onRequest', async (request, reply) => {
+    const path = request.url.split('?')[0]!;
+    if (!(path.startsWith('/api/') || path.startsWith('/ws/') || ['/mcp', '/auth', '/token', '/reg'].includes(path))) return;
+    let key = `ip:${request.ip}`;
+    let max: number = RATE_LIMITS.UNAUTHENTICATED_IP;
+    if (path === '/mcp' || path === '/ws/agent') {
+      try {
+        const credential = await authorize(request.headers.authorization);
+        key = `agent:${credential.connectionId}`;
+        max = RATE_LIMITS.AGENT_CONNECTION;
+      } catch { /* Invalid credentials share the unauthenticated IP budget. */ }
+    } else if (path.startsWith('/api/') || path === '/ws/browser') {
+      const token = readCookie(request.headers.cookie, SESSION_COOKIE_NAME);
+      try {
+        services.auth.resolveSession(token);
+        key = `human:${createHash('sha256').update(token!).digest('hex')}`;
+        max = RATE_LIMITS.HUMAN_SESSION;
+      } catch { /* No authenticated human session. */ }
+    }
+    if (!limiter.allow(key, max)) return sendError(reply, 429, 'rate_limited');
   });
 
   // Handlers reach the provider through the instance rather than through a

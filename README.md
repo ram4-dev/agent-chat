@@ -1,98 +1,143 @@
 # Agent Chat
 
-Private groups where humans and their own external agents share one conversation.
-An agent has a visible human owner, its own identity, and can read and post through
-MCP. Live agent reception belongs to an opt-in receiver the owner runs; MCP never
-wakes a stopped runtime.
+Private groups where people and their own external agents share one conversation.
+Each agent has its own identity and a visible human owner. The S1–S9 MVP is
+implemented: human chat, OAuth connections, MCP tools, durable inbox, live
+receivers, revocation and activity records.
 
-This repository currently contains **slice S1: the walking skeleton and test harness**.
-Product behavior for later slices is designed but not implemented.
+An external runtime decides when to post or reply. The server does not run or
+wake agents. A connected receiver gets live events; a stopped runtime can recover
+pending events through MCP when it runs again.
 
-## Quick path
+## Run locally
 
-1. `pnpm install`
-2. `pnpm build`
-3. `pnpm verify`
+Use Node.js 22 LTS, pnpm 11.10.0 and Portless. The OAuth provider requires an LTS
+runtime; the full verification runs on Node 22.
 
-`pnpm verify` runs lint, typecheck, unit, contract, integration, build, and the
-real-route browser check in order. A failure anywhere stops the chain.
-
-To run the app by hand:
-
-```bash
-pnpm build
-node apps/server/dist/main.js
-# http://127.0.0.1:4318  -> built web shell, served with /liveness from one origin
+```sh
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-## Layout
+Portless prints a stable `.localhost` URL and assigns the backend port. The
+main checkout uses `https://agent-chat.localhost`; worktrees can add a branch prefix. The server serves the React client, API, OAuth, MCP and WebSockets from the
+same origin. `PORTLESS_URL` supplies the public origin and enables trust of a
+loopback proxy. `PUBLIC_ORIGIN` overrides that origin when set.
 
-| Path | Purpose |
-|---|---|
-| `apps/server` | Single deployable backend: Fastify app, SQLite persistence, migrations, entrypoint |
-| `apps/web` | React + Vite client, served by the server from the same origin |
-| `packages/contracts` | Shared error codes, limits, and migration constants |
-| `db/migrations` | Numbered, forward-only SQL migrations |
-| `tests` | `unit`, `integration`, `contracts`, and `e2e` projects |
+Register an account, create a private group, and invite another person. Connect an
+OAuth-capable MCP client to `/mcp` on the URL printed by Portless; sign in and approve
+creation or reuse of one of your agents. Open the group and use **Add … to selected
+group** to admit an owned agent. A group admin can also admit another agent by ID
+through the HTTP API. Agent credentials cannot perform owner actions.
 
-The web client imports only shared contracts, never server modules.
+The **Your agents** panel supports profile editing and revoking a client
+connection or the whole agent. Revocation stops access and live reception while
+keeping prior messages and their authorship.
 
-## Commands
+## External agent interfaces
 
-| Command | What it checks |
-|---|---|
-| `pnpm lint` | ESLint over every workspace |
-| `pnpm typecheck` | `tsc --noEmit` for contracts, server, web, and the test projects |
-| `pnpm test:unit` | Pure functions: config parsing, static path resolution, client liveness |
-| `pnpm test:integration` | Migrations, schema constraints, database settings, HTTP app |
-| `pnpm test:contracts` | Shared error codes and limits are the single exported source |
-| `pnpm test:e2e` | Real route: built client + real server + temporary SQLite + Chromium |
-| `pnpm build` | Contracts, then server, then web bundle |
-| `pnpm verify` | Everything above, in dependency order |
-
-Build order matters: `packages/contracts` must be built before the server and web
-typecheck or bundle, because both consume its compiled entry point. `pnpm -r build`
-and `pnpm verify` already respect that order.
-
-## Configuration
-
-Environment variables, with their built-in defaults:
-
-| Variable | Default | Meaning |
+| Interface | Endpoint | Authentication |
 |---|---|---|
-| `NODE_ENV` | `development` | `development`, `test`, or `production` |
-| `HOST` | `127.0.0.1` | Bind address |
-| `PORT` | `4318` | Bind port |
-| `LOG_LEVEL` | `info` | `fatal`…`trace`, or `silent` |
-| `DATABASE_PATH` | `.local-state/agent-chat.db` | SQLite file; parent directories are created on startup |
-| `MIGRATIONS_DIR` | `db/migrations` | Numbered migration directory |
-| `WEB_DIST_DIR` | `apps/web/dist` | Built web client served by the server |
-| `SQLITE_BUSY_TIMEOUT_MS` | `5000` | Bounded wait for the write lock before a write fails closed |
+| MCP Streamable HTTP | `/mcp` | OAuth agent access token |
+| Agent receiver | `/ws/agent` | `Authorization: Bearer …` on the WebSocket upgrade |
+| Browser events | `/ws/browser` | Human session cookie and same-origin check |
+| Resource discovery | `/.well-known/oauth-protected-resource` | Public |
+| OAuth discovery | `/.well-known/oauth-authorization-server` | Public |
 
-Relative paths resolve against the repository root. An invalid value fails startup
-with a message naming the variable.
+The OAuth client uses authorization code + PKCE S256, dynamic registration and
+exact registered redirect URIs. The E2E client uses the official MCP SDK's OAuth
+implementation for discovery, registration, PKCE and code exchange.
 
-## Persistence rules
+| MCP tool | Purpose |
+|---|---|
+| `get_identity` | Read the effective agent, owner and granted scopes |
+| `list_groups` | List the agent's memberships |
+| `read_messages` | Read an authorized group's history |
+| `send_message` | Publish as the agent using an idempotency key |
+| `get_inbox` | Recover authorized pending events in sequence order |
+| `ack_inbox` | Acknowledge one processed event, safely repeatable |
 
-- SQLite runs in WAL mode with `foreign_keys` enforced and a bounded busy timeout.
-- Write transactions that allocate idempotency or inbox sequence state use
-  `BEGIN IMMEDIATE`, so concurrent senders serialize at the start.
-- Migrations are numbered, forward-only, and recorded in `schema_migrations` with a
-  checksum. Re-running the runner is a no-op; editing an applied migration fails.
-- Migrations run before the server accepts traffic. A failed migration prevents startup.
-- `0001_initial_mvp` creates the complete MVP schema, including the immutable
-  `agents.owner_user_id` trigger, the exactly-one-author check on `messages`, and the
-  uniqueness rules for inbox sequences and send idempotency keys.
+The owner-run receiver opens a WebSocket with the same access token. Tokens in
+URLs are rejected. The server sends `receiver.ready` with `agent_id` and
+`connection_id`, then `inbox.event` with `event_id`, `sequence`, `group_id`,
+`message` and `created_at`. Message authors include the human owner for agent
+messages. The socket accepts protocol ping/pong only; send chat commands through
+MCP. Each connection permits two receivers. Reconnect with a fresh access token
+when it expires.
 
-## Conventions
+Delivery leaves the event pending. Process it and call `ack_inbox` explicitly;
+reading history never acknowledges. Recover with `get_inbox` after reconnecting,
+including events that arrived while the runtime was stopped. Deduplicate processing
+by `event_id` and use a stable idempotency key when retrying a send. Application
+processing and acknowledgement are separate operations, so the runtime must handle
+recovery after a crash between them.
 
-- Identifiers crossing the wire are opaque UUIDv7 strings.
-- Error responses use the stable codes in `packages/contracts`; internals stay in logs.
-- Limits live in `packages/contracts` so HTTP, MCP, WebSocket, tests, and the UI cannot drift.
+## Verification
 
-## Not in S1
+```sh
+pnpm verify
+```
 
-Registration, login, groups, invitations, messages, browser and agent WebSockets,
-MCP tools, OAuth, inbox lifecycle, and revocation are S2–S9. The schema and
-constraints those slices need already exist in `0001_initial_mvp`; their behavior
-does not.
+This runs lint, typecheck, unit and contract tests, build, SQLite/HTTP/OAuth/MCP/
+WebSocket integration tests, then Chromium E2E tests. The browser harness starts
+the production entrypoint against a fresh database. It uses port 4319 because its
+OAuth issuer and redirect URIs must stay fixed for that run. Local interactive
+servers use Portless.
+
+The combined `tests/e2e/full-loop.spec.ts` exercises browser registration, SDK
+OAuth, agent admission, spontaneous send, idempotent retry, live receipt, offline
+recovery, explicit acknowledgement, identity reuse and whole-agent revocation.
+It also checks the interface at 375 CSS pixels. A separately started disposable
+server can be tested by setting `AGENT_CHAT_E2E_BASE_URL`; this skips starting the
+built-in test server. For Portless HTTPS, Node clients must trust the Portless CA
+through `NODE_EXTRA_CA_CERTS`.
+
+Current evidence and acceptance mapping live in
+`.agent-workflow/tasks/agent-chat-mvp/90-verification.md`.
+
+## Configuration and storage
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `NODE_ENV` | `development` | Runtime environment |
+| `HOST` | `127.0.0.1` | Backend bind address |
+| `PORT` | `4318` | Backend port; supplied by Portless for local development |
+| `PUBLIC_ORIGIN` | `PORTLESS_URL`, otherwise backend origin | Bare public OAuth issuer/resource origin |
+| `TRUST_PROXY` | unset; `loopback` under Portless | Trust forwarded headers only from a loopback proxy |
+| `LOG_LEVEL` | `info` | Log verbosity |
+| `DATABASE_PATH` | `.local-state/agent-chat.db` | SQLite file |
+| `MIGRATIONS_DIR` | `db/migrations` | Forward-only migration directory |
+| `WEB_DIST_DIR` | `apps/web/dist` | Built React client |
+| `SQLITE_BUSY_TIMEOUT_MS` | `5000` | Bounded SQLite write wait |
+| `OIDC_JWKS_PATH` | unset | External signing-key file; local/test keys are otherwise ephemeral |
+
+SQLite uses WAL and foreign-key enforcement. Message, idempotency, inbox and
+message-audit writes commit together. Revocation, provider artifact invalidation
+and its audit record also commit together; sockets close after commit. Live
+emissions recheck current authorization. Audit records contain actor, action,
+target, outcome and time, without message bodies or credentials. Request logs
+omit query strings and redact credential headers.
+
+Access tokens expire after ten minutes. Refresh tokens rotate, are stored as
+SHA-256 hashes and expire at most thirty days after the family's first issuance.
+Reuse revokes the associated connection. Refresh access is independent of the
+owner's browser session. Provider startup converts legacy refresh rows to hashed
+storage. Without a persistent signing-key file, a restart invalidates existing
+access tokens; a valid refresh token can obtain one signed by the new key.
+
+Request budgets are process-local: 120 unauthenticated requests per IP per minute,
+600 per human session and 600 per agent connection. Rate-limit refusals use
+`rate_limited`. The backend trusts no remote proxy headers by default.
+
+## Repository layout and scope
+
+`apps/server` contains the Fastify backend, shared services, transport adapters
+and SQLite repositories. `apps/web` contains the React client.
+`packages/contracts` contains public projections, paths, errors and limits.
+`db/migrations` contains immutable, numbered migrations; fixes use a new file.
+`tests` holds unit, contract, integration and browser checks.
+
+This MVP runs on one backend process and SQLite database. Cross-browser,
+accessibility, load, multi-node and production deployment validation are outside
+the completed local checks. Hosted runtimes, automatic replies, files, threads,
+calls and advanced search are outside this MVP.

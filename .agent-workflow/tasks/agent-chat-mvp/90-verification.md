@@ -1,165 +1,117 @@
-# 90 — Verification: Agent Chat MVP
+# Agent Chat MVP verification
 
-Task slug: `agent-chat-mvp`
-Artifact revision: **1**
-Recorded: 2026-10-15
-Controlling artifacts: `03-prd.md` r2 (approved), `04-tdd.md` System Design r2 + Program Design r1 (approved), `05-structure-outline.md` r1 (approved)
+Revision 2. Verified 2026-10-23, America/Sao_Paulo.
+Controlling artifacts: PRD revision 2, System Design revision 2, Program Design
+revision 1 and the approved structure outline.
 
-## Repository and branch
+## Checkout and runtime
 
-- Implementation repository: `/Users/ramiro/Desktop/projects/agent_chat`
-- Implementation worktree: `/Users/ramiro/Desktop/projects/agent_chat.feat-agent-chat-mvp`
-- Branch: `feat/agent-chat-mvp`
-- Public remote: <https://github.com/ram4-dev/agent-chat>
-- Runtime used for all recorded evidence: Node v26.8.1, pnpm 11.10.0
+Implementation branch: `feat/agent-chat-s7-s9`.
+Worktree: `/Users/ramiro/Desktop/projects/agent_chat.feat-agent-chat-s7-s9`.
+Source: `feat/agent-chat-mvp` at `238427eeef58df5ed933d013bbef527eff649924`.
+Node.js 22.23.3, pnpm 11.10.0, Chromium through Playwright 1.63.0.
+
+S1–S9 are complete for the local single-process MVP. The source checkout and the
+primary checkout were preserved. No push, PR, merge, release or production
+operation was performed.
 
 ## Automated evidence
 
-Run from the worktree root with `pnpm verify`, which chains lint, typecheck, unit, contract,
-build, integration, and browser E2E.
+`pnpm verify` passed the complete chain on this worktree:
 
-| Layer | Command | Result |
-|---|---|---|
-| Lint | `pnpm lint` | pass |
-| Types | `pnpm typecheck` | pass |
-| Unit | `pnpm test:unit` | pass — 147 tests |
-| Contract | `pnpm test:contracts` | pass — 15 tests |
-| Integration | `pnpm test:integration` | pass — 93 tests, none skipped |
-| Build | `pnpm build` | pass |
-| Browser E2E | `pnpm test:e2e` | pass — 8 tests in Chromium |
-
-## Acceptance-criteria evidence
-
-| Criterion | State | Evidence |
-|---|---|---|
-| AC1 | observed | `tests/e2e/chat.spec.ts` drives two real browser contexts; each sees the other's message over the live socket without reloading |
-| AC2 | observed | `tests/e2e/groups.spec.ts` covers invite-and-join plus non-member refusal; integration tests prove the refusal is indistinguishable from an unknown group |
-| AC3 | not started | requires S4 |
-| AC4 | partial | agent credentials do not exist yet, so only the human side is proven |
-| AC5 | partial | the member list renders an agent with its owner (`describeMember`), but no agent can be created yet |
-| AC6 | not started | requires S5 |
-| AC7 | not started | requires S8 |
-| AC8 | observed | integration test asserts one message for a retried key and a conflict for a reused key with new content |
-| AC9 | not started | requires S7 |
-| AC10 | not started | requires S6 |
-| AC11 | not started | requires S6 |
-| AC12 | not started | requires S9 |
-
-## Manual checks
-
-| Check | State |
+| Layer | Result |
 |---|---|
-| Responsive layout of the group and chat surfaces | pending |
-| Owner/agent labelling clarity in the member list | pending — no agent exists yet |
-| Consent-screen copy states agent-only authority | pending — requires S4 |
-| Reception state shown without implying automatic replies | pending — requires S7 |
-| No implied automatic-response promise anywhere in the UI | pending |
+| ESLint | pass |
+| TypeScript | pass |
+| Unit | 148 passed |
+| Contracts | 15 passed |
+| Production build | pass |
+| Integration | 117 passed; none skipped |
+| Chromium E2E | 11 passed |
 
-## Defects found by checks rather than by reasoning
+The combined full-loop test was run again after adding consent screenshots and
+reviewing the mobile flow; it passed. The same full-loop test also passed against
+a separately started HTTPS server behind Portless at
+`https://agent-chat-s7-s9-review.localhost`. That run used an isolated SQLite file,
+explicit loopback proxy trust, and the Portless CA for the Node clients.
 
-These are recorded because each one was a real failure observed while running the suite, not a
-review comment.
+The normal E2E harness uses its fixed local port to keep the OAuth issuer and
+registered callback URLs stable. Interactive review servers were started through
+Portless. No external dependency or unavailable E2E suite blocked validation.
 
-1. **Repositories prepared statements before migrations ran.** The server crashed on first boot
-   with `no such table: users`. Migrations now run before the application is composed, because
-   wiring prepares statements eagerly.
-2. **A bodyless POST carrying `content-type: application/json` is rejected by Fastify.** Inviting
-   a member and removing a member both failed until the client stopped sending a content type
-   with an empty body.
-3. **Ordering by `(created_at, id)` is not a stable creation order.** Two messages written in the
-   same millisecond tie on the timestamp, and a UUIDv7 breaks the tie by its random tail, so
-   pagination could return an older message before a newer one. `0002_message_sequence` adds a
-   per-group sequence allocated inside the same immediate transaction.
-4. **A test helper named `join` shadowed `node:path`'s `join`**, which silently broke every
-   temporary path in the harness.
-5. **A delegated writer's test asserted a wrong UUIDv7 timestamp prefix.** The literal was
-   corrected against the real encoding rather than the implementation being loosened.
+## Acceptance evidence
 
-## Blockers and not-run work
+| Criterion | Observed evidence |
+|---|---|
+| AC1: two-human realtime chat | `tests/e2e/chat.spec.ts`, two independent browser contexts |
+| AC2: private membership | Browser refusal plus HTTP/MCP integration tests for non-member reads and writes |
+| AC3: OAuth and identity reuse | Official MCP SDK OAuth client performs discovery, dynamic registration, S256 PKCE and code exchange; full-loop reconnect selects the same agent and creates no duplicate identity |
+| AC4: agent-only authority | `tests/integration/security.test.ts`: bearer credentials cannot call owner APIs, and author fields/prompt text cannot change the authenticated identity |
+| AC5: owner visible | Agent member row and messages inspected in browser screenshots; lifecycle E2E asserts both labels |
+| AC6: scoped spontaneous send | MCP group authorization tests and full-loop first message from the agent before any incoming message |
+| AC7: revocation | Lifecycle E2E revokes a connection and then an agent during live sessions; sockets close, MCP/refresh fail and historical authorship remains |
+| AC8: idempotency | SQLite integration tests plus a full-loop SDK retry returning the same message ID with no extra message |
+| AC9: active-runtime receipt | Separate real WebSocket client receives a persisted event; no automatic reply is generated |
+| AC10: offline recovery | Full-loop closes receiver and MCP client, publishes through the browser, reauthorizes the same agent and retrieves the pending event |
+| AC11: explicit acknowledgement | Reading history preserves pending state; repeated acknowledgement succeeds and the next inbox read excludes the event |
+| AC12: combined route | `tests/e2e/full-loop.spec.ts`: real browser, production server, SQLite, SDK OAuth, MCP and receiver in one test |
 
-- **S4 is complete and verified.** The authorization-code exchange issues a JWT access token
-  carrying `agent_id`, `connection_id`, and the resource audience; discovery, dynamic client
-  registration, the consent screen, agent creation, immutable ownership, connection reuse,
-  duplicate prevention, and cross-owner refusal are all covered. No S4 test is skipped.
-- **S5 is complete.** The MCP endpoint verifies the agent JWT on every request and serves all four
-  approved tools through the official SDK client. Agent admission and removal are served over
-  HTTP, guarded by group-admin authority and agent status, and the MCP tests now admit agents
-  through those routes rather than seeding membership by hand.
-- **S6 is complete.** Inbox events are written in the same transaction as the message, and
-  `get_inbox`/`ack_inbox` are served over MCP. AC10 and AC11 are observed, along with the rule
-  that reading message history never acknowledges, that repeating an acknowledgement succeeds,
-  and that an event whose group the agent has left is reported as absent rather than confirmed.
-- **S7–S9 are not started**, and each depends on the previous slice.
-- No push, pull request, merge, or release was performed; those remain separate human decisions.
+## Security and failure checks
 
-## S4 findings
+- Upgrade-time JWT checks cover expiry, issuer, audience, signature and agent binding.
+  Token scopes are intersected with current connection scopes.
+- Agent URL credentials and inbound application commands are rejected. Receiver
+  limits, slot release, token-expiry closure and per-emission reauthorization pass.
+- Cross-site browser WebSocket upgrades fail before the first private frame.
+  Browser deliveries also recheck the human session and group membership.
+- OAuth checks cover exact redirect matching, mandatory S256 PKCE, a wrong
+  verifier, code replay and refusing another owner's identity.
+- Owner HTTP mutations reject CSRF and cannot be authorized with an agent token.
+- Connection/whole-agent revocation blocks reads, writes, inbox operations,
+  refresh and receivers. Whole-agent revocation also rejects the earlier client's
+  token after a second client has connected.
+- Refresh rotation stores hashes, preserves consumed markers for reuse detection,
+  and revokes the connection/family on reuse, including concurrent attempts.
+  Agent refresh remains independent of the owner's browser session.
+- Audit rows contain no credentials or message bodies. Injected audit failures
+  roll back message/inbox creation or revocation and token invalidation together.
+- Request limits distinguish unauthenticated IP, human session and agent connection
+  budgets. An exhausted IP budget does not consume the authenticated budgets.
+- Request logging removes query strings and redacts credential headers.
 
-Established by running the approved provider, not by reading its documentation. They are
-recorded so the next session does not rediscover them.
+## Visual checks
 
-1. **The provider's callback cannot be mounted on a prefixed wildcard route.** With an issuer that
-   includes a path, the provider expects its own absolute paths and answers `404` for every
-   request. The correct mounting is `issuer` = origin with no path, and the provider's exact
-   routes (`/.well-known/openid-configuration`, `/.well-known/oauth-authorization-server`,
-   `/auth`, `/token`, `/reg`, `/jwks`, `/me`, `/revocation`, `/introspection`, `/session/end`)
-   registered explicitly. Fastify has no Express-style `use`, so each route hijacks the reply and
-   delegates to `provider.callback()` with the raw Node request and response.
-2. **The provider warns that the runtime is unsupported.** It printed
-   `Unsupported runtime. Use Node.js v22.x LTS, or a later LTS release` on Node v26.8.1. The
-   approved Program Design pins Node.js 22 LTS, so this is a conformance signal rather than a
-   defect: S4 must be developed and verified on Node 22 LTS, and the evidence above was produced
-   on a runtime the provider does not support.
-3. The adapter must be supplied as a **factory keyed by model name**, not as a single object.
-   `better-sqlite3` also requires every named parameter to be present, so optional bookkeeping
-   columns must be passed as `null`, not omitted.
-4. `refresh_token` as a grant type is only enabled when the provider issues refresh tokens.
-   Requiring `offline_access` would put a library default in front of a product decision, so the
-   provider is configured to issue them and the product decision stands.
-5. The same-origin guard originally applied to every mutation, which would reject every native
-   MCP client that sends no `Origin`. It is now scoped to `/api/` and the consent form: those are
-   browser-driven and need CSRF protection, while OAuth protocol endpoints authenticate through
-   PKCE, a client identifier, and a single-use code.
-6. Fastify parses request bodies before a handler runs, so the provider would read a drained
-   stream. The provider's routes therefore live in an encapsulated scope whose content type
-   parser passes the payload through untouched.
+Inspected generated browser screenshots for receiver state, owner labels,
+revocation confirmation, consent creation/reuse and the 375-pixel mobile layout.
+The mobile check caught horizontal overflow from a long client ID. Wrapping long
+identifiers fixed it, and the full-loop browser assertion now passes.
 
-### Why the authorization code did not work
+Local screenshots, ignored by Git:
 
-Recorded because each cause was observed, not inferred:
+- `.local-state/s7-receiver.png`: connected receiver and visible owner.
+- `.local-state/s8-revocation.png`: confirmation states that prior messages survive.
+- `.local-state/s9-mobile.png`: group, owner controls and disconnected-receiver copy.
+- `.local-state/s9-consent-new.png`: mobile creation consent and agent-only authority.
+- `.local-state/s9-consent-reuse.png`: selection of the existing agent identity.
 
-1. **Consent never resolved.** The grant recorded the agent scopes as resource scopes while
-   resource indicators were disabled, so the provider considered consent unsatisfied and asked
-   again after every approval. No code was issued at any point in that configuration. Recording
-   them as OIDC scopes is what made the code appear.
-2. **The token request arrived without a `content-type`.** The header had been moved inside the
-   same condition as `Origin` when the same-origin guard was scoped to browser calls, so a native
-   client's request body was never parsed and the provider reported
-   `no client authentication mechanism provided`.
-3. **The test read the code from the wrong response.** Approval redirects to the provider's own
-   resume path, and only that next hop issues the code.
-4. The access token stayed opaque: `accessTokenFormat` lives on a resource server, so JWT needs
-   `resourceIndicators`, and with it enabled the consent policy asks two independent questions —
-   scopes declared in the provider's scope list must be recorded as OIDC scopes, and the same
-   scopes, offered by our resource server, must also be recorded as resource scopes for its
-   indicator. Satisfying either alone re-prompts consent forever. The grant now records both.
-5. Even then the token stayed opaque, because the resource granted at the authorization request
-   is only applied to the issued token when `resourceIndicators.useGrantedResource` returns true
-   (it defaults to false). Setting it is what makes the access token a JWT with agent claims.
-6. Re-authorizing the same client added a connection row each time. A client now holds one
-   connection, which is reused and has its scopes brought in line with what was consented.
+The T3 collaborative preview could navigate but its snapshot operation timed out
+twice with `Preview automation snapshot timed out after 15000ms.` Visual review
+used the real-route Playwright screenshots instead.
 
-Remaining S4 work: make the authorization-code exchange succeed through this mounting, make a
-second consent round trip in one session work, re-enable the three skipped tests, and run an
-E2E with a real OAuth-capable MCP client.
+## Limits of the evidence
 
-## Not-run checks and why
+No production deployment, load test, multi-node test, accessibility audit or
+browser matrix beyond Chromium was run. The backend and rate-limit state remain
+single-process. Local signing keys are ephemeral unless `OIDC_JWKS_PATH` supplies
+a persistent key file. External hosted runtimes and automatic replies remain
+outside scope.
 
-- No production deployment, load, or multi-node check: the approved design accepts single-node
-  limits for the MVP.
-- No migration rollback test: migrations are forward-only by decision.
-- No accessibility or cross-browser matrix beyond Chromium.
+`oidc-provider` emits its known warning about Fastify's already-parsed body. The
+SDK authorization, code exchange and refresh tests pass through that mounting.
+The earlier Node 26 runtime warning was resolved by using the approved Node 22 LTS.
 
-## Next owner
+## Resumption
 
-Next action: implement S4 on Node 22 LTS, starting from the mounting findings above. Do not
-begin S5 until S4 is verified, because the MCP tool surface depends on agent credentials.
+The completed worktree is retained. See `91-s7-s9-receipt.md` for slice commits and
+execution evidence. No implementation slices remain open; publication and
+integration into another branch are separate actions.

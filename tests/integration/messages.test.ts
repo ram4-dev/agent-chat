@@ -182,7 +182,7 @@ function read(
 function openSocket(baseUrl: string, cookie: string): Promise<{ socket: WebSocket; first: BrowserEvent }> {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(`${baseUrl.replace('http', 'ws')}${BROWSER_SOCKET_PATH}`, {
-      headers: { cookie, origin: ORIGIN },
+      headers: { cookie, origin: baseUrl },
     });
     sockets.push(socket);
 
@@ -375,7 +375,7 @@ describe('browser socket', () => {
 
     const outcome = await new Promise<string>((resolve) => {
       const socket = new WebSocket(`${harness.baseUrl.replace('http', 'ws')}${BROWSER_SOCKET_PATH}`, {
-        headers: { origin: ORIGIN },
+        headers: { origin: harness.baseUrl },
       });
       sockets.push(socket);
       socket.once('close', (code: number) => resolve(`closed:${code}`));

@@ -7,6 +7,8 @@ import {
 import type { AuthModule } from '../../modules/auth/index.js';
 import type { GroupsModule } from '../../modules/groups/index.js';
 import type { LiveDeliveryHub } from '../../realtime/hub.js';
+import { isSameOriginRequest } from '../http/origin-guard.js';
+import { sendError } from '../http/error-envelope.js';
 import { readCookie } from '../http/cookie.js';
 
 export interface BrowserSocketDependencies {
@@ -20,9 +22,9 @@ export interface BrowserSocketDependencies {
 /**
  * Browser realtime socket.
  *
- * Authentication happens on the upgrade, so an unauthenticated socket is never
- * established. The server subscribes only to the groups the session belongs to
- * at connection time and never trusts a client-supplied group id.
+ * Origin is checked before upgrade. An invalid session is closed without a
+ * private frame. Every delivery rechecks the session and current membership;
+ * no client-supplied group subscription can grant access.
  *
  * The socket is an optimization over HTTP: a client that reconnects catches up
  * with a cursor read, so a dropped frame is never lost data.
@@ -33,7 +35,11 @@ export function registerBrowserSocket(
 ): void {
   const openSockets = new Map<string, number>();
 
-  app.get(BROWSER_SOCKET_PATH, { websocket: true }, (socket, request) => {
+  app.get(BROWSER_SOCKET_PATH, { websocket: true, preValidation: async (request, reply) => {
+    if (!isSameOriginRequest({ method: 'POST', origin: request.headers.origin, host: request.headers.host })) {
+      return sendError(reply, 403, 'forbidden');
+    }
+  } }, (socket, request) => {
     const token = readCookie(request.headers.cookie, SESSION_COOKIE_NAME);
 
     let user;

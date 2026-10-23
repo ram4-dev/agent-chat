@@ -37,6 +37,7 @@ export interface RuntimeConfig {
   publicOrigin: string;
   /** Optional JWKS file. Without one, local runs generate signing keys. */
   oidcJwksPath?: string;
+  trustProxy?: 'loopback';
 }
 
 export interface ReadConfigInput {
@@ -105,10 +106,11 @@ export function readConfig({ env, repoRoot }: ReadConfigInput): RuntimeConfig {
       60_000,
     ),
     publicOrigin: readPublicOrigin(
-      env['PUBLIC_ORIGIN'],
+      env['PUBLIC_ORIGIN'] ?? env['PORTLESS_URL'],
       readText('HOST', env['HOST'], CONFIG_DEFAULTS.host),
       readInteger('PORT', env['PORT'], CONFIG_DEFAULTS.port, 1, 65_535),
     ),
+    ...(env['TRUST_PROXY'] === undefined && env['PORTLESS_URL'] === undefined ? {} : { trustProxy: readEnum('TRUST_PROXY', env['TRUST_PROXY'], ['loopback'] as const, 'loopback') }),
     ...optionalText('oidcJwksPath', 'OIDC_JWKS_PATH', env['OIDC_JWKS_PATH']),
   };
 }

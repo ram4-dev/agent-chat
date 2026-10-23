@@ -62,6 +62,12 @@ export async function registerOidcRoutes(
         url,
         handler: (request, reply) => {
           reply.hijack();
+          // Koa has a boolean proxy setting. Enforce the narrower loopback trust
+          // boundary before it sees forwarded headers from an external socket.
+          const remote = request.raw.socket.remoteAddress;
+          if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(remote ?? '')) {
+            for (const name of ['x-forwarded-proto', 'x-forwarded-host', 'x-forwarded-for', 'x-forwarded-port']) delete request.raw.headers[name];
+          }
 
           const body = request.body;
           if (isStream(body)) {

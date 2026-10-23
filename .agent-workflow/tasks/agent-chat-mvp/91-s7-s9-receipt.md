@@ -40,6 +40,37 @@ No credentials or message bodies enter audit records.
 Full pnpm verify: lint, types, build, 147 unit, 15 contract, 109 integration,
 10 Chromium E2E pass. The UI confirmation screenshot was inspected.
 
-## Remaining
+## S9
 
-S9: combined reconnect/recovery E2E, security matrix, responsive review and docs.
+Official SDK OAuth now drives discovery, registration, PKCE and exchange in the
+browser E2E helpers. A protected-resource document and MCP challenge expose the
+same resource/issuer consistently. The combined full-loop E2E proves AC1-AC12
+alongside the focused acceptance tests, including offline recovery, idempotency,
+explicit acknowledgement and identity reuse.
+
+Security checks exposed a missing browser WebSocket Origin guard; the observed
+101 response became a 403 before upgrade. Added the planned request budgets and
+sanitized request logging. A config regression test exposed missing Portless
+origin support. Loopback proxy trust now supports HTTPS OAuth without trusting
+forwarded headers from a remote socket.
+
+A 375-pixel browser check exposed a 428-pixel document caused by long identifiers;
+wrapping fixed the overflow. Desktop/mobile owner labels, reception state,
+revocation copy and creation/reuse consent were visually inspected from E2E
+screenshots. T3 preview snapshots timed out twice, so those screenshots supplied
+the visual evidence.
+
+Final full pnpm verify: lint, types, build, 148 unit, 15 contract, 117 integration,
+11 Chromium E2E pass. The full-loop test was also run over Portless HTTPS and
+passed; the final screenshot-only test changes were checked by another passing
+full-loop run. No required local E2E suite was blocked.
+
+Slice commits: S7 `1519349`, S8 `71824f4`, S9 this receipt's commit.
+README and the verification report now describe the implemented MVP.
+
+## Completion and cleanup
+
+No implementation slice remains open. No publication or merge was performed.
+The worktree and ignored screenshots are retained for resumption. Temporary
+review servers started for this task are stopped at handoff. Existing source
+worktrees and unrelated processes are preserved.

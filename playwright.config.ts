@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 const host = '127.0.0.1';
 const port = 4319;
+const externalOrigin = process.env['AGENT_CHAT_E2E_BASE_URL'];
 
 /**
  * The real-route check boots the production server entrypoint against a fresh
@@ -16,7 +17,7 @@ export default defineConfig({
   workers: 1,
   reporter: [['list']],
   use: {
-    baseURL: `http://${host}:${port}`,
+    baseURL: externalOrigin ?? `http://${host}:${port}`,
   },
   projects: [
     {
@@ -24,7 +25,7 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
+  webServer: externalOrigin ? undefined : {
     command: 'pnpm build && node apps/server/dist/main.js',
     url: `http://${host}:${port}/liveness`,
     reuseExistingServer: false,

@@ -49,7 +49,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-export async function startHarness(): Promise<Harness> {
+export async function startHarness(signingKeys?: { keys: Record<string, unknown>[] }): Promise<Harness> {
   const webDistDir = temporaryDirectory('agent-chat-mcp-web-');
   mkdirSync(join(webDistDir, 'assets'), { recursive: true });
   writeFileSync(join(webDistDir, 'index.html'), '<div id="root"></div>', 'utf8');
@@ -62,9 +62,11 @@ export async function startHarness(): Promise<Harness> {
 
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
+  const signingPath = join(temporaryDirectory('agent-chat-keys-'), 'jwks.json');
+  if (signingKeys) writeFileSync(signingPath, JSON.stringify(signingKeys), { mode: 0o600 });
   const config = readConfig({
     repoRoot: REPOSITORY_ROOT,
-    env: { NODE_ENV: 'test', LOG_LEVEL: 'silent', WEB_DIST_DIR: webDistDir, PUBLIC_ORIGIN: origin },
+    env: { NODE_ENV: 'test', LOG_LEVEL: 'silent', WEB_DIST_DIR: webDistDir, PUBLIC_ORIGIN: origin, ...(signingKeys ? { OIDC_JWKS_PATH: signingPath } : {}) },
   });
   const app = await createApp({ config, database });
   await app.ready();
@@ -155,7 +157,7 @@ export async function call(
   return response;
 }
 
-async function follow(harness: Harness, jar: CookieJar, start: string, maxHops = 10) {
+export async function follow(harness: Harness, jar: CookieJar, start: string, maxHops = 10) {
   let url = start;
   let step = await call(harness, jar, { method: 'GET', url });
   for (let hop = 0; hop < maxHops; hop += 1) {
@@ -169,7 +171,7 @@ async function follow(harness: Harness, jar: CookieJar, start: string, maxHops =
   throw new Error('redirect chain did not settle');
 }
 
-function pkce() {
+export function pkce() {
   const verifier = randomBytes(32).toString('base64url');
   return { verifier, challenge: createHash('sha256').update(verifier).digest('base64url') };
 }
@@ -258,7 +260,7 @@ export async function ownerWithAgent(
 }
 
 /** Walks the provider's resume path and collects the issued code. */
-async function codeFrom(harness: Harness, jar: CookieJar, resume: string): Promise<string> {
+export async function codeFrom(harness: Harness, jar: CookieJar, resume: string): Promise<string> {
   let url = resume.startsWith(harness.origin) ? resume.slice(harness.origin.length) : resume;
   for (let hop = 0; hop < 6; hop += 1) {
     const step = await call(harness, jar, { method: 'GET', url });

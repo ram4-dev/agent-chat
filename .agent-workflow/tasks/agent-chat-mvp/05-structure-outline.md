@@ -28,9 +28,9 @@ Controlling artifacts: `03-prd.md` revision 2 (approved), `04-tdd.md` System Des
 | S4 — OAuth connection, agent identity, consent | done | `836be37`, `c23e36c`, `+` | Full authorization-code exchange issues a JWT access token carrying `agent_id`, `connection_id`, and the resource audience; discovery, dynamic registration, consent, agent creation, immutable ownership, connection reuse, duplicate prevention, and cross-owner refusal all verified. 147 unit, 15 contract, 84 integration, 8 Playwright pass, zero skipped |
 | S5 — MCP tool surface and idempotent sending | done | `fd6352c`, `24f46b4`, `+` | MCP endpoint with agent JWT verification and all four tools through the official SDK client; agent admission and removal over HTTP with admin/agent-status guards, so no test seeds membership by hand. 147 unit, 15 contract, 90 integration, 8 Playwright pass |
 | S6 — Durable inbox lifecycle | done | `78aeb6b`, `+` | Inbox events written in the same transaction as the message, get_inbox and ack_inbox as MCP tools; AC10 and AC11 observed, including that a history read never acknowledges and that an event whose group the agent left is never confirmed. 147 unit, 15 contract, 93 integration, 8 Playwright pass |
-| S7 — Agent receiver WebSocket and live delivery | done | this slice commit | Node 22: 147 unit, 15 contract, 101 integration, 9 browser E2E; receiver state and owner labels visually inspected |
-| S8 — Revocation and activity record | done | this slice commit | Node 22: 147 unit, 15 contract, 109 integration, 10 browser E2E; active connection and whole-agent revocation, refresh reuse, audit rollback and history preservation |
-| S9 — Full-loop verification and documentation | not started — depends on S4 | — | — |
+| S7 — Agent receiver WebSocket and live delivery | done | `1519349` | Node 22: 147 unit, 15 contract, 101 integration, 9 browser E2E; receiver state and owner labels visually inspected |
+| S8 — Revocation and activity record | done | `71824f4` | Node 22: 147 unit, 15 contract, 109 integration, 10 browser E2E; active connection and whole-agent revocation, refresh reuse, audit rollback and history preservation |
+| S9 — Full-loop verification and documentation | done | this slice commit | Node 22: 148 unit, 15 contract, 117 integration, 11 browser E2E; combined SDK OAuth/MCP/receiver recovery loop, HTTPS Portless run, security and responsive review |
 
 ## Slice plan
 
@@ -208,5 +208,6 @@ Invalidated by: Any change to slice scope, owning files, acceptance mapping, app
 
 ## Next step
 
-Implement S1 in the worktree above with strict TDD, then commit it as the first work unit on
-`feat/agent-chat-mvp`.
+S1–S9 are complete. The final evidence is recorded in `90-verification.md` and
+`91-s7-s9-receipt.md`. The completed branch is
+`feat/agent-chat-s7-s9`, based on the original MVP worktree.

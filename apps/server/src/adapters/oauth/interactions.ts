@@ -240,7 +240,7 @@ function escapeHtml(value: string): string {
 
 function renderLoginPage(uid: string, message: string): string {
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Sign in</title></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html{overflow-wrap:anywhere}input,button{box-sizing:border-box;max-width:100%}</style><title>Sign in</title></head>
 <body><main>
 <h1>Sign in</h1>
 <p>${escapeHtml(message)}</p>
@@ -286,7 +286,7 @@ function renderConsentPage(
     .join('');
 
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Authorize agent</title></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html{overflow-wrap:anywhere}input,button{box-sizing:border-box;max-width:100%}</style><title>Authorize agent</title></head>
 <body><main>
 <h1>Authorize an agent</h1>
 <p><code>${escapeHtml(clientId)}</code> is asking to act as one of your agents.</p>
@@ -306,7 +306,7 @@ function renderConsentPage(
 
 function renderNotice(message: string): string {
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Authorization</title></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html{overflow-wrap:anywhere}input,button{box-sizing:border-box;max-width:100%}</style><title>Authorization</title></head>
 <body><main><h1>Authorization</h1><p>${escapeHtml(message)}</p></main></body></html>`;
 }
 

@@ -74,3 +74,10 @@ describe('readConfig', () => {
     );
   });
 });
+
+it('uses the stable Portless origin and accepts only explicitly trusted loopback proxies', () => {
+  const config = readConfig({ repoRoot, env: { PORTLESS_URL: 'https://agent-chat.localhost', TRUST_PROXY: 'loopback' } });
+  expect(config.publicOrigin).toBe('https://agent-chat.localhost');
+  expect(config.trustProxy).toBe('loopback');
+  expect(() => readConfig({ repoRoot, env: { TRUST_PROXY: 'true' } })).toThrow('TRUST_PROXY');
+});

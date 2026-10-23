@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { DOMAIN_ERROR_CODES } from '@agent-chat/contracts';
 import type { JWK } from 'jose';
+import { AGENT_SCOPES } from '../../modules/agents/index.js';
 import { createMcpAuthenticator, McpUnauthenticated } from './auth.js';
 import { createMcpServer, type McpServices } from './server.js';
 
@@ -30,6 +31,13 @@ export async function registerMcpRoutes(app: FastifyInstance, options: McpRoutes
   const { publicJwk, issuer, audience, services } = options;
   const authorize = createMcpAuthenticator({ publicJwk, issuer, audience, agents: services.agents });
 
+  app.get('/.well-known/oauth-protected-resource', () => ({
+    resource: audience,
+    authorization_servers: [issuer],
+    scopes_supported: ['openid', ...AGENT_SCOPES],
+    bearer_methods_supported: ['header'],
+  }));
+
   await app.register(async (scope) => {
     scope.removeAllContentTypeParsers();
     scope.addContentTypeParser('application/json', { parseAs: 'string' }, (_request, body, done) => {
@@ -53,6 +61,7 @@ export async function registerMcpRoutes(app: FastifyInstance, options: McpRoutes
           if (!(error instanceof McpUnauthenticated)) {
             throw error;
           }
+          reply.raw.setHeader('www-authenticate', `Bearer resource_metadata="${issuer}/.well-known/oauth-protected-resource"`);
           return write(reply.raw, 401, {
             jsonrpc: '2.0',
             error: { code: -32001, message: DOMAIN_ERROR_CODES.unauthenticated },

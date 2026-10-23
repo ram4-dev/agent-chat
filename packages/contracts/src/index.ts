@@ -20,7 +20,7 @@ export {
   type MemberKind,
 } from './domain/groups.js';
 export { DOMAIN_ERROR_CODES, type DomainErrorCode } from './domain/errors.js';
-export { LIMITS, type Limits } from './domain/limits.js';
+export { LIMITS, RATE_LIMITS, type Limits } from './domain/limits.js';
 export {
   INITIAL_MIGRATION_FILE,
   INITIAL_MIGRATION_ID,
