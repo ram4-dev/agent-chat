@@ -112,3 +112,9 @@ Lint/typecheck/build/diff check PASS;165 unit+15 contratos+205 integración+27 E
 R2 cerró F1/F2 por inspección y dejó un medio: pausa oculta si jobs=[] y blockedElsewhere=true. Aviso ampliado al bloqueo externo, regresión de integración con pausa y ausencia de contenido ajeno y E2E con ambos indicadores/actividad vacía. Captura inspeccionada. Detalles en34-s7-external-block-pause.md.
 
 Lint/typecheck/build/diff check PASS;165 unit+15 contratos+205 integración+27 E2E=412 PASS,6 skips explícitos. E2E1.2min en Portless/Node22, DB nueva native-status-r3.db. Cierre independiente pendiente. Sin OAuth/~/.hermes/mensajes reales/push/PR. Se cierra solo el servidor temporal propio; servicios anteriores conservados.
+
+## Cierre independiente del incremento de observabilidad S7
+
+R3 cerró S7-F3-r2 por inspección estática de5d3afdd contra e6991f0, sin nuevos hallazgos. F1/F2 mantienen cierre r2. Hashes protegidos y árbol limpio verificados por reviewer; no ejecutó suites. Última suite del autor:412 PASS,6 skips explícitos, lint/typecheck/build PASS. Este cierre documental no cambia código ni requiere repetir esa suite.
+
+Registro completo en32-s7-review.md. Se cierra este incremento de consulta; quedan S6, restoS7/S8 y aceptación real. Grok continúa sin habilitar hasta demostrar terminal/challenge/red y definir operación24/7. Sin push, PR, OAuth, ~/.hermes ni mensajes reales.

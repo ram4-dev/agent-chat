@@ -1,4 +1,6 @@
-# Revisión independiente S7 r1
+# Revisiones independientes del incremento de observabilidad S7
+
+Estado actual: F1/F2 cerrados en r2; F3-r2 cerrado en r3. Sin hallazgos abiertos en este incremento. Los estados pendientes que siguen abajo corresponden al registro histórico de cada ronda.
 
 Estado: revisión r1 completada, tres hallazgos medios. Correcciones del autor en curso; todavía sin cierre independiente.
 
@@ -43,3 +45,12 @@ Estado: en curso. Snapshot5d3afdd437f92640ab792b54667fa518bd33aab9 contra e6991f
 - taskId:node:delegated-task:command%3Amcp%3A1bd8506e-58f0-4b1b-8ef4-39ee3ce5c936%3Adelegate-task%3Anative-bindings-s7-status-review-r3-20261024.
 
 Los412 PASS son evidencia del autor. Servidor temporal cerrado, servicios ajenos conservados. Sin activación real ni cambios OAuth/~/.hermes/mensajes/push/PR. El dictamen r3 sigue pendiente.
+
+
+## Dictamen r3 recibido: cierre del incremento
+
+S7-F3-r2 cerrado por inspección estática sobre5d3afdd437f92640ab792b54667fa518bd33aab9 contra e6991f0e43eafe1c5aee091ac82abbd136f8614a. Sin nuevos hallazgos concretos. Pausa y bloqueo externo visibles con jobs vacíos; regresiones de integración y E2E conservan la ausencia de contenido ajeno.
+
+El reviewer comprobó hashes protegidos al inicio/cierre y en el snapshot; árbol limpio, HEAD1df7428 solo documental. No ejecutó suites ni servicios ni realizó modificaciones. Los412 PASS y6 skips son evidencia del autor. F1/F2 mantienen su cierre r2.
+
+No quedan hallazgos abiertos de las tres rondas de este incremento de consulta. No implica cierre global de S7/S8, aceptación real de adaptadores ni aprobación humana. S6, controles/consentimiento de UI y migración/rollback de prueba siguen pendientes. Grok real requiere evidencia terminal, challenge, red y operación persistente; no se activa como consecuencia del cierre.
