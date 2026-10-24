@@ -18,6 +18,7 @@ export async function authorizeAgent(
   origin: string,
   existingAgent?: string,
   resource?: string,
+  scope = "openid agent:read agent:send agent:inbox agent:receive",
 ) {
   let registration: OAuthClientInformationMixed | undefined;
   let tokens: OAuthTokens | undefined;
@@ -33,7 +34,7 @@ export async function authorizeAgent(
       token_endpoint_auth_method: "none",
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
-      scope: "openid agent:read agent:send agent:inbox agent:receive",
+      scope,
     },
     state: () => state,
     clientInformation: () => registration,
@@ -52,7 +53,7 @@ export async function authorizeAgent(
       authorizationUrl = url;
     },
   };
-  expect(await auth(provider, { serverUrl: `${origin}/mcp` })).toBe("REDIRECT");
+  expect(await auth(provider, { serverUrl: `${origin}/mcp`, scope })).toBe("REDIRECT");
   expect(authorizationUrl).toBeDefined();
   await page.goto(authorizationUrl!.href);
   await expect(
@@ -80,6 +81,7 @@ export async function authorizeAgent(
     await auth(provider, {
       serverUrl: `${origin}/mcp`,
       authorizationCode: callback.searchParams.get("code")!,
+      scope,
     }),
   ).toBe("AUTHORIZED");
   if (!tokens || !registration)

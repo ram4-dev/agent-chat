@@ -181,7 +181,7 @@ export function createMcpServer({ agents, groups, inbox, messaging, identity, hu
             after: z.number().int().min(1).optional(),
         },
     }, async ({ limit, after }) => guard(async () => ok(await inbox.listPending({
-        agentId: context('agent:receive').agentId,
+        agentId: context('agent:inbox').agentId,
         ...(limit === undefined ? {} : { limit }),
         ...(after === undefined ? {} : { after }),
     }))));
@@ -189,7 +189,7 @@ export function createMcpServer({ agents, groups, inbox, messaging, identity, hu
         description: 'Mark a pending inbox event as processed. Repeating it is safe; reading message history does not do this.',
         inputSchema: { event_id: z.string().min(1) },
     }, async ({ event_id }) => guard(async () => {
-        const principal = context('agent:receive');
+        const principal = context('agent:inbox');
         if (automation?.isRuntimeConnection(principal.connectionId)) return refused('conflict');
         nativeAccess?.assertLegacyAckAllowed(principal.agentId, event_id);
         return ok(await inbox.acknowledge({ agentId: principal.agentId, eventId: event_id }));
