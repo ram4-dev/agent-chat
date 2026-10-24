@@ -2,8 +2,9 @@ import { spawn } from 'node:child_process';
 
 /** Own the entire POSIX process group, including background plugin setup. */
 export async function isolatedCommand(program: string, args: string[], options: {
-  env: NodeJS.ProcessEnv; cwd: string; timeoutMs: number; maxBytes: number;
+  env: NodeJS.ProcessEnv; cwd: string; timeoutMs: number; maxBytes: number; signal?: AbortSignal;
 }): Promise<string> {
+  options.signal?.throwIfAborted();
   return await new Promise((resolve, reject) => {
     const grouped = process.platform !== 'win32';
     const child = spawn(program, args, { env: options.env, cwd: options.cwd,
@@ -18,6 +19,7 @@ export async function isolatedCommand(program: string, args: string[], options: 
     const finish = () => {
       if (!closed || !drained) return;
       clearTimeout(timer);
+      options.signal?.removeEventListener('abort', cancel);
       if (failure || exitCode !== 0) reject(new Error(`Isolated command failed (${failure ?? 'exit'})`));
       else resolve(Buffer.concat(stdout).toString('utf8'));
     };
@@ -29,6 +31,9 @@ export async function isolatedCommand(program: string, args: string[], options: 
       // pipes open after the leader exits (e.g. background plugin git clones).
       setTimeout(() => { kill('SIGKILL'); drained = true; finish(); }, 100);
     };
+    const cancel = () => { failure = 'cancelled'; drain(); };
+    options.signal?.addEventListener('abort', cancel, { once: true });
+    if (options.signal?.aborted) cancel();
     child.stdout.on('data', (chunk: Buffer) => {
       bytes += chunk.length;
       if (bytes > options.maxBytes) { failure = 'output limit'; kill('SIGKILL'); }

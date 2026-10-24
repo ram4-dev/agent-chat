@@ -34,3 +34,19 @@ Las suites finales se vuelven a ejecutar con este cambio y base nueva antes de c
 ## Verificación final de correcciones
 
 Lint, typecheck y build PASS. Suite final: 148 unit, 15 contratos, 150 integración y 23 E2E PASS, un skip legacy real (AGENT_CHAT_REAL_CODEX). La suite E2E completa duró 33.0 s, con Hermes de fuente limpia en 16.0 s, usando base nueva y http://agent-chat-native-bindings-r3.localhost:1356. Se cerraron solo los dos servidores anteriores iniciados por este trabajo; el receptor real no cambió. S0 sigue parcial; el cierre de findings se presenta a revisión independiente r2 sobre el commit de correcciones.
+
+## Ronda 2 en curso
+
+- Snapshot de correcciones: `c8b40a15235ddf44affb5bc8663eb0350dc888fe`.
+- Tarea: `node:delegated-task:command%3Amcp%3A1bd8506e-58f0-4b1b-8ef4-39ee3ce5c936%3Adelegate-task%3Anative-bindings-s0-code-review-r2-20261023`.
+- Recepción confirmada: Codex `gpt-6.1-sol`, reasoning `high`, service tier `default`, solo lectura.
+- Alcance: verificar S0-F1–6 y el cierre de procesos adicionales, sin atribuir aceptación nativa completa ni abrir otra aprobación humana de implementación.
+- Sin veredicto todavía. La implementación aislada sigue autorizada; los checks pendientes del proveedor mantienen su habilitación bloqueada, sin bloquear por sí solos S1 común.
+
+## Resultado de ronda 2 y correcciones F7/F8
+
+La revisión r2 sobre c8b40a1 encontró S0-F7 major (managed scope /etc/hermes independiente de HOME) y S0-F8 minor (SIGKILL exterior podía matar el supervisor antes de drenar sus grupos). Cerró F2–F6 y la parte de F1 relativa al checkout, dejando aislamiento integral pendiente por F7. No critical/controlling; no bloquea por sí solo S1 común.
+
+Correcciones del autor: HERMES_MANAGED_DIR se fija a un directorio vacío antes de importar/reexec; el fixture recibe un scope sintético con .env canario y proveedor inválido, y los requests demuestran que no se carga. Discovery del launcher usa también managed scope vacío. El probe Codex tiene deadline total 50s, propaga AbortSignal a discovery/exec y cancela por SIGTERM/SIGINT/disconnect; el exterior usa SIGTERM a 60s en lugar de SIGKILL, esperando cleanup. La regresión cancela el entrypoint real con CLI falso y descendiente escritor que ignoran SIGTERM, exige terminación en menos de 2s y verifica desaparición del HOME y ausencia de escrituras nuevas.
+
+Checks enfocados: 3 E2E PASS (18.7s); 3 tests de aislamiento/lifecycle PASS; lint/typecheck/build PASS. S0 permanece parcial por capacidades nativas pendientes. El cierre independiente de F7/F8 se verificará junto con el siguiente incremento común, sin pedir otra aprobación de implementación.

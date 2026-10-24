@@ -20,7 +20,10 @@ export interface ProfileProbeResult {
 }
 
 /** Runs the installed Codex with disposable config and a wire-level fake provider. */
-export async function probeNativeProfile(): Promise<ProfileProbeResult> {
+export async function probeNativeProfile(options: { signal?: AbortSignal; totalTimeoutMs?: number } = {}): Promise<ProfileProbeResult> {
+  const deadline = AbortSignal.timeout(options.totalTimeoutMs ?? 50_000);
+  const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+  signal.throwIfAborted();
   const root = await mkdtemp(join(tmpdir(), 'agent-chat-native-profile-'));
   const home = join(root, 'home'); const workspace = join(root, 'workspace');
   const observations: Observation[] = [];
@@ -50,10 +53,11 @@ export async function probeNativeProfile(): Promise<ProfileProbeResult> {
     } catch { response.writeHead(400).end(); }
   });
   try {
+    signal.throwIfAborted();
     await mkdir(home); await mkdir(workspace);
     const env: NodeJS.ProcessEnv = { PATH: process.env['PATH'], HOME: home, CODEX_HOME: home, TMPDIR: tmpdir() };
     const catalogText = await isolatedCommand('codex', ['debug', 'models'], {
-      env, cwd: workspace, timeoutMs: 15_000, maxBytes: 8 * 1024 * 1024,
+      env, cwd: workspace, timeoutMs: 15_000, maxBytes: 8 * 1024 * 1024, signal,
     });
     const catalog = JSON.parse(catalogText) as { models?: Record<string, unknown>[] };
     const nativeModel = catalog.models?.find(model => model['slug'] === 'gpt-6.1-sol');
@@ -72,7 +76,7 @@ export async function probeNativeProfile(): Promise<ProfileProbeResult> {
       args.push('Capability fixture only; reply without using tools.');
       let stdout: string;
       try {
-        stdout = await isolatedCommand('codex', args, { env, cwd: workspace, timeoutMs: 30_000, maxBytes: 2 * 1024 * 1024 });
+        stdout = await isolatedCommand('codex', args, { env, cwd: workspace, timeoutMs: 30_000, maxBytes: 2 * 1024 * 1024, signal });
       }
       catch (cause) { throw new Error('Native profile probe failed; no user configuration was loaded', { cause }); }
       let thread: string | undefined;

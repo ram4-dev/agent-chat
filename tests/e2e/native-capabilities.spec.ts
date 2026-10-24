@@ -2,9 +2,9 @@ import { test, expect } from '@playwright/test';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { nativeHermes } from '../helpers/native-hermes';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, mkdir, readFile, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, dirname, basename } from 'node:path';
 
 test('native Codex profile entrypoint preserves persona, rules, tools and conversation without inference', async ({ page }) => {
   test.setTimeout(75_000);
@@ -18,7 +18,9 @@ test('native Codex profile entrypoint preserves persona, rules, tools and conver
     await writeFile(join(parentHome, 'config.toml'), 'invalid private fixture config = [');
     ({ stdout } = await promisify(execFile)(process.execPath, [resolve('apps/bridge/dist/native-capabilities.js')], {
       cwd: parentHome, env: { PATH: process.env['PATH'], HOME: parentHome, CODEX_HOME: parentHome },
-      timeout: 65_000, killSignal: 'SIGKILL', maxBuffer: 1024 * 1024,
+      // Probe's total deadline is 50s. At 60s ask its supervisor to cancel and
+      // await descendant shutdown + finally cleanup; never SIGKILL that owner.
+      timeout: 60_000, killSignal: 'SIGTERM', maxBuffer: 1024 * 1024,
     }));
   } finally { await rm(parentHome, { recursive: true, force: true }); }
   expect(JSON.parse(stdout)).toEqual({
@@ -46,6 +48,7 @@ test('installed Hermes returns durable terminal results with profile tools and g
       const request = snapshot.requests.findLast(r => r.fixture_kind === 'streamed_turn' && [...r.messages].reverse().find(m => m.role === 'user')?.content === input)!;
       expect(request.fixture_generation).toBe(snapshot.generation);
       expect(request.fixture_sequence).toBeGreaterThan(0);
+      expect(request.fixture_managed_canary_loaded).toBe(false);
       expect(request.tools?.map(t => t.function?.name).sort()).toEqual(expectedTools);
       return { snapshot, request };
     }
@@ -93,4 +96,44 @@ test('installed Hermes returns durable terminal results with profile tools and g
     expect(last.request.fixture_sequence).toBe(1);
     expect(last.snapshot.requests.filter(r => r.fixture_kind === 'streamed_turn' && [...r.messages].reverse().find(m => m.role === 'user')?.content === 'Actor A: KEY-427')).toHaveLength(0);
   } finally { await fixture.close(); }
+});
+
+test('outer SIGTERM cancels the actual probe supervisor, drains descendants and removes its home', async () => {
+  test.setTimeout(15_000);
+  const root = await mkdtemp(join(tmpdir(), 'native-outer-cancel-'));
+  const heartbeat = join(root, 'heartbeat');
+  const receipt = join(root, 'receipt.json');
+  const bin = join(root, 'bin'); await mkdir(bin);
+  const writer = `process.on('SIGTERM',()=>{});setInterval(()=>require('node:fs').writeFileSync(${JSON.stringify(heartbeat)},'alive'),10)`;
+  await writeFile(join(bin, 'codex'), `#!/usr/bin/env node
+    const fs=require('node:fs');
+    process.on('SIGTERM',()=>{});
+    require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(writer)}],{stdio:['ignore','inherit','inherit']});
+    fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify({pid:process.pid,home:process.env.HOME}));
+    setInterval(()=>{},1000);
+  `, { mode: 0o700 });
+  const command = promisify(execFile)(process.execPath, [resolve('apps/bridge/dist/native-capabilities.js')], {
+    env: { PATH: `${bin}:${process.env['PATH']}`, HOME: root, CODEX_HOME: root }, cwd: root,
+    timeout: 8000, killSignal: 'SIGTERM', maxBuffer: 64 * 1024,
+  });
+  const result = command.then(() => true, () => false);
+  let info: { pid: number; home: string } | undefined;
+  try {
+    await expect.poll(async () => { try { await access(heartbeat); return true; } catch { return false; } }).toBe(true);
+    info = JSON.parse(await readFile(receipt, 'utf8')) as typeof info;
+    const cancelledAt = performance.now();
+    command.child.kill('SIGTERM');
+    expect(await result).toBe(false);
+    expect(performance.now() - cancelledAt).toBeLessThan(2000);
+    expect(basename(dirname(info!.home))).toMatch(/^agent-chat-native-profile-/);
+    await expect(access(dirname(info!.home))).rejects.toThrow();
+    await rm(heartbeat);
+    await new Promise(resolve => setTimeout(resolve, 80));
+    await expect(access(heartbeat)).rejects.toThrow();
+  } finally {
+    command.child.kill('SIGTERM');
+    if (info) { try { process.kill(-info.pid, 'SIGKILL'); } catch { /* Owned group already drained. */ } }
+    await result;
+    await rm(root, { recursive: true, force: true });
+  }
 });

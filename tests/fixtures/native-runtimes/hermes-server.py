@@ -59,6 +59,11 @@ async def main():
         home.mkdir(parents=True, exist_ok=True)
         os.environ["HOME"] = directory
         os.environ["HERMES_HOME"] = directory
+        managed = home.parent / "managed-empty"
+        managed.mkdir(exist_ok=True)
+        # System-managed scope is independent of HOME. Pin it before importing
+        # Hermes and preserve it across the dependency reexec.
+        os.environ["HERMES_MANAGED_DIR"] = str(managed)
         os.environ["HERMES_DISABLE_UPDATE_CHECK"] = "1"
         os.chdir(directory)
         source = home.parent / "source"
@@ -94,6 +99,7 @@ async def main():
             body = await request.json()
             with report_lock:
                 body["fixture_generation"] = generation
+                body["fixture_managed_canary_loaded"] = bool(os.environ.get("NATIVE_MANAGED_CANARY"))
                 body["fixture_kind"] = "streamed_turn" if body.get("stream") else "auxiliary"
                 body["fixture_sequence"] = len(requests) + 1
                 requests.append(body)

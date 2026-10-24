@@ -1,6 +1,6 @@
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -16,8 +16,13 @@ export async function nativeHermes(source: string, temporaryParent = tmpdir()) {
   let python: string;
   let revision: string;
   try {
+    const managed = join(root, 'synthetic-host-managed');
+    await mkdir(managed);
+    await writeFile(join(managed, '.env'), 'NATIVE_MANAGED_CANARY=synthetic-managed-value\n');
+    await writeFile(join(managed, 'config.yaml'), 'model:\n  provider: synthetic-managed-invalid-provider\n');
     const env = { PATH: process.env['PATH'], HOME: root, HERMES_HOME: join(root, 'profile'),
-      GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' };
+      HERMES_MANAGED_DIR: join(root, 'managed-empty'), GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' };
+    await mkdir(env.HERMES_MANAGED_DIR);
     const command = promisify(execFile)('hermes', ['--print-runtime-command'], {
       env, cwd: root, timeout: 15_000, killSignal: 'SIGKILL', maxBuffer: 64 * 1024,
     });
@@ -52,6 +57,7 @@ export async function nativeHermes(source: string, temporaryParent = tmpdir()) {
       // Portless needs its existing proxy state. The Python fixture replaces HOME
       // with the disposable profile before importing any Hermes modules.
       env: { PATH: process.env['PATH'], HOME: process.env['HOME'], HERMES_HOME: join(root, 'profile'),
+        HERMES_MANAGED_DIR: join(root, 'synthetic-host-managed'),
         NATIVE_FIXTURE_HOME: join(root, 'profile'), NATIVE_FIXTURE_REPORT: report, NATIVE_FIXTURE_KEY: token,
         NATIVE_FIXTURE_SOURCE_REVISION: revision },
     });
@@ -92,7 +98,7 @@ export async function nativeHermes(source: string, temporaryParent = tmpdir()) {
     return new HermesRunsProbe(ready.origin, token);
   }
   async function observations(): Promise<{ generation: string; requests: {
-    fixture_generation: string; fixture_sequence: number; fixture_kind: string;
+    fixture_generation: string; fixture_sequence: number; fixture_kind: string; fixture_managed_canary_loaded: boolean;
     messages: { role: string; content: unknown }[];
     tools?: { function?: { name?: string } }[];
   }[] }> {
