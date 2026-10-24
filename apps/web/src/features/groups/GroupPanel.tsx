@@ -373,12 +373,12 @@ export function GroupDetails({
                 </strong>
                 <span>De {member.ownerDisplayName}</span>
                 <span
-                  className={`receiver-label ${member.receiverConnected ? "connected" : ""}`}
+                  className={`receiver-label ${(member.receiverConnected || member.notificationActive) ? "connected" : ""}`}
                 >
                   <i />
                   {member.nativeReceiverConfigured ? "Receptor nativo configurado" : member.receiverConnected
                     ? "Receptor activo"
-                    : "Sin receptor activo"}
+                    : member.notificationActive ? "Avisos por webhook activos" : "Sin receptor activo"}
                 </span>
               </div>
               {isAdmin && (

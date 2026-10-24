@@ -16,6 +16,7 @@ export async function createManagedApp(config: RuntimeConfig) {
   try {
     await db.ping();
     const services = createManagedServices(db, { url: managed.supabaseUrl, anonKey: managed.supabaseAnonKey, publicOrigin: config.publicOrigin });
+    if (process.env['VERCEL_ENV']==='production') await services.notifications!.initializeDispatcher(config.publicOrigin);
     let cursor = Number((await db.one<{ sequence: string }>('SELECT COALESCE(MAX(sequence),0) AS sequence FROM change_events'))!.sequence);
     let draining = false;
     let stopped = false;

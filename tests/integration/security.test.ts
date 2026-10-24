@@ -131,6 +131,9 @@ it('MCP tools enforce the scopes embedded in the token, including inbox and send
       { name: 'send_message', arguments: { group_id: 'not-a-member', text: 'Denied', idempotency_key: 'scope-denial' } },
       { name: 'get_inbox', arguments: {} },
       { name: 'ack_inbox', arguments: { event_id: 'not-an-event' } },
+      { name: 'setup_notifications', arguments: { platform: 'grokbot' } },
+      { name: 'get_notification_status', arguments: {} },
+      { name: 'confirm_notification_delivery', arguments: { delivery_id: '00000000-0000-4000-8000-000000000000', challenge: '0'.repeat(48) } },
     ]) {
       const result = await client.callTool(request);
       expect(result.isError).toBe(true);

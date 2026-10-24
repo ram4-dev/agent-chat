@@ -29,6 +29,7 @@ import type { GroupsModule } from './modules/groups/index.js';
 import type { InboxModule } from './modules/inbox/index.js';
 import type { MessagingModule } from './modules/messaging/index.js';
 import type { IdentityModule } from './modules/identity/index.js';
+import type { NotificationsModule } from './notifications/module.js';
 
 export type AsyncPort<T> = {
   [K in keyof T]: T[K] extends (...args: infer A) => infer R
@@ -47,6 +48,7 @@ export interface SocketLeases {
 }
 
 export interface ApplicationServices {
+  notifications?: NotificationsModule;
   identity: AsyncPort<IdentityModule>;
   auth: AsyncPort<AuthModule>;
   agents: AsyncPort<AgentsModule>;

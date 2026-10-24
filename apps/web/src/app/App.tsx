@@ -50,7 +50,7 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string>();
   const selectedRef = useRef<string | undefined>(undefined);
   const detailRequest = useRef(0);
-  const [view, setView] = useState<"chat" | "agents">("chat");
+  const [view, setView] = useState<"chat" | "agents">(()=>new URLSearchParams(location.search).has('notification_agent')?'agents':'chat');
   const [agentRevision, setAgentRevision] = useState(0);
   const [navOpen, setNavOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);

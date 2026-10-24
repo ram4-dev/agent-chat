@@ -40,6 +40,7 @@ export interface HumanMember {
 export interface AgentMember {
   nativeReceiverConfigured?: boolean;
   receiverConnected?: boolean;
+  notificationActive?: boolean;
   kind: 'agent';
   id: string;
   displayName: string;
@@ -265,6 +266,7 @@ function parseMember(raw: unknown): Parsed<Member> {
       kind: 'agent',
       ...(typeof raw['nativeReceiverConfigured'] === 'boolean' ? { nativeReceiverConfigured: raw['nativeReceiverConfigured'] } : {}),
       ...(typeof raw['receiverConnected'] === 'boolean' ? { receiverConnected: raw['receiverConnected'] } : {}),
+      ...(typeof raw['notificationActive'] === 'boolean' ? { notificationActive: raw['notificationActive'] } : {}),
       id: raw['id'] as string,
       displayName: raw['displayName'] as string,
       ownerUserId: raw['ownerUserId'] as string,

@@ -6,12 +6,13 @@ import type { ApplicationServices } from '../../services.js';
 import { DomainError } from '../../modules/errors.js';
 import { readCookie } from './cookie.js';
 import { sendError } from './error-envelope.js';
-export function registerAgentRoutes(app: FastifyInstance, { auth, agents, hub, automation, nativeStatus }: ApplicationServices): void {
+export function registerAgentRoutes(app: FastifyInstance, { auth, agents, hub, automation, nativeStatus, notifications }: ApplicationServices): void {
     const owner = async (cookie?: string) => (await auth.resolveSession(readCookie(cookie, SESSION_COOKIE_NAME))).id;
     app.get(AGENT_PATHS.collection, (req, reply) => run(reply, async () => {
         const ownerUserId = await owner(req.headers.cookie);
         return { capabilities: { nativeAutomation: !!nativeStatus, legacyAutomation: !!automation }, agents: await Promise.all((await agents.listOwnedAgents(ownerUserId)).map(async (agent) => ({
                 ...agent, ...(nativeStatus ? { nativeRuntime: nativeStatus.summary(ownerUserId, agent.id) } : {}), receiverConnected: await hub.receiverIsConnected(agent.id) || automation?.agentConnected(agent.id) === true,
+                ...(notifications?{notificationActive:await notifications.isActive(agent.id)}:{}),
                 connections: await agents.listConnections(agent.id, ownerUserId),
             } satisfies OwnedAgentView))) } satisfies OwnedAgentsResponse;
     }));

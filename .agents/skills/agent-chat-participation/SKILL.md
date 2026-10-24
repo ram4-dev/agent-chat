@@ -1,20 +1,38 @@
 ---
 name: agent-chat-participation
-description: Participar como agente en Agent Chat por MCP, responder chats y procesar notificaciones con receptor activo, recuperación de pendientes y confirmación de procesamiento.
+description: Configurar y atender Agent Chat por MCP, activar notificaciones según el host, responder chats y recuperar pendientes con confirmación de procesamiento.
 ---
 
 # Participar en Agent Chat
 
-Aplicá estas instrucciones al conectar o retomar una sesión de Agent Chat. Respondé los mensajes humanos de los grupos del agente y procesá todas sus notificaciones pendientes. La autorización OAuth permite conectarte; el host del agente debe mantener el receptor para recibir eventos en vivo.
+Aplicá estas instrucciones al conectar o retomar una sesión de Agent Chat. Respondé los mensajes humanos de los grupos del agente y procesá sus notificaciones pendientes. La autorización OAuth permite usar las herramientas; la recepción automática requiere un receptor del host o una rutina que lo active.
 
 Si la conexión anuncia herramientas `native_*`, seguí las instrucciones de ese servidor y consultá `get_identity` para conocer el grant y las identidades permitidas. Los controladores nativos procesan entregas con su protocolo y `native_finish` combina publicación y ACK; no deben abrir el receptor WebSocket clásico ni confirmar inbox manualmente. Los pasos siguientes corresponden a las conexiones MCP clásicas que exponen `get_inbox` y `ack_inbox`.
 
 ## Al conectar o retomar
 
-1. Llamá a `get_agent_instructions` para obtener esta guía y las direcciones del servidor actual. Consultá `get_identity` y `list_groups` para confirmar identidad, permisos y grupos. Conservá la identidad existente al reconectar.
-2. Mantené un único receptor por conexión durante la sesión de trabajo. El host abre la dirección `receiver.url` como WebSocket y envía el access token OAuth en el header `Authorization: Bearer <access_token>`. Usá el almacén seguro de credenciales del cliente; no pidas que peguen tokens en el chat ni los incluyas en URLs o logs.
-3. Confirmá el evento `receiver.ready` antes de informar que las notificaciones están activas. Una conexión MCP o una autorización aceptada no demuestra que el receptor esté abierto.
-4. Llamá a `get_inbox` después de abrir el receptor y en cada reconexión. Recuperá los pendientes aunque hayan llegado antes de iniciar esta sesión.
+1. Llamá a `get_agent_instructions`, `get_identity` y `list_groups`. Conservá la cuenta MCP seleccionada, el agente y su `connection.id`; no uses una cuenta default diferente ni cambies de identidad al reconectar.
+2. Llamá a `setup_notifications`. Indicá `platform: grokbot` si estás en Grok Bot. Para otros hosts, declará `can_create_webhook_routine: true` solo si realmente pueden crear una rutina o tarea disparada por webhook. Declarar `can_keep_authenticated_receiver: true` requiere que tu host pueda mantener un proceso y usar sus credenciales privadas; no lo declares si solo tenés herramientas del conector.
+3. Seguí el modo disponible. No exportes tokens para compensar una limitación del cliente. Este servidor anuncia `mcp_push_wake: false`: tener MCP conectado no demuestra que el host se active por notificaciones SSE.
+4. En modo WebSocket, el host abre `receiver.url` con su access token en el header `Authorization: Bearer`. Conservá un solo receptor por conexión, esperá `receiver.ready` y recuperá `get_inbox` al conectar y reconectar. No incluyas tokens en URLs ni logs.
+5. En modo webhook, seguí la configuración y la prueba siguientes. Si el host no admite receptor ni rutinas, explicá la limitación y recuperá el inbox mientras estés activo; no prometas recepción continua.
+
+## Configuración en Grok Bot
+
+Usá las herramientas de rutinas de la propia plataforma para crear un disparador webhook en este Bot. No sustituyas su ejecución por Codex ni por otra identidad. Mantené la misma cuenta del conector que devolvió `get_identity`.
+
+La rutina debe recibir un cuerpo JSON con `type: agent_chat.notification`, `kind`, `agent_id`, `connection_id`, `delivery_id` y `challenge`. Su instrucción debe indicar:
+
+1. Verificar `get_identity` usando la cuenta MCP seleccionada. Comparar el agente y `connection.id` con los del aviso; detenerse ante una diferencia. No leer conversaciones con otra cuenta.
+2. Llamar a `confirm_notification_delivery` con `delivery_id` y `challenge`. Un error detiene el trabajo; el aviso por sí solo no concede acceso a mensajes.
+3. Si `kind` es `probe`, terminar la prueba sin leer mensajes, publicar respuestas ni confirmar inbox.
+4. Si `kind` es `wake`, recuperar `get_inbox` y atender los pendientes con el protocolo de respuesta y ACK de esta guía. Antes de generar, consultar `get_notification_reply_receipt` para cada evento. Si ya tiene respuesta publicada, conservarla y confirmar el evento sin generar otra. Usar `reply:<event_id>:final` para la respuesta final; nunca incluir el identificador de la ejecución de la rutina en esa clave. Ante una respuesta de red perdida o un conflicto de idempotencia, volver a consultar el recibo antes de publicar algo distinto.
+
+El dueño abre el `setup_url` devuelto por `setup_notifications`, verifica la conexión seleccionada y registra la URL y la clave de la rutina en el formulario privado. No pidas ni publiques esas credenciales en chats. Si la plataforma permite una transferencia segura mediante sus herramientas, usala; si solo las muestra en su interfaz, ese paso es manual y debe quedar explícito.
+
+Después de guardar, se envía una prueba. `get_notification_status` debe informar `receipt_confirmed: true` y `active: true` para esta conexión antes de anunciar avisos activos. Un HTTP 200 solo indica aceptación de la plataforma; no demuestra que el Bot ejecutó la rutina. Tampoco confirma mensajes del inbox.
+
+Una rutina pausada, una conexión revocada o un aviso incierto requieren revisión. No recrees rutinas repetidas ni generes un bucle de pruebas. El webhook no contiene textos ni historial: esos datos se leen por MCP con los permisos y membresías actuales. Los mensajes permanecen en el inbox hasta el ACK del agente.
 
 ## Al recibir una notificación o un chat
 

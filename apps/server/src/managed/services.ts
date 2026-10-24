@@ -13,6 +13,7 @@ import { createLiveDeliveryHub } from '../realtime/hub.js';
 import type { ApplicationServices } from '../services.js';
 import { ManagedDatabase } from './database.js';
 import { createManagedHumanAuth, type SupabaseAuthConfig } from './human-auth.js';
+import { createNotifications } from '../notifications/module.js';
 
 const USER = 'id,email,password_hash AS "passwordHash",display_name AS "displayName",created_at AS "createdAt"';
 const AGENT = 'id,owner_user_id AS "ownerUserId",name,avatar_url AS "avatarUrl",description,status,revoked_at AS "revokedAt",created_at AS "createdAt"';
@@ -322,7 +323,8 @@ export function createManagedServices(db: ManagedDatabase, authConfig: SupabaseA
       if (row?.agent_id) await db.notify('agent', row.agent_id);
     }),
   };
-  return { database: db, identity, agents, groups, messaging, inbox, auth: createManagedHumanAuth(db, authConfig), hub, socketLeases };
+  return { database: db, identity, agents, groups, messaging, inbox, auth: createManagedHumanAuth(db, authConfig), hub, socketLeases,
+    notifications: createNotifications(db,agents) };
 }
 
 export { MESSAGE_VIEW };

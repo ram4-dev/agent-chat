@@ -1,5 +1,7 @@
 # Grok Bot notifications
 
+This document describes the SQLite native-delivery adapter and its terminal-evidence requirements. The managed webhook setup for ordinary MCP connections is described in [Notification setup through MCP](../README.md#notification-setup-through-mcp). The two protocols have separate readiness and completion guarantees.
+
 The Grok adapter wakes one owner-selected bot for one binding, revision and group. A durable journal records the attempt before the webhook POST. The envelope contains only version, event ID, binding ID, revision, target ID and start key. Message text, history, callback URLs, controller tickets and credentials stay out of the wake-up payload.
 
 A webhook HTTP200 means acceptance. It does not publish a reply or acknowledge the inbox. The routine uses its preconfigured native MCP connection to read the authorized delivery, consume `native_grok_begin` once, and return its durable result through `native_save`. The controller then uses `native_finish` to publish and acknowledge in the existing transaction.
