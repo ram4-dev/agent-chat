@@ -13,7 +13,7 @@ import { nativeProofPayload, nativeResultPayload } from '../../../packages/contr
 console.log(JSON.stringify({ fixturePid: process.pid }));
 const db = new Database(process.env.GROK_FIXTURE_DB);
 db.pragma('synchronous=FULL'); db.pragma('journal_mode=WAL');
-db.exec('CREATE TABLE IF NOT EXISTS requests(start_key TEXT,body TEXT); CREATE TABLE IF NOT EXISTS runs(start_key TEXT PRIMARY KEY,wake TEXT NOT NULL,result TEXT,proof TEXT,done INTEGER NOT NULL DEFAULT 0)');
+db.exec('CREATE TABLE IF NOT EXISTS requests(start_key TEXT,body TEXT); CREATE TABLE IF NOT EXISTS runs(start_key TEXT PRIMARY KEY,wake TEXT NOT NULL,result TEXT,proof TEXT,identity_verified INTEGER NOT NULL DEFAULT 0,done INTEGER NOT NULL DEFAULT 0)');
 const client = new Client({ name: 'synthetic-grok-webhook', version: '1' });
 await client.connect(new StreamableHTTPClientTransport(new URL('/mcp', process.env.AGENT_CHAT_MCP_URL), { requestInit: { headers: { authorization: `Bearer ${process.env.AGENT_CHAT_MCP_TOKEN}` } } }));
 async function call(name, args) {
@@ -27,9 +27,14 @@ async function processWake() {
   working = (async () => {
     const row = db.prepare('SELECT * FROM runs WHERE done=0 LIMIT 1').get(); if (!row) return;
     const wake = JSON.parse(row.wake);
+    const identity = await call('get_identity', {});
+    if (identity.grant?.kind !== 'automatic' || !['native:read','native:claim','native:start','native:complete'].every(scope => identity.grant.scopes.includes(scope)) ||
+        !identity.identities.some(item => item.agentId === process.env.GROK_FIXTURE_AGENT_ID && item.groupIds.includes(process.env.GROK_FIXTURE_GROUP_ID))) throw new Error('Wrong fixture identity');
+    db.prepare('UPDATE runs SET identity_verified=1 WHERE start_key=?').run(wake.startKey);
     const d = await call('native_delivery', { eventId: wake.eventId });
-    if (d.receipt) { db.prepare('UPDATE runs SET done=1 WHERE start_key=?').run(wake.startKey); return; }
+    if (d.agentId !== process.env.GROK_FIXTURE_AGENT_ID || d.groupId !== process.env.GROK_FIXTURE_GROUP_ID) throw new Error('Wrong fixture identity/group');
     if (d.targetId !== wake.targetId || d.bindingId !== wake.bindingId || d.bindingRevision !== wake.revision || d.startKey !== wake.startKey || !d.started) throw new Error('Wrong fixture wake');
+    if (d.receipt) { db.prepare('UPDATE runs SET done=1 WHERE start_key=?').run(wake.startKey); return; }
     let result; let proof;
     if (!row.result) {
       await call('native_grok_begin', { ticket: d.ticket, startKey: wake.startKey });

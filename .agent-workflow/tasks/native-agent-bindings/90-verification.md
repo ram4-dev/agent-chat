@@ -88,3 +88,9 @@ Lint/typecheck/build/diff check PASS;153 unit+15 contratos+193 integración+30 E
 Implementación aislada en feat/grok-notifications desde40ab8b8. Journal de despacho FULL/consumo único, envelope opaco, HTTPS/DNS/IP/TLS restringidos, native_grok_begin remoto separado, callbacks nativos durables y publicación+ACK existentes. Prueba desde navegador con supervisor real y webhook falso, duplicados, respuesta perdida, B vacío, pausa y silencio. Guía docs/grok-notifications.md y plantilla integrations/grok/agent-chat-routine.md.
 
 Lint/typecheck/build/diff check PASS;159 unit+15 contratos+199 integración+26 E2E=399 PASS,6 skips explícitos para no tocar Hermes ni usar modelo real. E2E final45.8s. Primer intento tuvo un timeout de readiness en el servidor temporal de un test nativo existente; se mejoró sincronización/diagnóstico y pasó la repetición completa sin aumentar timeouts. Evidencia y límites en27-s5-verification.md. Activación real bloqueada por decisiones/capacidades de26; conexiones reales y producción intactas. Revisión independiente pendiente.
+
+## Corrección S5-F1
+
+R1 de7df1c25 encontró un minor documental:binding/revisión/target no son campos de get_identity. La plantilla y guía ahora verifican identidad/clase/scopes en esa herramienta y mapping/grupo en native_delivery. Fixture añade la consulta real por MCP y el E2E exige identity_verified en cada entrega sintética. Sin cambiar respuestas productivas o permisos.
+
+Lint/typecheck/build/diff check PASS;159 unit+15 contratos+199 integración+26 E2E=399 PASS,6 skip explícitos. E2E completo44.1s, DB nueva grok-r2-verification-20261024.db y Portless agent-chat-grok-r2-check. S5-F1 corregido por autor; sin inventar revisión independiente adicional. R1 sin hallazgos mayores. Activación real y decisiones de26 siguen pendientes; restricciones del usuario intactas.

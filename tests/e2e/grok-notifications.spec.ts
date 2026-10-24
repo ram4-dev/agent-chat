@@ -46,7 +46,7 @@ test('Grok wake-up from the browser waits for callback, survives restart and los
     const proxy = child('portless', [`grok-callback-loss-${randomUUID().slice(0,8)}`, process.execPath, 'tests/fixtures/native-delivery/proxy.mjs'], { ...process.env, NATIVE_UPSTREAM: origin, NATIVE_LOST_RESPONSE: lost, NATIVE_DROP_TOOL: 'native_save' }); children.push(proxy.process);
     await expect.poll(() => /PORTLESS_URL=(https?:\/\/\S+)/.exec(proxy.output())?.[1]).toBeTruthy();
     const proxyOrigin = /PORTLESS_URL=(https?:\/\/\S+)/.exec(proxy.output())![1]!;
-    const webhook = child('portless', [`grok-fake-webhook-${randomUUID().slice(0,8)}`, process.execPath, 'tests/fixtures/grok/webhook.mjs'], { ...process.env, AGENT_CHAT_MCP_URL: proxyOrigin, AGENT_CHAT_MCP_TOKEN: identity.token, GROK_FIXTURE_DB: providerDb, GROK_FIXTURE_RELEASE: release, GROK_FIXTURE_SIGNER: keyFile, GROK_FIXTURE_WAKE_TOKEN: wakeToken }); children.push(webhook.process);
+    const webhook = child('portless', [`grok-fake-webhook-${randomUUID().slice(0,8)}`, process.execPath, 'tests/fixtures/grok/webhook.mjs'], { ...process.env, AGENT_CHAT_MCP_URL: proxyOrigin, AGENT_CHAT_MCP_TOKEN: identity.token, GROK_FIXTURE_AGENT_ID: identity.agentId, GROK_FIXTURE_GROUP_ID: groupId, GROK_FIXTURE_DB: providerDb, GROK_FIXTURE_RELEASE: release, GROK_FIXTURE_SIGNER: keyFile, GROK_FIXTURE_WAKE_TOKEN: wakeToken }); children.push(webhook.process);
     await expect.poll(() => /PORTLESS_URL=(https?:\/\/\S+)/.exec(webhook.output())?.[1]).toBeTruthy();
     const webhookOrigin = /PORTLESS_URL=(https?:\/\/\S+)/.exec(webhook.output())![1]!;
     await expect.poll(async () => { try { return (await page.request.get(webhookOrigin)).status(); } catch { return 0; } }).toBe(403);
@@ -60,7 +60,7 @@ test('Grok wake-up from the browser waits for callback, survives restart and los
       return supervisor;
     };
     const rows = () => { const db = createDatabase({ path: serverDb, busyTimeoutMs: 1000 }); try { return db.sqlite.prepare('SELECT event_id,state,started,provider_started,message_id FROM native_deliveries ORDER BY created_at').all() as { event_id: string; state: string; started: number; provider_started: number; message_id: string | null }[]; } finally { db.close(); } };
-    const provider = () => { const db = createDatabase({ path: providerDb, busyTimeoutMs: 1000 }); try { return { requests: db.sqlite.prepare('SELECT body FROM requests').all() as { body: string }[], runs: db.sqlite.prepare('SELECT result FROM runs').all() as { result: string | null }[] }; } finally { db.close(); } };
+    const provider = () => { const db = createDatabase({ path: providerDb, busyTimeoutMs: 1000 }); try { return { requests: db.sqlite.prepare('SELECT body FROM requests').all() as { body: string }[], runs: db.sqlite.prepare('SELECT result,identity_verified FROM runs').all() as { result: string | null; identity_verified: number }[] }; } finally { db.close(); } };
     const receiver = launch('controller-A'); await expect.poll(() => ready.length).toBe(1);
     await send(page, 'Uno'); await expect.poll(() => provider().requests.length).toBe(1);
     expect(rows()[0]).toMatchObject({ started: 1, provider_started: 0, message_id: null });
@@ -89,6 +89,7 @@ test('Grok wake-up from the browser waits for callback, survives restart and los
     await configure(true); await expect(page.getByText('Grok simulado: PAUSADO', { exact: true })).toBeVisible({ timeout: 15000 });
     await expect.poll(() => rows().filter(r => r.state === 'done').length).toBe(4);
     expect(provider().runs.filter(r => r.result)).toHaveLength(4);
+    expect(provider().runs.every(r => r.identity_verified === 1)).toBe(true);
     await page.screenshot({ path: '.local-state/grok-notifications-e2e.png', fullPage: true });
   } finally { await page.close(); await client?.close(); for (const process of children.reverse()) await stop(process); await rm(root, { recursive: true, force: true }); }
 });
