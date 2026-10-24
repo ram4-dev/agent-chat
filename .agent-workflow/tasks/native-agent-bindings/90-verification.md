@@ -146,3 +146,9 @@ Pendiente explícito S6 independiente de profiles/credenciales: escritura intera
 Integración y navegador con supervisor real/webhook falso verifican turno running, envío explícito, replay sin auditoría duplicada, conflicto e identidad no concedida rechazados, revocación interactiva, ledger/claim/fence/inbox intactos y finalización automática original una sola vez. Todos los datos/conexiones son fixtures temporales, sin inferencia o mensajes reales. Detalles en39/40 y docs/native-trial-migration.md.
 
 Lint/typecheck/build/diff-check PASS;165 unit+15 contratos+210 integración+27 E2E=417 PASS,6 skips explícitos. E2E completo1.3min con Portless/Node22 y DB nueva. Revisión independiente pendiente. S6 automático, Hermes personal, Grok real y host24/7 siguen pendientes con accesos/decisiones indicados en40. No se declara cierre global; sin push a main, PR, OAuth o ~/.hermes.
+
+## Cierre independiente de coexistencia
+
+R1 de e3a2a05 contra d51cf92 terminó sin hallazgos concretos. Preserva claves automáticas y atomicidad de publicación/ACK/recibo; restricción pública y regresiones de claim/inbox/auditoría inspeccionadas. Hashes protegidos, árbol limpio y diff-check verificados por reviewer; no ejecutó suites. Última suite del autor:417 PASS,6 skips explícitos, lint/typecheck/build PASS.
+
+Registro completo en41-coexistence-review.md. Cierre acotado al incremento; S6 automático y pendientes externos de40 continúan abiertos. Esta actualización solo documental no requiere repetir suites. Sin push, PR, OAuth, ~/.hermes ni mensajes reales.
