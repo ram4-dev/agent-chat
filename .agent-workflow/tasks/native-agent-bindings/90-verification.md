@@ -158,3 +158,9 @@ Registro completo en41-coexistence-review.md. Cierre acotado al incremento; S6 a
 Rama chore/native-verification-gaps desde642a53c, Worktrunk registrado en42. No quedó otra funcionalidad interna identificada sin gates externos; se aplicaron tres mejoras autorizadas:4 tests de bloqueo/reconciliación del receptor,6 tests HTTP del adaptador Hermes ante evidencia no terminal o inválida y guía del inventario de6 skips/decisiones de Rama. Solo tests/documentación, sin código de producto, contratos, dependencias o cambios de flags.
 
 Lint/typecheck/build/diff-check PASS;169 unit+15 contratos+216 integración+27 E2E=427 PASS,6 skips explícitos. E2E final1.3min con Portless agent-chat-verification-gaps, Node22.23.3 y DB nueva verification-gaps-final.db. Los doubles locales no acreditan Hermes real ni inferencia Codex, por lo que no se retiran los skips. Detalles en43 y docs/external-validation.md. Revisión independiente pendiente; sin push/PR/OAuth/~/.hermes/mensajes reales.
+
+## Cierre independiente de mejoras no funcionales
+
+R1 de1ce0313 contra642a53c terminó sin hallazgos concretos. Tests de bloqueo/reconciliación, rechazo de evidencia HTTP incompleta y limpieza de recursos inspeccionados; matriz de5 skips Hermes+1 Codex legacy coincide con fuentes. Hashes protegidos, árbol limpio y diff-check verificados por reviewer; no ejecutó suites. Última suite del autor:427 PASS,6 skips explícitos, lint/typecheck/build PASS.
+
+Registro en44-verification-gaps-review.md. Cierre acotado a tests/docs; esta actualización documental no requiere repetir la suite. S6 automático y aceptaciones reales siguen pendientes, con decisiones/accesos en docs/external-validation.md. Sin push, PR, OAuth, ~/.hermes o mensajes reales.
