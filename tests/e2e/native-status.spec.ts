@@ -67,6 +67,12 @@ test('owner sees native coverage, capabilities, empty activity and recoverable s
     await expect(panel.getByRole('list').getByText(label, { exact: true })).toBeVisible();
     await page.unroute(endpoint);
   }
+  await page.route(endpoint, route => route.fulfill({ json: { native: { ...snapshot, blockedElsewhere: true, jobs: [] } } }));
+  await expect(panel.getByRole('status')).toHaveText('Hay un turno pendiente fuera de este grupo');
+  await expect(panel.getByText('Respuestas nativas pausadas. El turno pendiente conserva su estado hasta confirmar su finalización.')).toBeVisible();
+  await expect(panel.getByRole('list').getByRole('listitem')).toHaveCount(0);
+  await page.screenshot({ path: '.local-state/native-status-paused-other-group.png', fullPage: true });
+  await page.unroute(endpoint);
   await selectGroup(page, 'Estado nativo'); await createGroup(page, 'Otro grupo'); await addAgent(page, 'Vista');
   await agents(page);
   await expect(panel.getByRole('status')).toHaveText('Este grupo no está habilitado para este receptor');

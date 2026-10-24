@@ -28,3 +28,9 @@ Estado: en curso, sin dictamen. Snapshot36958cbd866fdb595fcf5a5ce4d029dbfe1d16d2
 - taskId:node:delegated-task:command%3Amcp%3A1bd8506e-58f0-4b1b-8ef4-39ee3ce5c936%3Adelegate-task%3Anative-bindings-s7-status-review-r2-20261024.
 
 Los412 PASS son evidencia del autor, no del reviewer. Servidor temporal de verificación cerrado; servicios anteriores del usuario conservados. No hay activación real ni cambios OAuth/~/.hermes/mensajes/push/PR.
+
+## Dictamen r2 recibido
+
+Revisión estática de36958cb contra dd57fba, HEAD e6991f0 solo documental. F1 y F2 cerrados de forma acotada. F3 parcial: con pausa, bloqueo externo y jobs locales vacíos desaparecía la indicación de pausa. Hallazgo medio S7-F3-r2. Hashes protegidos coincidentes y árbol limpio; sin suites ni servicios del reviewer.
+
+La corrección del autor amplía el aviso de pausa al bloqueo externo; el contenido ajeno sigue ausente. Regresión HTTP/modelo con binding pausado, blockedElsewhere=true y jobs=[] y comprobación de navegador de ambos indicadores simultáneos. El cierre independiente queda pendiente.

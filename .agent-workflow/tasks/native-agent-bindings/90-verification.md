@@ -106,3 +106,9 @@ Lint/typecheck/build/diff check PASS;162 unit+15 contratos+204 integración+27 E
 Revisión r1 encontró tres hallazgos medios. Vencimiento por completed_at incluso para supresión sin resultado, polling secuencial con timeout visible de ocho segundos y pausa separada del estado pendiente. Regresión de supresión a ocho días y casos unitarios de pausa con incertidumbre/ejecución/cancelación. E2E de respuesta demorada cuatro segundos sin solapamiento, consulta retenida con error/reintento y los tres estados pausados.
 
 Lint/typecheck/build/diff check PASS;165 unit+15 contratos+205 integración+27 E2E=412 PASS,6 skips explícitos por restricciones sobre Hermes/modelo real. E2E completo1.2min en Portless agent-chat-native-status, Node22.23.3 y DB nueva native-status-fixes.db. Evidencia en33-s7-review-fixes.md. Correcciones del autor pendientes de revisión independiente. Sin OAuth/~/.hermes/mensajes reales/push/PR.
+
+## S7-F3-r2: pausa con bloqueo externo
+
+R2 cerró F1/F2 por inspección y dejó un medio: pausa oculta si jobs=[] y blockedElsewhere=true. Aviso ampliado al bloqueo externo, regresión de integración con pausa y ausencia de contenido ajeno y E2E con ambos indicadores/actividad vacía. Captura inspeccionada. Detalles en34-s7-external-block-pause.md.
+
+Lint/typecheck/build/diff check PASS;165 unit+15 contratos+205 integración+27 E2E=412 PASS,6 skips explícitos. E2E1.2min en Portless/Node22, DB nueva native-status-r3.db. Cierre independiente pendiente. Sin OAuth/~/.hermes/mensajes reales/push/PR. Se cierra solo el servidor temporal propio; servicios anteriores conservados.

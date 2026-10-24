@@ -263,7 +263,9 @@ it('native owner status hides other groups and refuses a non-owner or a human wh
   const s = setup(); const status = createNativeStatusModule(s.db.sqlite, s.services, s.clock);
   const d = s.claim(); s.delivery.begin(s.first.connectionId, d.ticket);
   const r = s.result(d, 'PRIVATE-A-OUTPUT'); s.delivery.save(s.first.connectionId, d.ticket, r, s.proof(d, r));
+  s.delivery.configureOwner(s.owner, s.first.bindingId, 1, false);
   const other = status.ownerState(s.owner, s.first.agentId, s.groupB)!;
+  expect(other.binding.enabled).toBe(false);
   expect(other.blockedElsewhere).toBe(true); expect(other.jobs).toEqual([]); expect(JSON.stringify(other)).not.toContain('PRIVATE-A-OUTPUT');
   expect(() => status.ownerState(randomUUID(), s.first.agentId, s.groupA)).toThrow();
   const human = randomUUID(); s.db.sqlite.prepare('INSERT INTO users(id,email,password_hash,display_name) VALUES(?,?,?,?)').run(human, `${human}@example.com`, 'fixture', 'Other');

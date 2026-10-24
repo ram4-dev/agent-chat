@@ -54,7 +54,7 @@ export function NativeAutomationPanel({ agentId, groupId, name }: { agentId: str
     <h4>{state ? `${providers[state.target.provider]} en este grupo` : 'Receptor nativo'}</h4>
     {error ? <><p role="alert">No pudimos consultar el estado nativo.</p><button className="button secondary" onClick={() => setRetry(value => value + 1)}>Reintentar estado nativo</button></> : <p role="status">{state ? refreshing ? 'Actualizando estado nativo…' : nativeStatusLabel(state) : 'Consultando estado nativo…'}</p>}
     {state && <>
-      {!state.binding.enabled && state.jobs.some(job => job.state !== 'done') && <p>Respuestas nativas pausadas. El turno pendiente conserva su estado hasta confirmar su finalización.</p>}
+      {!state.binding.enabled && (state.blockedElsewhere || state.jobs.some(job => job.state !== 'done')) && <p>Respuestas nativas pausadas. El turno pendiente conserva su estado hasta confirmar su finalización.</p>}
       <dl>
         <dt>Bot o profile</dt><dd><code>{state.target.nativeRef}</code></dd>
         <dt>Conector</dt><dd>{state.target.connectorId}</dd>
