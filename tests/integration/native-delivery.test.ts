@@ -276,3 +276,14 @@ it('native owner activity hides jobs when the agent is removed even if its owner
   const view = status.ownerState(s.owner, s.first.agentId, s.groupA)!;
   expect(view.group.covered).toBe(false); expect(view.jobs).toEqual([]); expect(view.controller.presence).toBe('unknown');
 });
+
+it('expires suppressed unstarted input by completion age without requiring a result hash or retention sweep', () => {
+  const s = setup(); const status = createNativeStatusModule(s.db.sqlite, s.services, s.clock);
+  const d = s.claim(); const receipt = s.delivery.suppressOwner(s.owner, d.ticket.eventId).receipt;
+  expect(status.ownerState(s.owner, s.first.agentId, s.groupA)?.jobs[0]).toMatchObject({ state: 'done', input: 'hello', output: null, contentExpired: false, receipt });
+  s.advance(8);
+  const expected = { contentExpired: true, input: null, output: null, receipt };
+  expect(status.ownerState(s.owner, s.first.agentId, s.groupA)?.jobs[0]).toMatchObject(expected);
+  s.delivery.retain();
+  expect(status.ownerState(s.owner, s.first.agentId, s.groupA)?.jobs[0]).toMatchObject(expected);
+});

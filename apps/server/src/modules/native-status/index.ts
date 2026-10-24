@@ -44,9 +44,9 @@ export function createNativeStatusModule(sqlite: Database.Database, deps: { agen
         group: { id: groupId, covered }, controller: { authorized, lastContactAt, presence: lastContactAt === null ? 'unknown' : observedAt >= lastContactAt && observedAt - lastContactAt <= NATIVE_CONTACT_FRESHNESS_MS ? 'recent' : 'stale' },
         observedAt, blockedElsewhere,
         jobs: rows.map(row => {
-          const contentExpired = row.state === 'done' && row.result_hash !== null && row.result_text === null;
+          const contentExpired = row.state === 'done' && row.completed_at !== null && row.completed_at < observedAt - 7 * 86400_000;
           return { eventId: row.event_id, state: row.state, started: row.started === 1, providerStarted: row.provider_started === 1,
-            input: contentExpired ? null : row.input, output: row.result_text, decision: row.decision,
+            input: contentExpired ? null : row.input, output: contentExpired ? null : row.result_text, decision: row.decision,
             receipt: row.disposition ? { disposition: row.disposition, messageId: row.message_id } : null, contentExpired,
             runRef: row.native_run_ref, conversationRef: row.conversation_ref, createdAt: row.created_at, completedAt: row.completed_at };
         }),

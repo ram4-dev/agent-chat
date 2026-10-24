@@ -100,3 +100,9 @@ Lint/typecheck/build/diff check PASS;159 unit+15 contratos+199 integración+26 E
 Incremento independiente desde737b60d en feat/native-notification-status. API del dueño con membresía actual, señal de controlador diferenciada de ejecución/entrega, panel en español con capacidades/cobertura/actividad y recibos, errores/vacíos/foco móvil. No habilita consumidores ni cambia conexiones. Detalles de alcance y evidencia en30-s7-observability-receipt.md,31-s7-observability-verification.md y docs/native-notification-status.md.
 
 Lint/typecheck/build/diff check PASS;162 unit+15 contratos+204 integración+27 E2E=408 PASS,6 skips explícitos (5 Hermes instalado,1 Codex real). E2E final48.6s con Portless agent-chat-native-status, Node22.23.3 y DB nueva. Capturas desktop/móvil/publicación inspeccionadas. Revisión independiente pendiente. S6 y resto de S7/S8 no se declaran bloqueados por Grok. Activación real sigue sujeta a26; sin OAuth/~/.hermes/mensajes reales/push/PR.
+
+## Correcciones S7-F1/F2/F3
+
+Revisión r1 encontró tres hallazgos medios. Vencimiento por completed_at incluso para supresión sin resultado, polling secuencial con timeout visible de ocho segundos y pausa separada del estado pendiente. Regresión de supresión a ocho días y casos unitarios de pausa con incertidumbre/ejecución/cancelación. E2E de respuesta demorada cuatro segundos sin solapamiento, consulta retenida con error/reintento y los tres estados pausados.
+
+Lint/typecheck/build/diff check PASS;165 unit+15 contratos+205 integración+27 E2E=412 PASS,6 skips explícitos por restricciones sobre Hermes/modelo real. E2E completo1.2min en Portless agent-chat-native-status, Node22.23.3 y DB nueva native-status-fixes.db. Evidencia en33-s7-review-fixes.md. Correcciones del autor pendientes de revisión independiente. Sin OAuth/~/.hermes/mensajes reales/push/PR.

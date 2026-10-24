@@ -12,7 +12,7 @@ La vista incluye bot/profile, conector, revisión, modo de contexto y capacidade
 
 La actividad está limitada a las últimas 30 entregas de la revisión y grupo actuales. Solo el dueño de la identidad, con membresía vigente en ese grupo, puede consultarla. Si el agente perdió acceso, no se devuelven cuerpos. Un turno de otro grupo puede indicar un bloqueo, pero no revela su contenido ni identificadores. El contenido vencido se indica expresamente y se conserva el recibo conforme a la retención existente.
 
-La consulta se actualiza cada tres segundos. Ante un error se retira el estado anterior y aparece un botón de reintento. El endpoint de sesión del dueño es `GET /api/agents/:agentId/native-status/:groupId`, con respuesta privada y sin caché. No utiliza ni modifica OAuth.
+La siguiente consulta comienza tres segundos después de terminar la anterior, sin solapamiento. Durante la consulta se indica que el estado se está actualizando. Si la respuesta tarda más de ocho segundos, se retira el estado anterior y aparece un error con reintento. Una pausa se muestra junto al estado del turno pendiente: no confirma su cancelación ni finalización. El endpoint de sesión del dueño es `GET /api/agents/:agentId/native-status/:groupId`, con respuesta privada y sin caché. No utiliza ni modifica OAuth.
 
 ## Verificación local
 

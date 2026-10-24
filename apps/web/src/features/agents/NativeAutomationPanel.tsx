@@ -4,7 +4,6 @@ const providers = { grok_bot: 'Grok Bot', hermes: 'Hermes', codex: 'Codex', lega
 const capabilityLabels: Record<keyof NativeCapabilities, string> = { groupIsolation: 'Contexto entre grupos', durableResults: 'Resultados durables', approvals: 'Aprobaciones nativas', toolCatalog: 'Herramientas del profile', nativeVisibility: 'Historial nativo' };
 export function nativeStatusLabel(state: NativeStatusView): string {
   if (!state.group.covered) return 'Este grupo no está habilitado para este receptor';
-  if (!state.binding.enabled) return 'Respuestas nativas pausadas';
   if (state.blockedElsewhere) return 'Hay un turno pendiente fuera de este grupo';
   const job = state.jobs.find(job => job.state !== 'done');
   if (job) {
@@ -17,36 +16,45 @@ export function nativeStatusLabel(state: NativeStatusView): string {
     if (job.state === 'claimed') return 'Mensaje reservado; inicio pendiente';
     return 'Estado del turno sin verificar';
   }
+  if (!state.binding.enabled) return 'Respuestas nativas pausadas';
   return state.controller.presence === 'recent' ? 'Controlador con señal reciente' : state.controller.presence === 'stale' ? 'Sin señal reciente del controlador' : 'Controlador sin señal registrada';
 }
 export function nativeJobLabel(job: NativeStatusView['jobs'][number]): string {
   if (job.receipt?.disposition === 'published' && job.receipt.messageId) return 'Respuesta publicada';
   if (job.receipt?.disposition === 'no_reply') return 'Sin respuesta';
   if (job.receipt?.disposition === 'suppressed') return 'Confirmado sin publicar';
-  return job.state === 'done' ? 'Finalizado sin recibo disponible' : job.state === 'result_saved' ? 'Resultado guardado; publicación pendiente' : job.state === 'needs_review' ? 'Revisión necesaria' : job.state === 'awaiting_approval' ? 'Esperando aprobación' : 'Entrega pendiente';
+  return job.state === 'done' ? 'Finalizado sin recibo disponible' : job.state === 'result_saved' ? 'Resultado guardado; publicación pendiente' : job.state === 'needs_review' ? 'Revisión necesaria' : job.state === 'awaiting_approval' ? 'Esperando aprobación' : job.state === 'start_uncertain' ? 'Inicio pendiente de confirmar' : job.state === 'cancel_requested' ? 'Cancelación pendiente de verificar' : job.state === 'running' ? 'Procesamiento autorizado; resultado pendiente' : job.state === 'claimed' ? 'Mensaje reservado; inicio pendiente' : 'Entrega pendiente';
 }
 export function NativeAutomationPanel({ agentId, groupId, name }: { agentId: string; groupId: string; name: string }) {
+  const [refreshing, setRefreshing] = useState(false);
   const [state, setState] = useState<NativeStatusView>(); const [error, setError] = useState(false); const [retry, setRetry] = useState(0);
   useEffect(() => {
-    let active = true; let request: AbortController | undefined; let generation = 0;
+    let active = true; let request: AbortController | undefined; let timer: ReturnType<typeof setTimeout> | undefined;
     setState(undefined); setError(false);
     const refresh = async () => {
-      const current = ++generation; request?.abort(); const controller = new AbortController(); request = controller;
+      const controller = new AbortController(); request = controller;
+      setRefreshing(true);
+      const deadline = setTimeout(() => controller.abort(), 8000);
       try {
         const response = await fetch(`/api/agents/${agentId}/native-status/${groupId}`, { signal: controller.signal });
         if (!response.ok) throw new Error();
         const next = await response.json() as { native: NativeStatusView | null };
-        if (!next.native) throw new Error();
-        if (active && current === generation) { setState(next.native); setError(false); }
-      } catch { if (active && current === generation && !controller.signal.aborted) { setState(undefined); setError(true); } }
+        if (!next.native || controller.signal.aborted) throw new Error();
+        if (active) { setState(next.native); setError(false); }
+      } catch { if (active) { setState(undefined); setError(true); } }
+      finally {
+        clearTimeout(deadline);
+        if (active) { setRefreshing(false); timer = setTimeout(() => { void refresh(); }, 3000); }
+      }
     };
-    void refresh(); const timer = setInterval(() => { void refresh(); }, 3000);
-    return () => { active = false; request?.abort(); clearInterval(timer); };
+    void refresh();
+    return () => { active = false; request?.abort(); clearTimeout(timer); };
   }, [agentId, groupId, retry]);
   return <section className="native-status-panel" aria-label={`Receptor nativo de ${name}`}>
     <h4>{state ? `${providers[state.target.provider]} en este grupo` : 'Receptor nativo'}</h4>
-    {error ? <><p role="alert">No pudimos consultar el estado nativo.</p><button className="button secondary" onClick={() => setRetry(value => value + 1)}>Reintentar estado nativo</button></> : <p role="status">{state ? nativeStatusLabel(state) : 'Consultando estado nativo…'}</p>}
+    {error ? <><p role="alert">No pudimos consultar el estado nativo.</p><button className="button secondary" onClick={() => setRetry(value => value + 1)}>Reintentar estado nativo</button></> : <p role="status">{state ? refreshing ? 'Actualizando estado nativo…' : nativeStatusLabel(state) : 'Consultando estado nativo…'}</p>}
     {state && <>
+      {!state.binding.enabled && state.jobs.some(job => job.state !== 'done') && <p>Respuestas nativas pausadas. El turno pendiente conserva su estado hasta confirmar su finalización.</p>}
       <dl>
         <dt>Bot o profile</dt><dd><code>{state.target.nativeRef}</code></dd>
         <dt>Conector</dt><dd>{state.target.connectorId}</dd>

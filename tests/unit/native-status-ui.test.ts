@@ -14,6 +14,15 @@ describe('native status wording', () => {
     expect(nativeStatusLabel({ ...state, binding: { ...state.binding, enabled: false } })).toBe('Respuestas nativas pausadas');
     expect(nativeStatusLabel({ ...state, group: { ...state.group, covered: false } })).toBe('Este grupo no está habilitado para este receptor');
   });
+  it.each([
+    ['start_uncertain', 'Inicio pendiente de confirmar'],
+    ['running', 'Procesamiento autorizado; resultado pendiente'],
+    ['cancel_requested', 'Cancelación pendiente de verificar'],
+  ])('preserves %s while paused in both summary and activity', (pending, label) => {
+    const active = { ...job, state: pending, providerStarted: true };
+    expect(nativeStatusLabel({ ...state, binding: { ...state.binding, enabled: false }, jobs: [active] })).toBe(label);
+    expect(nativeJobLabel(active)).toBe(label);
+  });
   it('requires a publication receipt with a message id', () => {
     expect(nativeJobLabel({ ...job, state: 'done', decision: 'reply' })).toBe('Finalizado sin recibo disponible');
     expect(nativeJobLabel({ ...job, receipt: { disposition: 'published', messageId: null } })).not.toBe('Respuesta publicada');
