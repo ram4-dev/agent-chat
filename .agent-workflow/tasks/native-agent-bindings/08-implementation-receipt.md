@@ -22,3 +22,7 @@ Servidor aislado de pruebas: http://agent-chat-native-bindings.localhost:1356, D
 Se corrigen los seis findings del harness con dos regresiones nuevas de aislamiento/cleanup y E2E fortalecidos. Checks: lint/typecheck/build PASS; 148 unit + 15 contratos + 149 integración + 23 E2E PASS, un skip legacy real por opt-in. El E2E completo se ejecutó contra http://agent-chat-native-bindings-r2.localhost:1356 con DB .local-state/native-bindings-r2-fresh.db nueva del worktree. No se migraron datos reales ni se habilitaron adaptadores.
 
 Verificación final tras controlar procesos hijos Codex: 148 unit + 15 contratos + 150 integración + 23 E2E PASS (336), un skip legacy real. Lint/typecheck/build PASS. Servidor vigente del harness: http://agent-chat-native-bindings-r3.localhost:1356, DB .local-state/native-bindings-r3-fresh.db. Los dos servidores anteriores del harness se cerraron, conservando sus bases como evidencia local; producción intacta.
+
+## Incremento S1
+
+Targets/bindings/versiones/grupos/conversaciones/deliveries en migración0008, contratos y repositorio interno; legado conservado como proyección pasiva. Evidencia en10-s1-foundation.md. Suite vigente343PASS y un skip legacy real, más lint/typecheck/build PASS. Servidor de prueba vigente http://agent-chat-native-bindings-s1.localhost:1356 con base propia nueva. No se habilitaron nuevos receptores ni se tocaron datos reales. S2 es la siguiente implementación autorizada.

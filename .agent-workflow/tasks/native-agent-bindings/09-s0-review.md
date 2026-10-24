@@ -35,13 +35,13 @@ Las suites finales se vuelven a ejecutar con este cambio y base nueva antes de c
 
 Lint, typecheck y build PASS. Suite final: 148 unit, 15 contratos, 150 integración y 23 E2E PASS, un skip legacy real (AGENT_CHAT_REAL_CODEX). La suite E2E completa duró 33.0 s, con Hermes de fuente limpia en 16.0 s, usando base nueva y http://agent-chat-native-bindings-r3.localhost:1356. Se cerraron solo los dos servidores anteriores iniciados por este trabajo; el receptor real no cambió. S0 sigue parcial; el cierre de findings se presenta a revisión independiente r2 sobre el commit de correcciones.
 
-## Ronda 2 en curso
+## Ronda 2 completada
 
 - Snapshot de correcciones: `c8b40a15235ddf44affb5bc8663eb0350dc888fe`.
 - Tarea: `node:delegated-task:command%3Amcp%3A1bd8506e-58f0-4b1b-8ef4-39ee3ce5c936%3Adelegate-task%3Anative-bindings-s0-code-review-r2-20261023`.
 - Recepción confirmada: Codex `gpt-6.1-sol`, reasoning `high`, service tier `default`, solo lectura.
 - Alcance: verificar S0-F1–6 y el cierre de procesos adicionales, sin atribuir aceptación nativa completa ni abrir otra aprobación humana de implementación.
-- Sin veredicto todavía. La implementación aislada sigue autorizada; los checks pendientes del proveedor mantienen su habilitación bloqueada, sin bloquear por sí solos S1 común.
+- Veredicto recibido: S0-F7 major (managed scope del host) y S0-F8 minor (cancelación exterior). Los demás findings quedan cerrados o acotados según el registro siguiente. La implementación aislada sigue autorizada y esos gaps no bloquean por sí solos S1 común.
 
 ## Resultado de ronda 2 y correcciones F7/F8
 

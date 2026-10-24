@@ -91,3 +91,8 @@ export {
 } from './http/groups.js';
 export { AGENT_PATHS, type OwnedAgentView, type OwnedAgentsResponse } from './http/agents.js';
 export type { ErrorResponse } from './http/errors.js';
+export {
+  NATIVE_PROVIDERS, UNKNOWN_NATIVE_CAPABILITIES,
+  type NativeProvider, type NativeContextMode, type CapabilityStatus,
+  type NativeCapabilities, type NativeRuntimeTarget, type NativeBinding,
+} from './domain/native-runtime.js';

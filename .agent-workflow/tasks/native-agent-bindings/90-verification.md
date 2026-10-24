@@ -40,3 +40,9 @@ No se modificaron servicios, configuración personal o bases de producción; sí
 ## Correcciones posteriores a revisión S0 r1
 
 S0-F1–6 corregidos por el autor, con cierre independiente pendiente: fuente Hermes limpia, descubrimiento Codex aislado, conteo de generaciones y snapshots sin carrera, cleanup de init, aserción de los cuatro tools y flag legacy AGENT_CHAT_REAL_CODEX corregido. Suite completa con DB nueva: 336 PASS, un skip legacy real por opt-in. Hubo un intento con DB reutilizada que se interrumpió; se volvió a ejecutar desde DB nueva con PASS. La evidencia inicial de aislamiento no se considera suficiente tras el hallazgo; la evidencia vigente es la obtenida desde la copia limpia. Registro y límites en 09-s0-review.md.
+
+## S1 y correcciones F7/F8
+
+Commit ac410b4 corrige managed scope Hermes y cancelación exterior Codex. Regresiones: scope sintético con canario/configuración inválida ignorados; SIGTERM al entrypoint real con CLI y escritor que ignoran SIGTERM, drenaje y eliminación del HOME antes de retornar. Tres E2E enfocados PASS.
+
+S1 agrega migración0008, contratos y repositorio interno, sin endpoints ni consumidores nuevos. Seis tests nuevos de ownership, contexto, CAS/rollback, capacidades, slots y migración legacy. Suite vigente: lint/typecheck/build PASS; 148 unit,15 contratos,156 integración y24 E2E PASS (343), un skip legacy real por opt-in. E2E completo32.0s con DB nueva .local-state/native-bindings-s1-fresh.db y Portless agent-chat-native-bindings-s1. Ver10-s1-foundation.md. La aceptación nativa de producto sigue pendiente y no se atribuye a esta suite.
