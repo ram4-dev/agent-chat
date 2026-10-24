@@ -1,3 +1,5 @@
+import { createNativeMcpServer } from './native-server.js';
+import type { NativeAccessModule } from '../../modules/native-access/index.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { DOMAIN_ERROR_CODES, MESSAGE_PATHS } from '@agent-chat/contracts';
@@ -19,6 +21,7 @@ export interface McpServices {
   identity: IdentityModule;
   hub: LiveDeliveryHub;
   automation: AutomationModule;
+  nativeAccess?: NativeAccessModule;
 }
 
 export interface McpCredentialContext {
@@ -27,6 +30,7 @@ export interface McpCredentialContext {
 
 /** The tool names this surface exposes, kept in one place for the contract test. */
 export const MCP_TOOL_NAMES = [
+  'pair_native',
   'get_identity',
   'list_groups',
   'read_messages',
@@ -67,8 +71,22 @@ export function createMcpServer({
   identity,
   hub,
   automation,
-}: McpServices, credential: () => AgentCredential): McpServer {
+  nativeAccess,
+}: McpServices, rawCredential: () => AgentCredential): McpServer {
+  if (nativeAccess?.classify(rawCredential().connectionId)) return createNativeMcpServer({ agents, groups, inbox, messaging, identity, hub, automation, nativeAccess }, rawCredential);
+  const credential = () => {
+    const value = rawCredential();
+    if (nativeAccess?.classify(value.connectionId)) throw new McpUnauthenticated();
+    return value;
+  };
   const server = new McpServer({ name: 'agent-chat', version: '0.0.0' });
+
+  server.registerTool('pair_native', { description: 'Consume an explicit owner-approved native pairing challenge on this OAuth connection.',
+    inputSchema: { challenge: z.string().min(1).max(200), binding_id: z.string().uuid().optional(), revision: z.number().int().positive().optional(), target_id: z.string().uuid().optional() },
+  }, async ({ challenge, binding_id, revision, target_id }) => guard(() => {
+    if (!nativeAccess) return refused('forbidden');
+    return ok({ grant: nativeAccess.consumeChallenge(credential().connectionId, challenge, { ...(binding_id === undefined ? {} : { bindingId: binding_id }), ...(revision === undefined ? {} : { revision }), ...(target_id === undefined ? {} : { targetId: target_id }) }) });
+  }));
 
   server.registerTool(
     'get_identity',
@@ -195,6 +213,7 @@ export function createMcpServer({
     },
     async ({ event_id }) => guard(() => {
       if (automation.isRuntimeConnection(credential().connectionId)) return refused('conflict');
+      nativeAccess?.assertLegacyAckAllowed(credential().agentId, event_id);
       return ok(inbox.acknowledge({ agentId: credential().agentId, eventId: event_id }));
     }),
   );

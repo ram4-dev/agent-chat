@@ -50,3 +50,9 @@ S1 agrega migración0008, contratos y repositorio interno, sin endpoints ni cons
 ## Cierre del hallazgo S1-F1
 
 S0-F7/F8 cerrados por la revisión independiente de 4837624. S1-F1 corregido por el autor: continuidad histórica compatible y rechazo atómico de ambigüedad; cierre independiente pendiente. Cuatro regresiones adicionales. Lint/typecheck/build PASS; 148 unit, 15 contratos, 160 integración y 24 E2E PASS (347), un skip legacy real por opt-in. E2E 31.9s sobre DB nueva native-bindings-s1-fix-fresh.db y Portless agent-chat-native-bindings-s1-fix. La corrección no altera migración0008 ni los servicios de producción.
+
+## S2: pairing y separación de autoridad
+
+S1-F1 cerrado por revisión independiente de 64b30a4, sin nuevos defectos concretos. Se implementa S2 con migración0009, módulo native-access, HTTP del dueño, clasificación persistente de conexiones OAuth y superficie MCP nativa separada. No se amplían defaults OAuth legacy. WS rechaza ambas clases nuevas y cierra sockets reclasificados; ACK/runtime legacy no consumen trabajo del binding nativo. Once tests de integración nuevos y un E2E de navegador. Detalles en 12-s2-authorization.md.
+
+Verificación final: lint/typecheck/build y diff --check PASS; 148 unit, 15 contratos, 171 integración, 25 E2E PASS (359), un skip legacy real por opt-in. E2E 35.9s, DB nueva native-bindings-s2-checked-fresh.db y Portless agent-chat-native-bindings-s2-checked. Se cerraron solamente los tres servidores temporales propios de S2. La publicación interactiva se inspeccionó en captura; la UI de consentimiento nativo y los adaptadores reales siguen pendientes de sus slices. Revisión independiente de S2 pendiente.

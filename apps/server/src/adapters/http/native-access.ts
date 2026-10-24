@@ -1,0 +1,62 @@
+import { z } from 'zod';
+import { NATIVE_AUTOMATIC_SCOPES, NATIVE_INTERACTIVE_SCOPES, NATIVE_PROVIDERS, SESSION_COOKIE_NAME } from '@agent-chat/contracts';
+import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { ApplicationServices } from '../../services.js';
+import { DomainError } from '../../modules/errors.js';
+import { readCookie } from './cookie.js';
+import { sendError } from './error-envelope.js';
+
+const selection = z.object({ agentId: z.string().uuid(), groupIds: z.array(z.string().uuid()).min(1).max(20) }).strict();
+const consentSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('automatic'), connectionId: z.string().uuid(), bindingId: z.string().uuid(),
+    revision: z.number().int().positive(), targetId: z.string().uuid(), scopes: z.array(z.enum(NATIVE_AUTOMATIC_SCOPES)).min(1) }).strict(),
+  z.object({ kind: z.literal('interactive'), connectionId: z.string().uuid(),
+    selections: z.array(selection).min(1).max(20), scopes: z.array(z.enum(NATIVE_INTERACTIVE_SCOPES)).min(1) }).strict(),
+]);
+const targetSchema = z.object({ provider: z.enum(NATIVE_PROVIDERS).exclude(['legacy_codex']), connectorId: z.string().trim().min(1).max(200),
+  nativeRef: z.string().trim().min(1).max(500), contextMode: z.enum(['native_per_group', 'shared_bot_context', 'unsupported']) }).strict();
+const bindingSchema = z.object({ agentId: z.string().uuid(), targetId: z.string().uuid(), groupIds: z.array(z.string().uuid()).min(1).max(20) }).strict();
+const restrictSchema = z.object({ scopes: z.array(z.enum([...NATIVE_AUTOMATIC_SCOPES, 'native:send'])), selections: z.array(selection).max(20) }).strict();
+
+export function registerNativeAccessRoutes(app: FastifyInstance, { auth, nativeAccess }: ApplicationServices): void {
+  const owner = (cookie?: string) => auth.resolveSession(readCookie(cookie, SESSION_COOKIE_NAME)).id;
+  app.post('/api/native/targets', (request, reply) => run(reply, () => {
+    const ownerUserId = owner(request.headers.cookie);
+    const parsed = targetSchema.safeParse(request.body);
+    if (!parsed.success) return sendError(reply, 400, 'invalid_input');
+    const id = crypto.randomUUID();
+    nativeAccess.repository.registerTarget({ ...parsed.data, id, ownerUserId });
+    return reply.code(201).send({ target: nativeAccess.repository.findTarget(ownerUserId, id) });
+  }));
+  app.post('/api/native/bindings', (request, reply) => run(reply, () => {
+    const ownerUserId = owner(request.headers.cookie);
+    const parsed = bindingSchema.safeParse(request.body);
+    if (!parsed.success) return sendError(reply, 400, 'invalid_input');
+    const input = parsed.data;
+    return reply.code(201).send({ binding: nativeAccess.createOwnedBinding(ownerUserId, input) });
+  }));
+  app.post('/api/native/pairings', (request, reply) => run(reply, () => {
+    const ownerUserId = owner(request.headers.cookie);
+    const parsed = consentSchema.safeParse(request.body);
+    if (!parsed.success) return sendError(reply, 400, 'invalid_input');
+    return reply.code(201).send(nativeAccess.createChallenge(ownerUserId, parsed.data));
+  }));
+  app.patch<{ Params: { grantId: string } }>('/api/native/grants/:grantId', (request, reply) => run(reply, () => {
+    const ownerUserId = owner(request.headers.cookie);
+    const parsed = restrictSchema.safeParse(request.body);
+    if (!parsed.success) return sendError(reply, 400, 'invalid_input');
+    return { grant: nativeAccess.restrict(ownerUserId, request.params.grantId, parsed.data.scopes, parsed.data.selections) };
+  }));
+  app.delete<{ Params: { grantId: string } }>('/api/native/grants/:grantId', (request, reply) => run(reply, () => {
+    nativeAccess.revoke(owner(request.headers.cookie), request.params.grantId);
+    return { status: 'revoked' };
+  }));
+}
+async function run<T>(reply: FastifyReply, operation: () => T): Promise<T | FastifyReply> {
+  try { return operation(); }
+  catch (error) {
+    if (error instanceof DomainError) return sendError(reply, error.statusCode, error.code);
+    if (error instanceof Error && 'code' in error && typeof error.code === 'string' && error.code.startsWith('SQLITE_CONSTRAINT')) return sendError(reply, 409, 'conflict');
+    throw error;
+  }
+}

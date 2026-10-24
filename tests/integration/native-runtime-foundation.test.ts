@@ -10,7 +10,7 @@ afterEach(() => { for (const db of databases.splice(0)) db.close(); });
 function setup(beforeNative = false) {
   const db = createDatabase({ path: ':memory:', busyTimeoutMs: 1000 }); databases.push(db);
   const migrations = loadMigrations(resolve('db/migrations'));
-  applyMigrations(db.sqlite, beforeNative ? migrations.filter(m => !m.id.startsWith('0008')) : migrations);
+  applyMigrations(db.sqlite, beforeNative ? migrations.filter(m => m.id < '0008') : migrations);
   const owner = randomUUID(); const otherOwner = randomUUID();
   const agent = randomUUID(); const second = randomUUID(); const otherAgent = randomUUID();
   const a = randomUUID(); const b = randomUUID();

@@ -1,3 +1,4 @@
+import { registerNativeAccessRoutes } from './native-access.js';
 import type { FastifyInstance } from 'fastify';
 import type { RuntimeConfig } from '../../config/index.js';
 import type { DatabaseHandle } from '../../persistence/index.js';
@@ -34,6 +35,7 @@ export function registerHttpAdapter(
     secureCookies: config.nodeEnv === 'production',
   });
   registerAgentRoutes(app, services);
+  registerNativeAccessRoutes(app, services);
   registerGroupRoutes(app, { auth: services.auth, groups: services.groups, hub: services.hub, automation: services.automation });
   registerMessageRoutes(app, {
     auth: services.auth,

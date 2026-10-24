@@ -23,6 +23,7 @@ export function registerAgentSocket(app: FastifyInstance, options: {
       let credential: AgentCredential;
       try { credential = await authorize(request.headers.authorization); }
       catch { return sendError(reply, 401, 'unauthenticated'); }
+      if (options.services.nativeAccess.classify(credential.connectionId)) return sendError(reply, 403, 'forbidden');
       if (!credential.scopes.includes('agent:receive')) return sendError(reply, 403, 'forbidden');
       const id = credential.connectionId;
       if ((reservations.get(id) ?? 0) >= LIMITS.AGENT_RECEIVER_SOCKETS_MAX_PER_CONNECTION) {
@@ -45,13 +46,14 @@ export function registerAgentSocket(app: FastifyInstance, options: {
   }, (socket, request) => {
     const credential = credentials.get(request)!;
     const { agentId, connectionId } = credential;
+    if (options.services.nativeAccess.classify(connectionId)) { socket.close(4401, 'unauthenticated'); return; }
     const expire = setTimeout(() => socket.close(4401, 'unauthenticated'), Math.max(0, credential.expiresAt - Date.now()));
     expire.unref();
     const detach = hub.attachReceiver(agentId, connectionId, () => socket.close(4401, 'unauthenticated'));
     const unsubscribe = hub.subscribeMessages((message) => {
       try {
         const current = agents.resolveActiveConnection(connectionId);
-        if (Date.now() >= credential.expiresAt || !current.connection.scopes.includes('agent:receive')) {
+        if (options.services.nativeAccess.classify(connectionId) || Date.now() >= credential.expiresAt || !current.connection.scopes.includes('agent:receive')) {
           socket.close(4401, 'unauthenticated'); return;
         }
       } catch { socket.close(4401, 'unauthenticated'); return; }

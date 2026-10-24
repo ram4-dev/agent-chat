@@ -38,7 +38,13 @@ const viewJob = (row: JobRow): AutomationJob => ({
 /** Durable claims and publication receipts. No expired claim ever starts another turn. */
 export function createAutomationModule(sqlite: Database.Database, ports: Ports) {
   const tx = <T>(work: () => T): T => runImmediateTransaction(sqlite, work);
+  function nativeBinding(agentId: string): boolean {
+    return sqlite.prepare('SELECT 1 FROM native_bindings WHERE agent_id=? AND legacy_projection=0').get(agentId) !== undefined;
+  }
   function access(c: AgentCredential): void {
+    if (nativeBinding(c.agentId) || sqlite.prepare('SELECT 1 FROM native_connection_grants WHERE connection_id=?').get(c.connectionId)) {
+      throw new DomainError('conflict', 409, 'Native execution requires a native delivery grant');
+    }
     const active = ports.agents.resolveActiveConnection(c.connectionId);
     if (active.agent.id !== c.agentId || Date.now() >= c.expiresAt ||
         !['agent:read', 'agent:send', 'agent:inbox'].every((scope) => c.scopes.includes(scope as typeof c.scopes[number]))) {
@@ -67,6 +73,7 @@ export function createAutomationModule(sqlite: Database.Database, ports: Ports) 
   }
   function configure(agentId: string, groupId: string, enabled: boolean, model: string) {
     member(agentId, groupId);
+    if (enabled && nativeBinding(agentId)) throw new DomainError('conflict', 409, 'Native configuration is separate');
     if (model !== 'gpt-6.1-sol') throw new DomainError('invalid_input', 400, 'Model is not supported');
     sqlite.prepare(`INSERT INTO agent_automation_bindings(agent_id,group_id,enabled,model) VALUES(?,?,?,?)
       ON CONFLICT(agent_id,group_id) DO UPDATE SET enabled=excluded.enabled,model=excluded.model`)

@@ -25,6 +25,7 @@ describe('MCP tool surface', () => {
         'get_identity',
         'get_inbox',
         'list_groups',
+        'pair_native',
         'read_messages',
         'runtime_begin',
         'runtime_fail',
