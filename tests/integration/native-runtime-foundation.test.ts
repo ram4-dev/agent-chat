@@ -95,6 +95,43 @@ describe('native runtime foundation', () => {
     s.db.sqlite.prepare("UPDATE native_deliveries SET state='done' WHERE event_id=?").run(eventOne);
     insert(eventTwo, s.second, s.b, two.id, 'claim-two');
   });
+  it('restores the last compatible conversation when a group is removed and later reintroduced', () => {
+    const s = setup(); const target = s.target(); const binding = s.bind(target, [s.a, s.b]);
+    s.db.sqlite.prepare('UPDATE native_conversations SET generation=4,native_ref=? WHERE binding_id=? AND group_id=?')
+      .run('group-a-thread', binding.id, s.a);
+    s.repository.replaceVersion({ ownerUserId: s.owner, bindingId: binding.id, expectedRevision: 1, targetId: target, groupIds: [s.b] });
+    s.repository.replaceVersion({ ownerUserId: s.owner, bindingId: binding.id, expectedRevision: 2, targetId: target, groupIds: [s.a, s.b] });
+    expect(s.db.sqlite.prepare('SELECT generation,native_ref FROM native_conversations WHERE binding_id=? AND revision=3 AND group_id=?')
+      .get(binding.id, s.a)).toEqual({ generation: 4, native_ref: 'group-a-thread' });
+  });
+  it('never copies another target conversation when switching away and back', () => {
+    const s = setup(); const first = s.target(); const second = s.target(); const binding = s.bind(first);
+    s.db.sqlite.prepare('UPDATE native_conversations SET generation=4,native_ref=? WHERE binding_id=?').run('first-target-thread', binding.id);
+    s.repository.replaceVersion({ ownerUserId: s.owner, bindingId: binding.id, expectedRevision: 1, targetId: second, groupIds: [s.a] });
+    expect(s.db.sqlite.prepare('SELECT generation,native_ref FROM native_conversations WHERE binding_id=? AND revision=2')
+      .get(binding.id)).toEqual({ generation: 1, native_ref: null });
+    s.db.sqlite.prepare('UPDATE native_conversations SET native_ref=? WHERE binding_id=? AND revision=2').run('second-target-thread', binding.id);
+    s.repository.replaceVersion({ ownerUserId: s.owner, bindingId: binding.id, expectedRevision: 2, targetId: first, groupIds: [s.a] });
+    expect(s.db.sqlite.prepare('SELECT generation,native_ref FROM native_conversations WHERE binding_id=? AND revision=3')
+      .get(binding.id)).toEqual({ generation: 4, native_ref: 'first-target-thread' });
+  });
+  it('rejects ambiguous historical references atomically rather than choosing a new context', () => {
+    const s = setup(); const target = s.target(); const binding = s.bind(target);
+    s.db.sqlite.prepare('UPDATE native_conversations SET native_ref=? WHERE binding_id=?').run('original', binding.id);
+    s.repository.replaceVersion({ ownerUserId: s.owner, bindingId: binding.id, expectedRevision: 1, targetId: target, groupIds: [s.a] });
+    s.db.sqlite.prepare('UPDATE native_conversations SET native_ref=? WHERE binding_id=? AND revision=2').run('conflicting', binding.id);
+    expect(() => s.repository.replaceVersion({ ownerUserId: s.owner, bindingId: binding.id, expectedRevision: 2, targetId: target, groupIds: [s.a] })).toThrow('ambiguous');
+    expect(s.repository.findBinding(s.owner, binding.id)?.revision).toBe(2);
+    expect(s.db.sqlite.prepare('SELECT count(*) AS n FROM native_binding_versions WHERE binding_id=?').get(binding.id)).toEqual({ n: 2 });
+  });
+  it('keeps an explicit new conversation generation instead of resurrecting the previous one', () => {
+    const s = setup(); const target = s.target(); const binding = s.bind(target);
+    s.db.sqlite.prepare('UPDATE native_conversations SET native_ref=? WHERE binding_id=?').run('old-conversation', binding.id);
+    s.db.sqlite.prepare('INSERT INTO native_conversations(binding_id,revision,group_id,generation) VALUES(?,1,?,2)').run(binding.id, s.a);
+    s.repository.replaceVersion({ ownerUserId: s.owner, bindingId: binding.id, expectedRevision: 1, targetId: target, groupIds: [s.a] });
+    expect(s.db.sqlite.prepare('SELECT generation,native_ref FROM native_conversations WHERE binding_id=? AND revision=2').get(binding.id))
+      .toEqual({ generation: 2, native_ref: null });
+  });
   it('migrates the legacy binding and conversation passively without changing pending jobs or ACKs', () => {
     const s = setup(true); const eventId = s.event();
     s.db.sqlite.prepare("INSERT INTO oauth_clients(client_id,client_name,redirect_uris) VALUES('client','Fixture','[]')").run();

@@ -33,3 +33,7 @@ Checks: lint, typecheck y build PASS; 148 unit, 15 contratos, 156 integración y
 S0-F7/F8 tienen regresiones enfocadas y cierre del autor; quedan para verificación independiente. S0 continúa parcial respecto de aprobaciones nativas, dos profiles, visor y retorno/red del bot Grok. Esas capacidades no se convierten en PASS por completar S1.
 
 Próxima acción autorizada: revisión del incremento y continuar S2, con autoridad interactiva/automática explícita y denegación de nuevos grants en WebSocket. Sin push, PR ni cambios al receptor real.
+
+## Corrección S1-F1
+
+La continuidad se recupera de todas las revisiones compatibles del mismo binding, target y grupo, incluso si el grupo estuvo ausente en revisiones intermedias. Conflictos de referencia o regresión de generación rechazan el cambio y revierten la transacción. Cuatro regresiones adicionales cubren reincorporación, separación entre targets, ambigüedad y nueva generación.

@@ -71,14 +71,21 @@ export function createNativeRuntimeRepository(sqlite: Database.Database) {
         const revision = binding.revision + 1;
         sqlite.prepare('INSERT INTO native_binding_versions(binding_id,revision,target_id,owner_user_id) VALUES(?,?,?,?)').run(binding.id, revision, input.targetId, input.ownerUserId);
         groups(binding.id, revision, input.groupIds);
-        if (binding.targetId === input.targetId) {
-          for (const groupId of input.groupIds) {
-            const previous = sqlite.prepare(`SELECT generation,native_ref FROM native_conversations
-              WHERE binding_id=? AND revision=? AND group_id=? ORDER BY generation DESC LIMIT 1`)
-              .get(binding.id, binding.revision, groupId) as { generation: number; native_ref: string | null } | undefined;
-            if (previous) sqlite.prepare(`UPDATE native_conversations SET generation=?,native_ref=?
-              WHERE binding_id=? AND revision=? AND group_id=?`).run(previous.generation, previous.native_ref, binding.id, revision, groupId);
+        for (const groupId of input.groupIds) {
+          const history = sqlite.prepare(`SELECT c.generation,c.native_ref FROM native_conversations c
+            JOIN native_binding_versions v ON v.binding_id=c.binding_id AND v.revision=c.revision
+            WHERE c.binding_id=? AND c.group_id=? AND v.target_id=? AND c.revision<=?
+            ORDER BY c.revision DESC,c.generation DESC`)
+            .all(binding.id, groupId, input.targetId, binding.revision) as { generation: number; native_ref: string | null }[];
+          const latest = history[0];
+          if (!latest) continue;
+          const references = new Set(history.filter(row => row.generation === latest.generation && row.native_ref !== null).map(row => row.native_ref));
+          if (history.some(row => row.generation > latest.generation) || references.size > 1) {
+            throw new Error('Native conversation history is ambiguous');
           }
+          const reference = references.values().next().value ?? null;
+          sqlite.prepare(`UPDATE native_conversations SET generation=?,native_ref=?
+            WHERE binding_id=? AND revision=? AND group_id=?`).run(latest.generation, reference, binding.id, revision, groupId);
         }
         sqlite.prepare('UPDATE native_bindings SET current_revision=?,enabled=0 WHERE id=?').run(revision, binding.id);
         return findBinding(input.ownerUserId, binding.id)!;

@@ -46,3 +46,7 @@ S0-F1–6 corregidos por el autor, con cierre independiente pendiente: fuente He
 Commit ac410b4 corrige managed scope Hermes y cancelación exterior Codex. Regresiones: scope sintético con canario/configuración inválida ignorados; SIGTERM al entrypoint real con CLI y escritor que ignoran SIGTERM, drenaje y eliminación del HOME antes de retornar. Tres E2E enfocados PASS.
 
 S1 agrega migración0008, contratos y repositorio interno, sin endpoints ni consumidores nuevos. Seis tests nuevos de ownership, contexto, CAS/rollback, capacidades, slots y migración legacy. Suite vigente: lint/typecheck/build PASS; 148 unit,15 contratos,156 integración y24 E2E PASS (343), un skip legacy real por opt-in. E2E completo32.0s con DB nueva .local-state/native-bindings-s1-fresh.db y Portless agent-chat-native-bindings-s1. Ver10-s1-foundation.md. La aceptación nativa de producto sigue pendiente y no se atribuye a esta suite.
+
+## Cierre del hallazgo S1-F1
+
+S0-F7/F8 cerrados por la revisión independiente de 4837624. S1-F1 corregido por el autor: continuidad histórica compatible y rechazo atómico de ambigüedad; cierre independiente pendiente. Cuatro regresiones adicionales. Lint/typecheck/build PASS; 148 unit, 15 contratos, 160 integración y 24 E2E PASS (347), un skip legacy real por opt-in. E2E 31.9s sobre DB nueva native-bindings-s1-fix-fresh.db y Portless agent-chat-native-bindings-s1-fix. La corrección no altera migración0008 ni los servicios de producción.
