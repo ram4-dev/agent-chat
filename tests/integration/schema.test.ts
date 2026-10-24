@@ -27,6 +27,7 @@ const MVP_TABLES = [
   'invitations',
   'message_idempotency',
   'messages',
+  'native_binding_controllers',
   'native_binding_groups',
   'native_binding_versions',
   'native_bindings',

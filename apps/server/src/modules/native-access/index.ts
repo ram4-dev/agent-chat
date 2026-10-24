@@ -82,6 +82,10 @@ export function createNativeAccessModule(sqlite: Database.Database, deps: {
   }
   return {
     repository, classify, resolve, requireAccess,
+    setProofKey(owner: string, targetId: string, key: string) {
+      if (!repository.findTarget(owner, targetId)) throw deny();
+      sqlite.prepare('UPDATE native_runtime_targets SET proof_public_key=? WHERE id=? AND proof_public_key IS NULL').run(key, targetId);
+    },
     createOwnedBinding(owner: string, input: { agentId: string; targetId: string; groupIds: string[] }) {
       return runImmediateTransaction(sqlite, () => {
         validateSelections(owner, [{ agentId: input.agentId, groupIds: input.groupIds }]);

@@ -1,3 +1,4 @@
+import { createNativeDeliveryModule, type NativeDeliveryModule } from './modules/native-delivery/index.js';
 import { createNativeAccessModule, type NativeAccessModule } from './modules/native-access/index.js';
 import { createAutomationModule, type AutomationModule } from './modules/automation/index.js';
 import { runImmediateTransaction } from './persistence/client.js';
@@ -38,6 +39,7 @@ export interface ApplicationServices {
   hub: LiveDeliveryHub;
   automation: AutomationModule;
   nativeAccess: NativeAccessModule;
+  nativeDelivery: NativeDeliveryModule;
 }
 
 /**
@@ -112,7 +114,8 @@ export function createServices(database: DatabaseHandle): ApplicationServices {
 
   const automation = createAutomationModule(database.sqlite, { agents, groups, inbox, messaging, hub });
   const nativeAccess = createNativeAccessModule(database.sqlite, { agents, groups, messaging, hub, closeReceivers: (connectionId) => hub.closeReceivers({ connectionId }) });
-  return { identity, auth, agents, groups, inbox, messaging, hub, automation, nativeAccess };
+  const nativeDelivery = createNativeDeliveryModule(database.sqlite, nativeAccess, { agents, groups, messaging, inbox, hub });
+  return { identity, auth, agents, groups, inbox, messaging, hub, automation, nativeAccess, nativeDelivery };
 }
 
 const SYSTEM_CLOCK = { now: (): Date => new Date() };

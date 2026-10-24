@@ -1,3 +1,4 @@
+import type { MessageView } from '../http/messages.js';
 export const NATIVE_PROVIDERS = ['legacy_codex', 'codex', 'hermes', 'grok_bot'] as const;
 export type NativeProvider = typeof NATIVE_PROVIDERS[number];
 export type NativeContextMode = 'native_per_group' | 'shared_bot_context' | 'unsupported';
@@ -34,4 +35,19 @@ export interface NativeGrant {
   id: string; connectionId: string; ownerUserId: string; kind: 'automatic' | 'interactive';
   bindingId: string | null; revision: number | null; targetId: string | null;
   scopes: NativeScope[]; selections: NativeSelection[];
+}
+
+export interface NativeResult { decision: 'reply' | 'no_reply'; text: string; conversationRef: string }
+export interface NativeTerminalData {
+  eventId: string; targetId: string; startKey: string; runRef: string;
+  terminal: 'completed' | 'cancelled'; resultHash: string | null;
+}
+export interface NativeTerminalProof { data: NativeTerminalData; signature: string }
+export const nativeResultPayload = (r: NativeResult): string => JSON.stringify([r.decision, r.text, r.conversationRef]);
+export const nativeProofPayload = (d: NativeTerminalData): string => JSON.stringify([1, d.eventId, d.targetId, d.startKey, d.runRef, d.terminal, d.resultHash]);
+export interface NativeTicket { eventId: string; claim: string; epoch: number; controllerId: string }
+export interface NativeDeliveryView {
+  ticket: NativeTicket; bindingId: string; targetId: string; groupId: string; agentId: string;
+  state: string; started: boolean; cancelStarted: boolean; startKey: string; runRef: string | null; conversationRef: string | null;
+  incoming: MessageView | null; result: NativeResult | null; receipt: { disposition: 'published' | 'no_reply' | 'suppressed'; messageId: string | null } | null;
 }

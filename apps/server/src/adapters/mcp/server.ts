@@ -1,3 +1,4 @@
+import type { NativeDeliveryModule } from '../../modules/native-delivery/index.js';
 import { createNativeMcpServer } from './native-server.js';
 import type { NativeAccessModule } from '../../modules/native-access/index.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -22,6 +23,7 @@ export interface McpServices {
   hub: LiveDeliveryHub;
   automation: AutomationModule;
   nativeAccess?: NativeAccessModule;
+  nativeDelivery?: NativeDeliveryModule;
 }
 
 export interface McpCredentialContext {
@@ -72,8 +74,9 @@ export function createMcpServer({
   hub,
   automation,
   nativeAccess,
+  nativeDelivery,
 }: McpServices, rawCredential: () => AgentCredential): McpServer {
-  if (nativeAccess?.classify(rawCredential().connectionId)) return createNativeMcpServer({ agents, groups, inbox, messaging, identity, hub, automation, nativeAccess }, rawCredential);
+  if (nativeAccess?.classify(rawCredential().connectionId)) return createNativeMcpServer({ agents, groups, inbox, messaging, identity, hub, automation, nativeAccess, ...(nativeDelivery ? { nativeDelivery } : {}) }, rawCredential);
   const credential = () => {
     const value = rawCredential();
     if (nativeAccess?.classify(value.connectionId)) throw new McpUnauthenticated();

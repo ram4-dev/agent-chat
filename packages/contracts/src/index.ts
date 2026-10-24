@@ -92,6 +92,7 @@ export {
 export { AGENT_PATHS, type OwnedAgentView, type OwnedAgentsResponse } from './http/agents.js';
 export type { ErrorResponse } from './http/errors.js';
 export {
+  nativeResultPayload, nativeProofPayload, type NativeResult, type NativeTerminalData, type NativeTerminalProof, type NativeTicket, type NativeDeliveryView,
   NATIVE_PROVIDERS, UNKNOWN_NATIVE_CAPABILITIES, NATIVE_READ_SCOPE, NATIVE_AUTOMATIC_SCOPES, NATIVE_INTERACTIVE_SCOPES,
   type NativeScope, type NativeSelection, type NativeConsent, type NativeGrant,
   type NativeProvider, type NativeContextMode, type CapabilityStatus,

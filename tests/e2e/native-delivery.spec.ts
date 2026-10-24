@@ -1,0 +1,115 @@
+import { stripVTControlCharacters } from 'node:util';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { createInterface } from 'node:readline';
+import { generateKeyPairSync, randomUUID } from 'node:crypto';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { existsSync } from 'node:fs';
+import { expect, test } from '@playwright/test';
+import { createDatabase } from '../../apps/server/src/persistence/client';
+import { authorizeAgent, mcpClient, payload } from './helpers/agent';
+import { signUp, createGroup, addAgent, send } from './helpers/ui';
+
+const ownership = new WeakMap<ChildProcess, { closed: boolean; childPid: () => number | undefined }>();
+function child(command: string, args: string[], env: NodeJS.ProcessEnv) {
+  const childEnv = { ...env };
+  // Invoking the installed CLI, not a package download through pnpm exec.
+  if (command === 'portless') delete childEnv['npm_command'];
+  const process = spawn(command, args, { env: childEnv, detached: true, stdio: ['ignore','pipe','pipe'] });
+  let output = '';
+  process.stdout!.on('data', chunk => { output += String(chunk); });
+  process.stderr!.on('data', chunk => { output += String(chunk); });
+  const state = { closed: false, childPid: () => { const value = /"fixturePid":(\d+)/.exec(stripVTControlCharacters(output))?.[1]; return value ? Number(value) : undefined; } };
+  ownership.set(process, state); process.once('close', () => { state.closed = true; });
+  return { process, output: () => stripVTControlCharacters(output) };
+}
+async function stop(process: ChildProcess) {
+  const state = ownership.get(process)!;
+  if (state.closed) return;
+  const childPid = state.childPid();
+  const signal = (pid: number | undefined, kind: NodeJS.Signals) => { if (pid) { try { globalThis.process.kill(pid, kind); } catch { /* Already closed. */ } } };
+  signal(childPid, 'SIGTERM');
+  process.kill('SIGTERM');
+  const timer = setTimeout(() => { signal(childPid ? -childPid : undefined, 'SIGKILL'); signal(process.pid ? -process.pid : undefined, 'SIGKILL'); }, 3000);
+  await new Promise<void>(resolve => process.once('close', () => resolve())); clearTimeout(timer);
+}
+
+test('native supervisor recovers after dispatch, a lost publication response and a reconnect window without regenerating', async ({ page }) => {
+  test.setTimeout(90_000);
+  const root = await mkdtemp(join(tmpdir(), 'native-delivery-e2e-'));
+  const children: ChildProcess[] = [];
+  let client: Awaited<ReturnType<typeof mcpClient>> | undefined;
+  const serverDb = join(root, 'server.db'); const providerDb = join(root, 'provider.db');
+  try {
+    const oidcKey = generateKeyPairSync('ed25519').privateKey.export({ format: 'jwk' });
+    await writeFile(join(root, 'oidc-jwks.json'), JSON.stringify({ keys: [{ ...oidcKey, alg: 'EdDSA', use: 'sig', kid: 'fixture' }] }), { mode: 0o600 });
+    const server = child('portless', [`native-delivery-${randomUUID().slice(0,8)}`, process.execPath, 'tests/fixtures/native-delivery/server.mjs'], { ...process.env, DATABASE_PATH: serverDb, OIDC_JWKS_PATH: join(root, 'oidc-jwks.json'), LOG_LEVEL: 'warn' }); children.push(server.process);
+    await expect.poll(() => server.output()).toMatch(/PORTLESS_URL=https?:\/\//);
+    const origin = /PORTLESS_URL=(https?:\/\/\S+)/.exec(server.output())![1]!;
+    await expect.poll(async () => { try { return (await page.request.get(`${origin}/liveness`)).ok(); } catch { return false; } }).toBe(true);
+    await page.goto(origin); await signUp(page, 'native-supervisor@example.com', 'Native E2E');
+    const identity = await authorizeAgent(page, origin);
+    await page.goto(origin); const groupId = await createGroup(page, 'Supervisor nativo'); await addAgent(page, 'Scout');
+    const keys = generateKeyPairSync('ed25519'); const keyFile = join(root, 'fixture-key');
+    await writeFile(keyFile, keys.privateKey.export({ format: 'pem', type: 'pkcs8' }), { mode: 0o600 });
+    const post = async (path: string, data: unknown) => { const response = await page.request.post(`${origin}${path}`, { headers: { origin }, data }); expect(response.status()).toBe(201); return response.json(); };
+    const { target } = await post('/api/native/targets', { provider: 'codex', connectorId: 'fixture-only', nativeRef: 'synthetic-profile', contextMode: 'native_per_group', proofPublicKey: keys.publicKey.export({ format: 'pem', type: 'spki' }) });
+    const { binding } = await post('/api/native/bindings', { agentId: identity.agentId, targetId: target.id, groupIds: [groupId] });
+    const challenge = await post('/api/native/pairings', { kind: 'automatic', connectionId: identity.connectionId, bindingId: binding.id, revision: 1, targetId: target.id, scopes: ['native:read','native:claim','native:start','native:complete'] });
+    client = await mcpClient(origin, identity.token);
+    payload(await client.callTool({ name: 'pair_native', arguments: { challenge: challenge.challenge, binding_id: binding.id, revision: 1, target_id: target.id } }));
+    // Fixture verification applies only to this test's temporary database and signer.
+    const db = createDatabase({ path: serverDb, busyTimeoutMs: 1000 });
+    try { db.sqlite.prepare('UPDATE native_runtime_targets SET capabilities_json=? WHERE id=?').run(JSON.stringify({ groupIsolation: 'verified', durableResults: 'verified', approvals: 'verified', toolCatalog: 'verified', nativeVisibility: 'verified' }), target.id); } finally { db.close(); }
+    const configure = async (enabled: boolean) => { const response = await page.request.patch(`${origin}/api/native/bindings/${binding.id}`, { headers: { origin }, data: { revision: 1, enabled } }); expect(response.ok()).toBe(true); };
+    await configure(true);
+    const config = join(root, 'adapter.json');
+    await writeFile(config, JSON.stringify({ targetId: target.id, keyFile, providerDb, crashMarker: join(root, 'dispatch-crashed') }), { mode: 0o600 });
+    const lost = join(root, 'publication-response-lost');
+    const proxy = child('portless', [`native-loss-${randomUUID().slice(0,8)}`, process.execPath, 'tests/fixtures/native-delivery/proxy.mjs'], { ...process.env, NATIVE_UPSTREAM: origin, NATIVE_LOST_RESPONSE: lost }); children.push(proxy.process);
+    await expect.poll(() => /PORTLESS_URL=(https?:\/\/\S+)/.exec(proxy.output())?.[1]).toBeTruthy();
+    const proxyOrigin = /PORTLESS_URL=(https?:\/\/\S+)/.exec(proxy.output())![1]!;
+    const ready: number[] = [];
+    const launch = (state: string) => {
+      const supervisor = child(process.execPath, ['apps/bridge/dist/supervisor.js', '--native-adapter', resolve('tests/fixtures/native-delivery/adapter.mjs'), '--state', join(root, state)], { ...process.env, AGENT_CHAT_MCP_URL: proxyOrigin, AGENT_CHAT_MCP_TOKEN: identity.token, NATIVE_FIXTURE_CONFIG: config });
+      children.push(supervisor.process);
+      createInterface({ input: supervisor.process.stdout! }).on('line', line => { try { const event = JSON.parse(line); if (event.type === 'native.ready') ready.push(event.pid); } catch { /* Only structured readiness. */ } });
+      return supervisor;
+    };
+    const receiver = launch('controller-A');
+    await expect.poll(() => ready.length).toBe(1);
+    await send(page, 'Uno');
+    await expect(page.getByText('Nativo: Uno', { exact: true })).toBeVisible({ timeout: 15000 });
+    await expect.poll(() => existsSync(lost)).toBe(true);
+    await expect.poll(() => ready.length).toBeGreaterThanOrEqual(3);
+    const providerRows = () => { const db = createDatabase({ path: providerDb, busyTimeoutMs: 1000 }); try { return db.sqlite.prepare('SELECT * FROM runs').all() as { start_key: string; conversation_ref: string }[]; } finally { db.close(); } };
+    expect(providerRows()).toHaveLength(1);
+    const snapshot = () => { const db = createDatabase({ path: serverDb, busyTimeoutMs: 1000 }); try { return db.sqlite.prepare('SELECT event_id,state,message_id FROM native_deliveries ORDER BY created_at').all() as { event_id: string; state: string; message_id: string }[]; } finally { db.close(); } };
+    await expect.poll(() => snapshot()[0]?.state).toBe('done');
+    const original = snapshot()[0]!;
+    expect(payload<{ receipt: { messageId: string } }>(await client.callTool({ name: 'native_delivery', arguments: { eventId: original.event_id } })).receipt.messageId).toBe(original.message_id);
+    await page.screenshot({ path: '.local-state/native-delivery-01-recovered.png', fullPage: true });
+    // Kill an idle receiver while its HTTP long poll is pending; send in the reconnect window.
+    const before = ready.length; process.kill(ready.at(-1)!, 'SIGKILL');
+    await send(page, 'Dos');
+    await expect(page.getByText('Nativo: Dos', { exact: true })).toBeVisible({ timeout: 15000 });
+    await expect.poll(() => ready.length).toBeGreaterThan(before);
+    expect(providerRows()).toHaveLength(2);
+    expect(new Set(providerRows().map(row => row.conversation_ref)).size).toBe(1);
+    await stop(receiver.process);
+    launch('controller-B-empty-local-store');
+    await expect.poll(() => ready.length).toBeGreaterThan(before + 1);
+    expect(providerRows()).toHaveLength(2);
+    await send(page, 'SILENCIO');
+    await expect.poll(() => snapshot().filter(row => row.state === 'done').length).toBe(3);
+    expect(providerRows()).toHaveLength(3);
+    await configure(false); await send(page, 'PAUSADO');
+    expect(providerRows()).toHaveLength(3);
+    await configure(true);
+    await expect(page.getByText('Nativo: PAUSADO', { exact: true })).toBeVisible({ timeout: 15000 });
+    expect(providerRows()).toHaveLength(4);
+    expect(new Set(providerRows().map(row => row.conversation_ref)).size).toBe(1);
+    await page.screenshot({ path: '.local-state/native-delivery-02-new-controller.png', fullPage: true });
+  } finally { await page.close(); await client?.close(); for (const process of children.reverse()) await stop(process); await rm(root, { recursive: true, force: true }); }
+});

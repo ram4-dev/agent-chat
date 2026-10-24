@@ -1,3 +1,5 @@
+import { createPublicKey } from 'node:crypto';
+import { nativeProofSchema } from '../../modules/native-delivery/schema.js';
 import { z } from 'zod';
 import { NATIVE_AUTOMATIC_SCOPES, NATIVE_INTERACTIVE_SCOPES, NATIVE_PROVIDERS, SESSION_COOKIE_NAME } from '@agent-chat/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
@@ -14,18 +16,36 @@ const consentSchema = z.discriminatedUnion('kind', [
     selections: z.array(selection).min(1).max(20), scopes: z.array(z.enum(NATIVE_INTERACTIVE_SCOPES)).min(1) }).strict(),
 ]);
 const targetSchema = z.object({ provider: z.enum(NATIVE_PROVIDERS).exclude(['legacy_codex']), connectorId: z.string().trim().min(1).max(200),
-  nativeRef: z.string().trim().min(1).max(500), contextMode: z.enum(['native_per_group', 'shared_bot_context', 'unsupported']) }).strict();
+  nativeRef: z.string().trim().min(1).max(500), contextMode: z.enum(['native_per_group', 'shared_bot_context', 'unsupported']), proofPublicKey: z.string().max(1000).optional() }).strict();
 const bindingSchema = z.object({ agentId: z.string().uuid(), targetId: z.string().uuid(), groupIds: z.array(z.string().uuid()).min(1).max(20) }).strict();
 const restrictSchema = z.object({ scopes: z.array(z.enum([...NATIVE_AUTOMATIC_SCOPES, 'native:send'])), selections: z.array(selection).max(20) }).strict();
 
-export function registerNativeAccessRoutes(app: FastifyInstance, { auth, nativeAccess }: ApplicationServices): void {
+export function registerNativeAccessRoutes(app: FastifyInstance, { auth, nativeAccess, nativeDelivery }: ApplicationServices): void {
   const owner = (cookie?: string) => auth.resolveSession(readCookie(cookie, SESSION_COOKIE_NAME)).id;
+  app.patch<{ Params: { bindingId: string } }>('/api/native/bindings/:bindingId', (request, reply) => run(reply, () => {
+    const parsed = z.object({ enabled: z.boolean(), revision: z.number().int().positive() }).strict().safeParse(request.body);
+    if (!parsed.success) return sendError(reply, 400, 'invalid_input');
+    return nativeDelivery.configureOwner(owner(request.headers.cookie), request.params.bindingId, parsed.data.revision, parsed.data.enabled);
+  }));
+  app.post<{ Params: { eventId: string } }>('/api/native/deliveries/:eventId/cancel', (request, reply) => run(reply, () => nativeDelivery.cancelOwner(owner(request.headers.cookie), request.params.eventId)));
+  app.post<{ Params: { eventId: string } }>('/api/native/deliveries/:eventId/suppress', (request, reply) => run(reply, () => nativeDelivery.suppressOwner(owner(request.headers.cookie), request.params.eventId)));
+  // Provider-signed evidence is the sole authority here: no read, publish or generation operation.
+  app.post('/native/reconcile', (request, reply) => run(reply, () => {
+    const parsed = nativeProofSchema.safeParse(request.body);
+    if (!parsed.success) return sendError(reply, 400, 'invalid_input');
+    return nativeDelivery.reconcile(parsed.data);
+  }));
   app.post('/api/native/targets', (request, reply) => run(reply, () => {
     const ownerUserId = owner(request.headers.cookie);
     const parsed = targetSchema.safeParse(request.body);
     if (!parsed.success) return sendError(reply, 400, 'invalid_input');
+    if (parsed.data.proofPublicKey) {
+      try { if (createPublicKey(parsed.data.proofPublicKey).asymmetricKeyType !== 'ed25519') return sendError(reply, 400, 'invalid_input'); }
+      catch { return sendError(reply, 400, 'invalid_input'); }
+    }
     const id = crypto.randomUUID();
     nativeAccess.repository.registerTarget({ ...parsed.data, id, ownerUserId });
+    if (parsed.data.proofPublicKey) nativeAccess.setProofKey(ownerUserId, id, parsed.data.proofPublicKey);
     return reply.code(201).send({ target: nativeAccess.repository.findTarget(ownerUserId, id) });
   }));
   app.post('/api/native/bindings', (request, reply) => run(reply, () => {

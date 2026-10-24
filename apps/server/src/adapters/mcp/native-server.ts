@@ -1,3 +1,4 @@
+import { nativeTicketSchema, nativeResultSchema, nativeProofSchema } from '../../modules/native-delivery/schema.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { McpServices } from './server.js';
@@ -38,5 +39,29 @@ export function createNativeMcpServer(services: McpServices, credential: () => A
   }, async ({ as_agent_id, group_id, text, idempotency_key }) => guard(() => {
     return access.publishInteractive(current(), { agentId: as_agent_id, groupId: group_id, text, idempotencyKey: idempotency_key });
   }));
+  if (services.nativeDelivery) {
+    const delivery = services.nativeDelivery;
+    server.registerTool('native_open', { description: 'Register a controller epoch without releasing uncertain execution.', inputSchema: { controllerId: z.string().uuid() } }, async ({ controllerId }) => guard(() => delivery.open(current(), controllerId)));
+    server.registerTool('native_next', { description: 'Claim or recover durable work; started deliveries must only be observed.', inputSchema: { controllerId: z.string().uuid(), epoch: z.number().int().positive(), waitMs: z.number().int().min(0).max(10000).optional() } }, async ({ controllerId, epoch, waitMs }, extra) => {
+      if (extra.signal.aborted) return guard(() => { throw new DomainError('temporarily_unavailable', 503, 'Cancelled'); });
+      const initial = guard(() => delivery.next(current(), controllerId, epoch));
+      if ('isError' in initial || !waitMs || JSON.parse(initial.content[0]!.text).delivery || JSON.parse(initial.content[0]!.text).blocked) return initial;
+      await new Promise<void>(resolve => {
+        const finish = () => { clearTimeout(timer); unsubscribe(); extra.signal.removeEventListener('abort', finish); resolve(); };
+        const unsubscribe = services.hub.subscribeMessages(finish);
+        const timer = setTimeout(finish, waitMs);
+        extra.signal.addEventListener('abort', finish, { once: true });
+        if (extra.signal.aborted) finish();
+      });
+      return guard(() => { if (extra.signal.aborted) throw new DomainError('temporarily_unavailable', 503, 'Cancelled'); return delivery.next(current(), controllerId, epoch); });
+    });
+    server.registerTool('native_begin', { description: 'Consume one start authorization. Never retry an uncertain start.', inputSchema: { ticket: nativeTicketSchema } }, async ({ ticket }) => guard(() => delivery.begin(current(), ticket)));
+    server.registerTool('native_cancel_begin', { description: 'Consume one cancellation dispatch for an owner-requested cancellation.', inputSchema: { ticket: nativeTicketSchema } }, async ({ ticket }) => guard(() => delivery.cancelBegin(current(), ticket)));
+    server.registerTool('native_running', { description: 'Record the accepted native run reference.', inputSchema: { ticket: nativeTicketSchema, runRef: z.string().min(1).max(500) } }, async ({ ticket, runRef }) => guard(() => delivery.running(current(), ticket, runRef)));
+    server.registerTool('native_pending', { description: 'Record an approval or uncertain run without releasing its slot.', inputSchema: { ticket: nativeTicketSchema, state: z.enum(['awaiting_approval','needs_review']) } }, async ({ ticket, state }) => guard(() => delivery.pending(current(), ticket, state)));
+    server.registerTool('native_save', { description: 'Persist an immutable result with signed terminal evidence.', inputSchema: { ticket: nativeTicketSchema, result: nativeResultSchema, proof: nativeProofSchema } }, async ({ ticket, result, proof }) => guard(() => delivery.save(current(), ticket, result, proof)));
+    server.registerTool('native_finish', { description: 'Publish the saved result and ACK atomically; does not generate.', inputSchema: { ticket: nativeTicketSchema } }, async ({ ticket }) => guard(() => delivery.finish(current(), ticket)));
+    server.registerTool('native_delivery', { description: 'Read an authorized delivery or its terminal receipt.', inputSchema: { eventId: z.string().uuid() } }, async ({ eventId }) => guard(() => delivery.get(current(), eventId)));
+  }
   return server;
 }

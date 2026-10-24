@@ -70,7 +70,7 @@ export async function createApp({
   const authorize = createMcpAuthenticator({ publicJwk: toPublicJwk(jwks.keys[0]), issuer: config.publicOrigin, audience: config.publicOrigin, agents: services.agents });
   app.addHook('onRequest', async (request, reply) => {
     const path = request.url.split('?')[0]!;
-    if (!(path.startsWith('/api/') || path.startsWith('/ws/') || ['/mcp', '/auth', '/token', '/reg'].includes(path))) return;
+    if (!(path.startsWith('/api/') || path.startsWith('/native/') || path.startsWith('/ws/') || ['/mcp', '/auth', '/token', '/reg'].includes(path))) return;
     let key = `ip:${request.ip}`;
     let max: number = RATE_LIMITS.UNAUTHENTICATED_IP;
     if (path === '/mcp' || path === '/ws/agent') {
@@ -135,6 +135,11 @@ export async function createApp({
   });
 
   registerHttpAdapter(app, { config, database, services });
+  const retain = () => { try { services.nativeDelivery.retain(); } catch { app.log.warn('Native retention deferred'); } };
+  const retention = setInterval(retain, 3600_000);
+  retention.unref();
+  app.addHook('onReady', async () => { retain(); });
+  app.addHook('onClose', async () => { clearInterval(retention); });
 
   return app;
 }
