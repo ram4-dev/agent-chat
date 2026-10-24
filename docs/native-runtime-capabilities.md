@@ -11,15 +11,15 @@ pnpm install --frozen-lockfile
 pnpm bridge:capabilities
 ```
 
-El comando crea un HOME/CODEX_HOME temporal, un profile y un workspace de prueba. Conserva la metadata pública del modelo del catálogo instalado y usa un proveedor HTTP falso local. Comprueba selección del profile, instrucciones, reglas de workspace, herramientas anunciadas y continuidad al retomar. No ejecuta inferencia ni permite que el proveedor falso solicite herramientas.
+El comando crea un HOME/CODEX_HOME temporal, un profile y un workspace de prueba. Conserva la metadata pública del modelo del catálogo incorporado en el binario y usa un proveedor HTTP falso local. El descubrimiento del catálogo también usa HOME/CODEX_HOME y cwd temporales; no carga configuración del caller. Comprueba selección del profile, instrucciones, reglas de workspace, herramientas anunciadas y continuidad al retomar. No ejecuta inferencia ni permite que el proveedor falso solicite herramientas. El harness termina también los procesos de setup que queden en el grupo del CLI antes de borrar el HOME temporal, incluidos clones de plugins en background.
 
 La salida mantiene `automaticActivationAllowed: false`. Un resultado satisfactorio no acredita acceso a un profile personal ni actividad visible en T3. Las capacidades de Hermes y Grok Bot no verificadas no se convierten en PASS.
 
 ## Hermes instalado con proveedor falso
 
-Requiere una instalación local de Hermes compatible con `--print-runtime-command`, Python y dependencias que su bootstrap prepare, y Portless disponible en PATH. El proceso Node de las pruebas debe ofrecer `tls.getCACertificates` y `tls.setDefaultCACertificates`: se incorpora temporalmente la CA pública de Portless y se restaura al cerrar. La validación TLS permanece habilitada. Se usa el Python de esa instalación, sin asumir una ruta de virtualenv. El fixture soporta macOS/Linux. No modifica el core ni lee la configuración personal de Hermes.
+Requiere un checkout Git de Hermes, su CLI compatible con `--print-runtime-command`, Python, uv y Portless disponibles en PATH. Se archiva el commit seleccionado en un temporal y se excluyen archivos `.env*`, `.op.env`, estado sin versionar y symlinks. Las dependencias se instalan con `uv sync --frozen --extra messaging --no-dev --no-install-project` desde el lockfile versionado, sin copiar el entorno privado instalado. Si el proxy usa HTTPS, el proceso Node de las pruebas debe ofrecer `tls.getCACertificates` y `tls.setDefaultCACertificates`: se incorpora temporalmente la CA pública de Portless y se restaura al cerrar. La validación TLS permanece habilitada. Se usa el Python de esa instalación, sin asumir una ruta de virtualenv. El fixture soporta macOS/Linux. No modifica el core ni lee la configuración personal de Hermes.
 
-Primero compilar y levantar un servidor de Agent Chat de prueba, con una base aislada:
+Primero compilar y levantar un servidor de Agent Chat de prueba, con una base aislada nueva para cada ejecución completa. Los E2E existentes usan correos de fixture fijos y no deben reutilizar la base de una suite anterior:
 
 ```sh
 pnpm build
@@ -37,7 +37,7 @@ AGENT_CHAT_HERMES_SOURCE=/ruta/al/checkout/hermes \
 
 El puerto del proxy del ejemplo puede variar; copiar la URL anunciada por Portless. El test lanza otro endpoint nombrado para Hermes, con perfil y credenciales temporales generadas para ese fixture. El proveedor falso responde por HTTP en un hilo separado: el constructor nativo puede consultar metadata de forma síncrona y bloquearía un proveedor alojado en su mismo event loop.
 
-El E2E comprueba persona y tools anunciadas, idempotencia, conflicto por contenido diferente, resultado terminal y `no_reply` explícito, contexto compartido entre participantes, separación entre grupos y recuperación de resultado/historial al reiniciar el proceso. No reemplaza AIAgent ni modifica sus métodos con mocks.
+El E2E comprueba persona y los cuatro tools de archivos por nombre, idempotencia, conflicto por contenido diferente, resultado terminal y `no_reply` explícito, contexto compartido entre participantes, separación entre grupos y recuperación de resultado/historial al reiniciar el proceso. Cada request registra generación del proceso, secuencia y si es turno principal con streaming o auxiliar sin streaming. Los snapshots se escriben antes de devolver la respuesta del fake; las aserciones esperan el input esperado y comprueban que el replay no añade turnos principales antes ni después del reinicio. Las consultas y replay tras reinicio se prueban además sin ningún request nuevo al proveedor. No reemplaza AIAgent ni modifica sus métodos con mocks.
 
 Sin `AGENT_CHAT_HERMES_SOURCE`, esa aceptación instalada queda marcada como omitida, con motivo explícito. Las pruebas HTTP deterministas siguen disponibles con `pnpm test:integration`. La primera preparación de dependencias puede requerir red; si falla, el adaptador no se declara habilitado.
 

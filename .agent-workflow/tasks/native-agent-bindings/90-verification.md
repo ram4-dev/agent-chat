@@ -17,15 +17,15 @@ Se leyeron código, ayuda de CLIs, fuentes públicas de Hermes local y documenta
 
 ## S0 ejecutado
 
-Probe del Codex instalado con profile/configuración/workspace temporales y proveedor Responses falso. E2E del Hermes instalado con AIAgent original, profile temporal y proveedor HTTP falso separado del event loop; continuidad, aislamiento por sesión, resultados explícitos, idempotencia, conflicto de contenido y recuperación tras reinicio. Detalles, hallazgos del harness y capacidades aún pendientes en 07-native-capabilities.md.
+Probe del Codex instalado con descubrimiento, profile/configuración/workspace temporales y proveedor Responses falso; regresión con configuración inválida del caller. E2E de fuente Hermes versionada copiada por git archive, sin .env ni estado privado/symlinks, con AIAgent original, profile temporal, dependencias del lockfile en venv temporal y proveedor HTTP falso separado del event loop; continuidad, aislamiento por sesión, resultados explícitos, idempotencia, conflicto de contenido y recuperación tras reinicio. Detalles, hallazgos del harness y capacidades aún pendientes en 07-native-capabilities.md.
 
 - pnpm lint: PASS.
 - pnpm typecheck: PASS.
 - pnpm build: PASS.
 - pnpm test:unit: 148 PASS.
 - pnpm test:contracts: 15 PASS.
-- pnpm test:integration: 147 PASS.
-- pnpm test:e2e con AGENT_CHAT_HERMES_SOURCE y servidor Portless aislado: 23 PASS, 1 skip. El skip es el E2E legacy con inferencia Codex real, que exige opt-in AGENT_CHAT_REAL_CODEX_E2E=1; las nuevas pruebas no usan inferencia.
+- pnpm test:integration: 150 PASS.
+- pnpm test:e2e con AGENT_CHAT_HERMES_SOURCE y servidor Portless aislado: 23 PASS, 1 skip. El skip es el E2E legacy con inferencia Codex real, que exige opt-in AGENT_CHAT_REAL_CODEX=1; las nuevas pruebas no usan inferencia.
 - Python fixture: compilación sintáctica y ejecución desde el E2E instalado satisfactorias.
 - git diff --check: PASS.
 
@@ -36,3 +36,7 @@ Las primeras ejecuciones detectaron defectos del harness que fueron corregidos a
 S0 parcial verificado; no se declaró completo ni se habilitó un adaptador nativo real. Faltan aprobación nativa, selección entre profiles y observación soportada de su actividad. Grok Bot todavía requiere elegir el bot, establecer callback y ruta de red desde su nube. La pregunta de nombre de bot está pendiente; no se solicitaron secretos en chat.
 
 No se modificaron servicios, configuración personal o bases de producción; sí se iniciaron procesos temporales de prueba. No hubo modelos reales ni rutinas Grok Bot, push o PR. El receptor actual permanece separado de estos fixtures. La próxima acción es revisión del incremento S0 y cierre de sus checks pendientes, manteniendo bloqueada la habilitación de proveedores no verificados.
+
+## Correcciones posteriores a revisión S0 r1
+
+S0-F1–6 corregidos por el autor, con cierre independiente pendiente: fuente Hermes limpia, descubrimiento Codex aislado, conteo de generaciones y snapshots sin carrera, cleanup de init, aserción de los cuatro tools y flag legacy AGENT_CHAT_REAL_CODEX corregido. Suite completa con DB nueva: 336 PASS, un skip legacy real por opt-in. Hubo un intento con DB reutilizada que se interrumpió; se volvió a ejecutar desde DB nueva con PASS. La evidencia inicial de aislamiento no se considera suficiente tras el hallazgo; la evidencia vigente es la obtenida desde la copia limpia. Registro y límites en 09-s0-review.md.

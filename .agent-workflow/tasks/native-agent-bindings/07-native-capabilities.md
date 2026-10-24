@@ -13,7 +13,7 @@ Pendiente: aprobación de herramientas, adopción de un profile real seleccionad
 
 ## Hermes instalado
 
-Hermes `0.22.2`, fuente local `d923a5eb487a`, Python resuelto mediante `hermes --print-runtime-command`. Se ejecuta APIServerAdapter y AIAgent originales contra un proveedor HTTP falso, sin reemplazar clases/métodos del agente. Configuración y estado en profile temporal. El bootstrap prepara dependencias para ese root; puede requerir red.
+Hermes `0.22.2`, fuente versionada `d923a5eb487a`, Python resuelto mediante `hermes --print-runtime-command`. Tras el finding S0-F1, se ejecutan APIServerAdapter y AIAgent originales desde git archive del commit en una copia temporal: no se importa el checkout instalado con sus archivos privados. Se excluyen .env*, .op.env, estado sin versionar y symlinks; las dependencias provienen del lockfile mediante uv en un venv temporal. No se reemplazan clases ni métodos. El aislamiento del primer incremento no estaba acreditado por HOME solamente; no se inspeccionó el .env real para corregirlo.
 
 Demostrado por E2E desde el proceso real de la API:
 
@@ -45,6 +45,8 @@ Estos fueron problemas de preparación/observación del fixture; no se atribuyen
 
 ## Verificación
 
-Lint, typecheck y build: PASS. Unit: 148 PASS. Contratos: 15 PASS. Integración: 147 PASS. E2E completo: 23 PASS, 1 skip, ejecutado con AGENT_CHAT_HERMES_SOURCE y el servidor aislado vía Portless. El skip es el test legacy con modelo Codex real, que exige AGENT_CHAT_REAL_CODEX_E2E=1; no se solicitó inferencia en esta fase de fixtures.
+Lint, typecheck y build: PASS. Unit: 148 PASS. Contratos: 15 PASS. Integración: 150 PASS. E2E completo: 23 PASS, 1 skip, ejecutado con AGENT_CHAT_HERMES_SOURCE y el servidor aislado vía Portless. El skip es el test legacy con modelo Codex real, que exige AGENT_CHAT_REAL_CODEX=1; no se solicitó inferencia en esta fase de fixtures.
 
-El E2E instalado Hermes pasó en 18.2 s en la ejecución enfocada y 16.9 s dentro de la suite completa. No se ejecutaron pruebas de modelos reales. El receptor y la base de producción no fueron modificados. La siguiente tarea técnica es cerrar los checks de autorización/aprobaciones y selección de profile de S0; los módulos comunes pueden prepararse sin declarar habilitado un proveedor pendiente, conforme al outline.
+La suite de correcciones desde fuente limpia pasó con 23 E2E y un skip en 32.8 s; el caso Hermes duró 19.0 s. Un intento intermedio contra una base reutilizada se interrumpió por colisiones de usuarios de fixture y se repitió con una base nueva; no se atribuye como fallo del producto. No se ejecutaron pruebas de modelos reales. El receptor y la base de producción no fueron modificados. La siguiente tarea técnica es cerrar los checks de autorización/aprobaciones y selección de profile de S0; los módulos comunes pueden prepararse sin declarar habilitado un proveedor pendiente, conforme al outline.
+
+Las correcciones S0-F1–6 y la evidencia de regresión están registradas en 09-s0-review.md. El descubrimiento Codex usa también env/cwd temporales y el E2E planta una configuración inválida en el HOME del caller para detectar regresiones. Los requests del proveedor tienen generación/secuencia; snapshot síncrono antes de responder y aserciones de ausencia de nuevas completions al consultar/repetir el resultado. Las llamadas auxiliares de títulos se observan separadamente y se espera su llegada antes de establecer el baseline inicial.

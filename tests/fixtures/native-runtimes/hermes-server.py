@@ -12,12 +12,47 @@ from pathlib import Path
 import signal
 import sys
 import threading
+import subprocess
+import tarfile
+import shutil
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+def copy_committed_source(original_source, revision, destination, home):
+    """Copy only regular committed files, excluding private env files and symlinks."""
+    destination = Path(destination)
+    destination.mkdir(parents=True)
+    archive = subprocess.Popen(
+        ["git", "--no-replace-objects", "-C", str(original_source), "archive", revision],
+        stdout=subprocess.PIPE,
+        env={"PATH": os.environ["PATH"], "HOME": str(home),
+             "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull})
+    try:
+        with tarfile.open(fileobj=archive.stdout, mode="r|") as files:
+            for member in files:
+                path = Path(member.name)
+                if (path.is_absolute() or ".." in path.parts
+                        or any(p.startswith(".env") or p == ".op.env" for p in path.parts)):
+                    continue
+                if not member.isfile():
+                    continue
+                target = destination / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with files.extractfile(member) as incoming, target.open("wb") as outgoing:
+                    shutil.copyfileobj(incoming, outgoing)
+                target.chmod(member.mode & 0o777)
+        if archive.wait(timeout=30) != 0:
+            raise RuntimeError("Hermes source archive failed")
+    finally:
+        if archive.poll() is None:
+            archive.kill()
+        archive.wait()
 
 
 async def main():
     faulthandler.register(signal.SIGUSR1)
-    source = Path(sys.argv[1]).resolve()
+    original_source = Path(sys.argv[1]).resolve()
     sys.argv[0] = str(Path(sys.argv[0]).resolve())
     with contextlib.nullcontext(os.environ["NATIVE_FIXTURE_HOME"]) as directory:
         home = Path(directory)
@@ -26,18 +61,47 @@ async def main():
         os.environ["HERMES_HOME"] = directory
         os.environ["HERMES_DISABLE_UPDATE_CHECK"] = "1"
         os.chdir(directory)
+        source = home.parent / "source"
+        if not source.exists():
+            copy_committed_source(original_source, os.environ["NATIVE_FIXTURE_SOURCE_REVISION"], source, home)
+        # An archive has no installed checkout metadata. Provision dependencies
+        # from its versioned lockfile rather than borrowing the private install.
+        runtime = source / ".venv" / "bin" / "python"
+        if Path(sys.prefix).resolve() != (source / ".venv").resolve():
+            if not runtime.exists():
+                subprocess.run(["uv", "sync", "--project", str(source), "--frozen", "--no-dev",
+                                "--extra", "messaging", "--no-install-project", "--python", sys.executable],
+                               check=True, timeout=100)
+            os.execv(str(runtime), [str(runtime), *sys.argv])
         sys.path.insert(0, str(source))
         import hermes_bootstrap  # noqa: F401; installed dependency loader, temporary root only
         from aiohttp import web
 
         requests = []
+        generation = uuid.uuid4().hex
+        report_lock = threading.Lock()
+
+        def snapshot():
+            report_path = os.environ.get("NATIVE_FIXTURE_REPORT")
+            if report_path:
+                temporary = Path(report_path + ".tmp")
+                temporary.write_text(json.dumps({"generation": generation, "requests": requests}))
+                temporary.replace(report_path)
+
+        snapshot()
 
         async def completion(request):
             body = await request.json()
-            requests.append(body)
+            with report_lock:
+                body["fixture_generation"] = generation
+                body["fixture_kind"] = "streamed_turn" if body.get("stream") else "auxiliary"
+                body["fixture_sequence"] = len(requests) + 1
+                requests.append(body)
+                snapshot()
             last = next((m.get("content", "") for m in reversed(body["messages"])
                          if m.get("role") == "user"), "")
-            text = json.dumps({"decision": "no_reply", "text": ""}) if last == "SILENT" else "native fixture reply"
+            text = (json.dumps({"decision": "no_reply", "text": ""}) if last == "SILENT"
+                    else f"native fixture reply {generation}:{body['fixture_sequence']}")
             message = {"role": "assistant", "content": text}
             if body.get("stream"):
                 chunks = [
@@ -97,18 +161,6 @@ async def main():
         }))
         if not await adapter.connect():
             raise RuntimeError("isolated Hermes API failed to start")
-        # Metadata belongs only to this test server; no production data is exposed.
-        # The adapter freezes its router on connect; use the provider's test-only endpoint.
-        # Provider requests stay in this process and are retrieved through a private report file.
-        async def report():
-            while True:
-                report_path = os.environ.get("NATIVE_FIXTURE_REPORT")
-                if report_path:
-                    temporary = Path(report_path + ".tmp")
-                    temporary.write_text(json.dumps({"requests": requests}))
-                    temporary.replace(report_path)
-                await asyncio.sleep(0.05)
-        reporter = asyncio.create_task(report())
         stop = asyncio.Event()
         for sig in (signal.SIGINT, signal.SIGTERM):
             asyncio.get_running_loop().add_signal_handler(sig, stop.set)
@@ -117,11 +169,13 @@ async def main():
         try:
             await stop.wait()
         finally:
-            reporter.cancel()
             await adapter.disconnect()
             await asyncio.to_thread(provider.shutdown)
             provider.server_close()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    if sys.argv[1:2] == ["--copy-only"]:
+        copy_committed_source(Path(sys.argv[2]), sys.argv[3], Path(sys.argv[4]), Path(sys.argv[5]))
+    else:
+        asyncio.run(main())

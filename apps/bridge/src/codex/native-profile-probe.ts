@@ -1,11 +1,9 @@
 import { createServer } from 'node:http';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { isolatedCommand } from './isolated-command.js';
 
-const execute = promisify(execFile);
 interface Observation { model?: string; instructions?: string; tools?: unknown[]; input?: unknown }
 export function hasNativeTools(observation: Observation): boolean {
   if (Array.isArray(observation.tools) && observation.tools.length > 0) return true;
@@ -53,9 +51,11 @@ export async function probeNativeProfile(): Promise<ProfileProbeResult> {
   });
   try {
     await mkdir(home); await mkdir(workspace);
-    const catalogCommand = execute('codex', ['debug', 'models'], { timeout: 15_000, killSignal: 'SIGKILL', maxBuffer: 8 * 1024 * 1024 });
-    catalogCommand.child.stdin?.end();
-    const catalog = JSON.parse((await catalogCommand).stdout) as { models?: Record<string, unknown>[] };
+    const env: NodeJS.ProcessEnv = { PATH: process.env['PATH'], HOME: home, CODEX_HOME: home, TMPDIR: tmpdir() };
+    const catalogText = await isolatedCommand('codex', ['debug', 'models'], {
+      env, cwd: workspace, timeoutMs: 15_000, maxBytes: 8 * 1024 * 1024,
+    });
+    const catalog = JSON.parse(catalogText) as { models?: Record<string, unknown>[] };
     const nativeModel = catalog.models?.find(model => model['slug'] === 'gpt-6.1-sol');
     if (!nativeModel) throw new Error('Native model metadata unavailable');
     await writeFile(join(home, 'catalog.json'), JSON.stringify({ models: [nativeModel] }));
@@ -65,7 +65,6 @@ export async function probeNativeProfile(): Promise<ProfileProbeResult> {
     await writeFile(join(home, 'native-probe.config.toml'), `model = "gpt-6.1-sol"\nmodel_catalog_json = ${JSON.stringify(join(home, 'catalog.json'))}\nmodel_instructions_file = ${JSON.stringify(join(home, 'persona.md'))}\n`);
     await writeFile(join(home, 'persona.md'), 'NATIVE_PROFILE_SENTINEL: retain this configured persona.');
     await writeFile(join(workspace, 'AGENTS.md'), 'NATIVE_WORKSPACE_SENTINEL: preserve these workspace rules.');
-    const env: NodeJS.ProcessEnv = { PATH: process.env['PATH'], HOME: home, CODEX_HOME: home, TMPDIR: tmpdir() };
     let first: string | undefined; let resumed: string | undefined;
     for (let round = 0; round < 2; round++) {
       const args = ['exec', '--profile', 'native-probe', '--json', '--skip-git-repo-check', '-C', workspace];
@@ -73,9 +72,7 @@ export async function probeNativeProfile(): Promise<ProfileProbeResult> {
       args.push('Capability fixture only; reply without using tools.');
       let stdout: string;
       try {
-        const command = execute('codex', args, { env, timeout: 30_000, killSignal: 'SIGKILL', maxBuffer: 2 * 1024 * 1024 });
-        command.child.stdin?.end();
-        ({ stdout } = await command);
+        stdout = await isolatedCommand('codex', args, { env, cwd: workspace, timeoutMs: 30_000, maxBytes: 2 * 1024 * 1024 });
       }
       catch (cause) { throw new Error('Native profile probe failed; no user configuration was loaded', { cause }); }
       let thread: string | undefined;
@@ -97,6 +94,6 @@ export async function probeNativeProfile(): Promise<ProfileProbeResult> {
     return result;
   } finally {
     server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 25 });
   }
 }
