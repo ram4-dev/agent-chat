@@ -19,6 +19,10 @@ export interface AuthenticatedUser {
   sessionToken: string;
 }
 
+export class ConfirmationRequiredError extends Error {
+  constructor() { super('Confirm the account email before signing in'); }
+}
+
 export interface RegisterInput {
   email: string;
   displayName: string;

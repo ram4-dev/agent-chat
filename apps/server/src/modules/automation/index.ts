@@ -3,7 +3,7 @@ import type Database from 'better-sqlite3';
 import { runImmediateTransaction } from '../../persistence/client.js';
 import { DomainError } from '../errors.js';
 import type { AgentCredential } from '../../adapters/mcp/auth.js';
-import type { ApplicationServices } from '../../services.js';
+import type { LocalApplicationServices as ApplicationServices } from '../../services.js';
 import type { InboxEventView } from '../inbox/index.js';
 
 export interface AutomationBinding {

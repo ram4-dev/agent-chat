@@ -36,6 +36,7 @@ export function AgentsPanel({
   const [editing, setEditing] = useState<OwnedAgentView | "new">();
   const [connecting, setConnecting] = useState(false);
   const [confirmation, setConfirmation] = useState<Confirmation>();
+  const [capabilities, setCapabilities] = useState({ nativeAutomation: false, legacyAutomation: false });
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const refresh = useCallback(async () => {
@@ -44,6 +45,7 @@ export function AgentsPanel({
       if (!response.ok) throw new Error();
       const data = (await response.json()) as OwnedAgentsResponse;
       setAgents(data.agents);
+      setCapabilities(data.capabilities ?? { nativeAutomation: false, legacyAutomation: false });
       setError("");
     } catch {
       setError("No pudimos cargar tus agentes. Volvé a intentar.");
@@ -189,7 +191,7 @@ export function AgentsPanel({
             </button>
           </div>
         )}
-        {agents && groupId && <NativeConsentPanel key={groupId} agents={agents} groupId={groupId} groupName={groupName ?? "este grupo"} groupAgentIds={groupAgentIds} />}
+        {capabilities.nativeAutomation && agents && groupId && <NativeConsentPanel key={groupId} agents={agents} groupId={groupId} groupName={groupName ?? "este grupo"} groupAgentIds={groupAgentIds} />}
         <ul className="agent-grid" aria-label="Agentes propios">
           {agents?.map((agent) => (
             <li
@@ -239,7 +241,7 @@ export function AgentsPanel({
                   </span>
                 </div>
               </div>
-              {groupId && groupAgentIds.includes(agent.id) && agent.status === "active" && (agent.nativeRuntime ? <NativeAutomationPanel agentId={agent.id} groupId={groupId} name={agent.name} /> : <AutomationPanel agentId={agent.id} groupId={groupId} name={agent.name} />)}
+              {(capabilities.nativeAutomation || capabilities.legacyAutomation) && groupId && groupAgentIds.includes(agent.id) && agent.status === "active" && (agent.nativeRuntime ? <NativeAutomationPanel agentId={agent.id} groupId={groupId} name={agent.name} /> : <AutomationPanel agentId={agent.id} groupId={groupId} name={agent.name} />)}
               <details className="agent-connections">
                 <summary>
                   <span>Conexiones de {agent.name}</span>

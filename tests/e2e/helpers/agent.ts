@@ -17,6 +17,7 @@ export async function authorizeAgent(
   page: Page,
   origin: string,
   existingAgent?: string,
+  resource?: string,
 ) {
   let registration: OAuthClientInformationMixed | undefined;
   let tokens: OAuthTokens | undefined;
@@ -24,6 +25,7 @@ export async function authorizeAgent(
   let authorizationUrl: URL | undefined;
   const state = randomBytes(16).toString("hex");
   const provider: OAuthClientProvider = {
+    ...(resource ? { validateResourceURL: async () => new URL(resource) } : {}),
     redirectUrl: `${origin}/callback`,
     clientMetadata: {
       client_name: "Owner-run SDK MCP client",

@@ -8,23 +8,23 @@ import { DomainError } from '../../modules/errors.js';
 /** Native credentials have their own surface; legacy automation/ACK is absent. */
 export function createNativeMcpServer(services: McpServices, credential: () => AgentCredential): McpServer {
   const access = services.nativeAccess!;
-  const server = new McpServer({ name: 'agent-chat', version: '0.0.0' });
+  const server = new McpServer({ name: 'agent-chat', version: '0.0.0' }, { instructions: 'This connection uses native grants. Read get_identity to determine its kind and permitted selections. Native automatic controllers must use native delivery tools and native_finish for atomic publication and acknowledgement; never use legacy WebSocket receivers or manual inbox ACK. Interactive grants may reply only through their explicitly allowed identities and groups. Keep the authorized controller running while its host is available; report unsupported background execution honestly.' });
   const current = () => credential().connectionId;
   const result = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] });
-  function guard(operation: () => unknown) {
-    try { return result(operation()); }
+  async function guard(operation: () => unknown | Promise<unknown>) {
+    try { return result(await operation()); }
     catch (error) { return { isError: true, content: [{ type: 'text' as const, text: error instanceof DomainError ? error.code : 'temporarily_unavailable' }] }; }
   }
-  server.registerTool('get_identity', { description: 'List explicitly granted identities and currently authorized groups.', inputSchema: {} }, async () => guard(() => {
+  server.registerTool('get_identity', { description: 'List explicitly granted identities and currently authorized groups.', inputSchema: {} }, async () => guard(async () => {
     const grant = access.resolve(current());
-    return { grant: { id: grant.id, kind: grant.kind, scopes: grant.scopes }, identities: access.visibleSelections(current()).map(selection => ({
-      ...selection, name: services.agents.getOwnedAgent(selection.agentId, grant.ownerUserId).name,
-    })) };
+    return { grant: { id: grant.id, kind: grant.kind, scopes: grant.scopes }, identities: await Promise.all(access.visibleSelections(current()).map(async selection => ({
+      ...selection, name: (await services.agents.getOwnedAgent(selection.agentId, grant.ownerUserId)).name,
+    }))) };
   }));
-  server.registerTool('list_groups', { description: 'List authorized groups for an explicitly selected identity.', inputSchema: { as_agent_id: z.string().uuid() } }, async ({ as_agent_id }) => guard(() => {
+  server.registerTool('list_groups', { description: 'List authorized groups for an explicitly selected identity.', inputSchema: { as_agent_id: z.string().uuid() } }, async ({ as_agent_id }) => guard(async () => {
     access.resolve(current());
     const ids = access.visibleSelections(current()).find(s => s.agentId === as_agent_id)?.groupIds ?? [];
-    return { groups: services.groups.listGroupsForAgent(as_agent_id).filter(item => ids.includes(item.group.id)).map(({ group, role }) => ({ id: group.id, name: group.name, role })) };
+    return { groups: (await services.groups.listGroupsForAgent(as_agent_id)).filter(item => ids.includes(item.group.id)).map(({ group, role }) => ({ id: group.id, name: group.name, role })) };
   }));
   server.registerTool('read_messages', {
     description: 'Read history using one granted identity and group. Does not acknowledge inbox events.',
@@ -44,7 +44,7 @@ export function createNativeMcpServer(services: McpServices, credential: () => A
     server.registerTool('native_open', { description: 'Register a controller epoch without releasing uncertain execution.', inputSchema: { controllerId: z.string().uuid() } }, async ({ controllerId }) => guard(() => delivery.open(current(), controllerId)));
     server.registerTool('native_next', { description: 'Claim or recover durable work; started deliveries must only be observed.', inputSchema: { controllerId: z.string().uuid(), epoch: z.number().int().positive(), waitMs: z.number().int().min(0).max(10000).optional() } }, async ({ controllerId, epoch, waitMs }, extra) => {
       if (extra.signal.aborted) return guard(() => { throw new DomainError('temporarily_unavailable', 503, 'Cancelled'); });
-      const initial = guard(() => delivery.next(current(), controllerId, epoch));
+      const initial = await guard(() => delivery.next(current(), controllerId, epoch));
       if ('isError' in initial || !waitMs || JSON.parse(initial.content[0]!.text).delivery || JSON.parse(initial.content[0]!.text).blocked) return initial;
       await new Promise<void>(resolve => {
         const finish = () => { clearTimeout(timer); unsubscribe(); extra.signal.removeEventListener('abort', finish); resolve(); };

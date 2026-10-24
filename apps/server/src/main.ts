@@ -12,6 +12,16 @@ import { createDatabase, migrateFromDirectory } from './persistence/index.js';
 async function main(): Promise<void> {
   const config = loadConfig();
 
+  if (config.managed) {
+    const { createManagedApp } = await import('./managed/runtime.js');
+    const app = await createManagedApp(config);
+    await app.listen({ host: config.host, port: config.port });
+    const shutdown = () => { void app.close().then(() => process.exit(0)); };
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
+    return;
+  }
+
   mkdirSync(dirname(config.databasePath), { recursive: true });
 
   const database = createDatabase({
@@ -63,7 +73,8 @@ async function main(): Promise<void> {
   process.on('SIGTERM', shutdown);
 }
 
-await main().catch((error: unknown) => {
+export const serverStarted = main();
+await serverStarted.catch((error: unknown) => {
   console.error(error);
   process.exitCode = 1;
 });

@@ -20,12 +20,23 @@ test('native supervisor recovers after dispatch, a lost publication response and
   try {
     const oidcKey = generateKeyPairSync('ed25519').privateKey.export({ format: 'jwk' });
     await writeFile(join(root, 'oidc-jwks.json'), JSON.stringify({ keys: [{ ...oidcKey, alg: 'EdDSA', use: 'sig', kid: 'fixture' }] }), { mode: 0o600 });
-    const server = child('portless', [`native-delivery-${randomUUID().slice(0,8)}`, process.execPath, 'tests/fixtures/native-delivery/server.mjs'], { ...process.env, DATABASE_PATH: serverDb, OIDC_JWKS_PATH: join(root, 'oidc-jwks.json'), LOG_LEVEL: 'warn' }); children.push(server.process);
-    await expect.poll(() => server.output()).toMatch(/PORTLESS_URL=https?:\/\//);
-    const origin = /PORTLESS_URL=(https?:\/\/\S+)/.exec(server.output())![1]!;
+    let server: ReturnType<typeof child> | undefined;
+    // Portless chooses from a shared port pool. Retry only an observed bind
+    // collision during dependency setup, before authorization or native work.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const candidate = child('portless', [`native-delivery-${randomUUID().slice(0,8)}`, process.execPath, 'tests/fixtures/native-delivery/server.mjs'], { ...process.env, DATABASE_PATH: serverDb, OIDC_JWKS_PATH: join(root, 'oidc-jwks.json'), LOG_LEVEL: 'warn' });
+      children.push(candidate.process);
+      await expect.poll(() => candidate.output().includes('EADDRINUSE') || candidate.output().includes('"fixtureServerReady":true') || candidate.process.exitCode !== null).toBe(true);
+      if (!candidate.output().includes('EADDRINUSE')) { server = candidate; break; }
+      await stop(candidate.process);
+    }
+    if (!server) throw new Error('Could not allocate the owned Portless fixture after three bind collisions');
+    const ownedServer = server;
+    await expect.poll(() => ownedServer.output()).toMatch(/PORTLESS_URL=https?:\/\//);
+    const origin = /PORTLESS_URL=(https?:\/\/\S+)/.exec(ownedServer.output())![1]!;
     // Portless announces its mapping before the child has listened; wait for the owned server's readiness first.
-    await expect.poll(() => server.output()).toContain('"fixtureServerReady":true');
-    await expect.poll(async () => { try { return (await page.request.get(`${origin}/liveness`)).ok(); } catch { return false; } }).toBe(true).catch(error => { throw new Error(`Owned native fixture startup failed: ${server.output().slice(-3000)}`, { cause: error }); });
+    await expect.poll(() => ownedServer.output()).toContain('"fixtureServerReady":true');
+    await expect.poll(async () => { try { return (await page.request.get(`${origin}/liveness`)).ok(); } catch { return false; } }).toBe(true).catch(error => { throw new Error(`Owned native fixture startup failed: ${ownedServer.output().slice(-3000)}`, { cause: error }); });
     await page.goto(origin); await signUp(page, 'native-supervisor@example.com', 'Native E2E');
     const identity = await authorizeAgent(page, origin);
     await page.goto(origin); const groupId = await createGroup(page, 'Supervisor nativo'); await addAgent(page, 'Scout');

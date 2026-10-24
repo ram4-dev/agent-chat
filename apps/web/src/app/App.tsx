@@ -11,6 +11,7 @@ import {
   type ErrorResponse,
 } from "@agent-chat/contracts";
 import { AuthPanel } from "../features/auth/AuthPanel";
+import { RecoveryPanel } from '../features/auth/RecoveryPanel';
 import {
   loadSession,
   loginAccount,
@@ -39,6 +40,10 @@ import {
 import { loadLiveness } from "../shared/liveness";
 
 export function App() {
+  const [recoveryToken, setRecoveryToken] = useState(() => {
+    const params = new URLSearchParams(location.hash.slice(1));
+    return params.get('type') === 'recovery' ? params.get('access_token') : null;
+  });
   const [session, setSession] = useState<SessionState>({ status: "loading" });
   const [groups, setGroups] = useState<GroupsState>({ status: "loading" });
   const [detail, setDetail] = useState<GroupDetailState>({ status: "loading" });
@@ -68,10 +73,12 @@ export function App() {
       setDetail(state);
   }, []);
   const openGroup = useCallback(
-    (id: string) => {
-      setView("chat");
-      setNavOpen(false);
-      setNotice("");
+    (id: string, options?: { navigate?: boolean }) => {
+      if (options?.navigate !== false) {
+        setView("chat");
+        setNavOpen(false);
+        setNotice("");
+      }
       if (!id) return;
       const changed = selectedRef.current !== id;
       selectedRef.current = id;
@@ -89,6 +96,10 @@ export function App() {
   );
 
   useEffect(() => {
+    if (new URLSearchParams(location.hash.slice(1)).get('type') === 'recovery') {
+      const url = new URL(location.href); url.hash = ''; url.searchParams.delete('recovery');
+      history.replaceState(null, '', url);
+    }
     void loadSession().then(setSession);
     void loadLiveness().then((result) => setOffline(result.status !== "ok"));
   }, []);
@@ -108,7 +119,7 @@ export function App() {
         const remembered = new URLSearchParams(location.search).get("group");
         const first =
           state.groups.find((g) => g.id === remembered) ?? state.groups[0];
-        if (first) openGroup(first.id);
+        if (first && !selectedRef.current) openGroup(first.id, { navigate: false });
       }
       if (new URLSearchParams(location.search).has("invite")) {
         setActionError("");
@@ -233,6 +244,7 @@ export function App() {
     }
   }
 
+  if (recoveryToken) return <RecoveryPanel token={recoveryToken} onDone={() => { setRecoveryToken(null); setSession({ status: 'anonymous' }); }} />;
   if (session.status === "loading")
     return (
       <main className="app-loading">
@@ -278,6 +290,7 @@ export function App() {
         }}
       />
       <main
+        tabIndex={-1}
         className={`workspace ${detailsOpen && view === "chat" && current ? "with-details" : ""}`}
       >
         {(offline || notice) && (

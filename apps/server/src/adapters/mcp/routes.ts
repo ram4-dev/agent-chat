@@ -70,7 +70,7 @@ export async function registerMcpRoutes(app: FastifyInstance, options: McpRoutes
           });
         }
 
-        const server = createMcpServer(services, () => credential);
+        const server = createMcpServer(services, () => credential, issuer);
         const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
         transport.onclose = () => {
           void server.close();

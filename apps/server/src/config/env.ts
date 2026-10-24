@@ -1,5 +1,6 @@
 import { isAbsolute, resolve } from 'node:path';
 import { MIGRATIONS_DIRECTORY } from '@agent-chat/contracts';
+import { readManagedConfig, type ManagedConfig } from '../managed/config.js';
 
 export const NODE_ENVIRONMENTS = ['development', 'test', 'production'] as const;
 export type NodeEnvironment = (typeof NODE_ENVIRONMENTS)[number];
@@ -37,7 +38,8 @@ export interface RuntimeConfig {
   publicOrigin: string;
   /** Optional JWKS file. Without one, local runs generate signing keys. */
   oidcJwksPath?: string;
-  trustProxy?: 'loopback';
+  trustProxy?: 'loopback' | 'platform';
+  managed?: ManagedConfig;
 }
 
 export interface ReadConfigInput {
@@ -71,7 +73,9 @@ export class ConfigError extends Error {
  * fails before the server accepts traffic.
  */
 export function readConfig({ env, repoRoot }: ReadConfigInput): RuntimeConfig {
+  const managed = readManagedConfig(env);
   return {
+    ...(managed ? { managed } : {}),
     nodeEnv: readEnum(
       'NODE_ENV',
       env['NODE_ENV'],
@@ -106,11 +110,12 @@ export function readConfig({ env, repoRoot }: ReadConfigInput): RuntimeConfig {
       60_000,
     ),
     publicOrigin: readPublicOrigin(
-      env['PUBLIC_ORIGIN'] ?? env['PORTLESS_URL'],
+      env['PUBLIC_ORIGIN'] ?? env['PORTLESS_URL'] ?? (env['VERCEL_URL'] ? `https://${env['VERCEL_URL']}` : undefined),
       readText('HOST', env['HOST'], CONFIG_DEFAULTS.host),
       readInteger('PORT', env['PORT'], CONFIG_DEFAULTS.port, 1, 65_535),
     ),
-    ...(env['TRUST_PROXY'] === undefined && env['PORTLESS_URL'] === undefined ? {} : { trustProxy: readEnum('TRUST_PROXY', env['TRUST_PROXY'], ['loopback'] as const, 'loopback') }),
+    ...(env['VERCEL'] === '1' ? { trustProxy: 'platform' as const } :
+      env['TRUST_PROXY'] === undefined && env['PORTLESS_URL'] === undefined ? {} : { trustProxy: readEnum('TRUST_PROXY', env['TRUST_PROXY'], ['loopback'] as const, 'loopback') }),
     ...optionalText('oidcJwksPath', 'OIDC_JWKS_PATH', env['OIDC_JWKS_PATH']),
   };
 }

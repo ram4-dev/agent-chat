@@ -13,18 +13,21 @@
     "@agent-chat/contracts": "workspace:*",
     "@fastify/websocket": "^11.3.4",
     "@modelcontextprotocol/sdk": "^1.32.1",
+    "@supabase/supabase-js": "^2.118.0",
     "argon2": "^0.45.1",
     "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.4",
     "fastify": "^5.12.7",
     "jose": "^6.2.12",
     "oidc-provider": "^9.12.2",
+    "pg": "^8.23.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.6.5",
     "@types/oidc-provider": "^9.12.1",
+    "@types/pg": "^8.23.1",
     "typescript": "^5.9.3"
   }
 }

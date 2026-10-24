@@ -1,4 +1,26 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+
+export function restoreFocus(previous: HTMLElement | null) {
+  requestAnimationFrame(() => {
+    if (document.querySelector("dialog[open]")) return;
+    const available = (element: HTMLElement | null): element is HTMLElement =>
+      !!element?.isConnected &&
+      element !== document.body &&
+      !element.closest("[inert]") &&
+      !element.matches(":disabled") &&
+      element.getClientRects().length > 0 &&
+      getComputedStyle(element).visibility !== "hidden";
+    if (available(previous)) {
+      previous.focus();
+      return;
+    }
+    const menu = document.querySelector<HTMLElement>(
+      '.workspace button[aria-controls="workspace-navigation"]',
+    );
+    if (available(menu)) menu.focus();
+    else document.querySelector<HTMLElement>("main.workspace")?.focus();
+  });
+}
 
 export type IconName =
   | "chat"
@@ -159,10 +181,14 @@ export function Modal({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const id = useId();
-  useEffect(() => {
+  useLayoutEffect(() => {
     const dialog = ref.current!;
+    const previous = document.activeElement as HTMLElement | null;
     dialog.showModal();
-    return () => dialog.close();
+    return () => {
+      dialog.close();
+      restoreFocus(previous);
+    };
   }, []);
   return (
     <dialog

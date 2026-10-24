@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   AGENT_PATHS,
   GROUP_PATHS,
@@ -9,7 +9,14 @@ import {
   type PublicUser,
 } from "@agent-chat/contracts";
 import type { GroupsState } from "./transport";
-import { Avatar, Brand, Icon, Modal, errorMessage } from "../../shared/ui";
+import {
+  Avatar,
+  Brand,
+  Icon,
+  Modal,
+  errorMessage,
+  restoreFocus,
+} from "../../shared/ui";
 
 export function GroupPanel({
   groups,
@@ -37,19 +44,68 @@ export function GroupPanel({
   onLogout(): void;
 }) {
   const [search, setSearch] = useState("");
+  const panel = useRef<HTMLElement>(null);
+  const [mobile, setMobile] = useState(
+    () => window.matchMedia("(max-width: 760px)").matches,
+  );
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 760px)");
+    const update = () => setMobile(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  useLayoutEffect(() => {
+    if (!mobile || !open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const workspace = document.querySelector<HTMLElement>("main.workspace");
+    const wasInert = workspace?.inert ?? false;
+    if (workspace) workspace.inert = true;
+    panel.current
+      ?.querySelector<HTMLElement>('button[aria-label="Cerrar navegación"]')
+      ?.focus();
+    return () => {
+      if (workspace) workspace.inert = wasInert;
+      restoreFocus(previous);
+    };
+  }, [mobile, open]);
   return (
     <>
       {open && (
         <button
           className="nav-backdrop"
+          tabIndex={-1}
           aria-label="Cerrar panel de navegación"
           onClick={onClose}
         />
       )}
       <aside
+        ref={panel}
+        inert={mobile && !open}
         id="workspace-navigation"
         className={`sidebar ${open ? "sidebar-open" : ""}`}
         aria-label="Navegación principal"
+        onKeyDown={(event) => {
+          if (!mobile || !open) return;
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onClose();
+          }
+          if (event.key !== "Tab") return;
+          const controls = [
+            ...event.currentTarget.querySelectorAll<HTMLElement>(
+              'button:not(:disabled), input:not(:disabled), a[href], [tabindex="0"]',
+            ),
+          ].filter((element) => element.getClientRects().length > 0);
+          const first = controls[0];
+          const last = controls.at(-1);
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last?.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first?.focus();
+          }
+        }}
       >
         <div className="sidebar-brand">
           <Brand />

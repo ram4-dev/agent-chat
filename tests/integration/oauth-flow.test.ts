@@ -341,6 +341,57 @@ describe('authorization server', () => {
 });
 
 describe('agent connection through consent', () => {
+  it.each(['foreign origin', 'different path', 'query'])('rejects an unsupported resource: %s', async (kind) => {
+    const harness = await startHarness();
+    const { jar, clientId, redirectUri } = await approvedSession(harness, 'resource-owner@example.com', 'Ada');
+    const { challenge } = pkce();
+    const resource = kind === 'foreign origin' ? 'https://other.example/'
+      : kind === 'different path' ? `${harness.origin}/other` : `${harness.origin}/?other=true`;
+    const denied = await follow(harness, jar,
+      `${authorizeUrl(harness, clientId, redirectUri, challenge)}&resource=${encodeURIComponent(resource)}`);
+    const callback = new URL(String(denied.headers['location']), harness.origin);
+    expect(callback.searchParams.get('error')).toBe('invalid_target');
+    expect(callback.searchParams.has('code')).toBe(false);
+    expect(harness.database.sqlite.prepare('SELECT COUNT(*) AS count FROM agents').get()).toMatchObject({ count: 0 });
+  });
+
+  it('completes consent once when a client normalizes the root resource with a trailing slash', async () => {
+    const harness = await startHarness();
+    const { jar, clientId, redirectUri } = await approvedSession(harness, 'normalized@example.com', 'Ada');
+    const { verifier, challenge } = pkce();
+    const resource = `${harness.origin}/`;
+    const consentPage = await follow(harness, jar,
+      `${authorizeUrl(harness, clientId, redirectUri, challenge)}&resource=${encodeURIComponent(resource)}`);
+    expect(consentPage.statusCode).toBe(200);
+    const uid = /\/oauth\/interaction\/([^/"]+)/.exec(consentPage.body)?.[1] ?? interactionUidFrom(consentPage);
+    const approved = await call(harness, jar, {
+      method: 'POST', url: `/oauth/interaction/${uid}/consent`,
+      payload: new URLSearchParams({ newAgentName: 'Normalized client agent' }).toString(),
+    });
+    const { code } = await authorizationCode(harness, jar, approved);
+    const token = await call(harness, jar, {
+      method: 'POST', url: '/token', payload: new URLSearchParams({
+        grant_type: 'authorization_code', code: code!, redirect_uri: redirectUri,
+        client_id: clientId, code_verifier: verifier, resource,
+      }).toString(),
+    });
+    expect(token.statusCode).toBe(200);
+    const claims = readClaims(JSON.parse(token.body).access_token);
+    expect(claims['aud']).toBe(harness.origin);
+    expect(claims['agent_id']).toEqual(expect.any(String));
+    expect(claims['connection_id']).toEqual(expect.any(String));
+    const refreshed = await call(harness, jar, {
+      method: 'POST', url: '/token', payload: new URLSearchParams({
+        grant_type: 'refresh_token', refresh_token: JSON.parse(token.body).refresh_token,
+        client_id: clientId, resource,
+      }).toString(),
+    });
+    expect(refreshed.statusCode).toBe(200);
+    expect(readClaims(JSON.parse(refreshed.body).access_token)).toMatchObject({
+      aud: harness.origin, agent_id: claims['agent_id'], connection_id: claims['connection_id'],
+    });
+  });
+
   it('creates an agent owned by the approving human and returns agent-bound claims', async () => {
     const harness = await startHarness();
     const { jar, clientId, redirectUri } = await approvedSession(

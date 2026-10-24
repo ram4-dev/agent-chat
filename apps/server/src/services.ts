@@ -30,7 +30,39 @@ import type { InboxModule } from './modules/inbox/index.js';
 import type { MessagingModule } from './modules/messaging/index.js';
 import type { IdentityModule } from './modules/identity/index.js';
 
+export type AsyncPort<T> = {
+  [K in keyof T]: T[K] extends (...args: infer A) => infer R
+    ? (...args: A) => R | Promise<Awaited<R>>
+    : T[K];
+};
+
+export type ApplicationHub = Omit<LiveDeliveryHub, 'receiverIsConnected'> & {
+  receiverIsConnected(agentId: string): boolean | Promise<boolean>;
+};
+
+export interface SocketLeases {
+  reserve(principal: string, socketId: string, max: number, agentId?: string, connectionId?: string): Promise<boolean>;
+  renew(socketId: string): Promise<boolean>;
+  release(socketId: string): Promise<void>;
+}
+
 export interface ApplicationServices {
+  identity: AsyncPort<IdentityModule>;
+  auth: AsyncPort<AuthModule>;
+  agents: AsyncPort<AgentsModule>;
+  groups: AsyncPort<GroupsModule>;
+  inbox: AsyncPort<InboxModule>;
+  messaging: AsyncPort<MessagingModule>;
+  hub: ApplicationHub;
+  socketLeases?: SocketLeases;
+  /** Native execution currently requires the durable local runtime backend. */
+  automation?: AutomationModule;
+  nativeAccess?: NativeAccessModule;
+  nativeDelivery?: NativeDeliveryModule;
+  nativeStatus?: NativeStatusModule;
+}
+
+export interface LocalApplicationServices {
   identity: IdentityModule;
   auth: AuthModule;
   agents: AgentsModule;
@@ -52,7 +84,7 @@ export interface ApplicationServices {
  * keeps a use case testable with fakes and keeps the driver choice out of the
  * modules.
  */
-export function createServices(database: DatabaseHandle): ApplicationServices {
+export function createServices(database: DatabaseHandle): LocalApplicationServices {
   const identity = createIdentityModule({
     users: createSqliteUserRepository(database.sqlite),
     clock: SYSTEM_CLOCK,

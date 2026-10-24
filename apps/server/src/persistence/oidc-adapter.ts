@@ -29,7 +29,7 @@ export interface OidcArtifactRecord {
  */
 export function createOidcAdapterFactory(
   sqlite: Database.Database,
-  onRefreshReuse?: (grantId: string) => void,
+  onRefreshReuse?: (grantId: string) => void | Promise<void>,
 ): (model: string) => OidcAdapter {
   // Upgrade provider-owned refresh rows written before S8 without retaining replayable values.
   const legacy = sqlite.prepare("SELECT id, payload FROM oidc_artifacts WHERE model = 'RefreshToken' AND json_type(payload, '$.jti') = 'text'").all() as { id: string; payload: string }[];
@@ -48,7 +48,7 @@ export class OidcAdapter {
   constructor(
     private readonly sqlite: Database.Database,
     private readonly model: string,
-    private readonly onRefreshReuse?: (grantId: string) => void,
+    private readonly onRefreshReuse?: (grantId: string) => void | Promise<void>,
   ) {}
 
   upsert(id: string, payload: OidcArtifactRecord, expiresInSeconds?: number): void {
@@ -149,7 +149,7 @@ export class OidcAdapter {
       if (this.model === 'RefreshToken') {
         const row = this.sqlite.prepare('SELECT grant_id FROM oidc_artifacts WHERE model = ? AND id = ?')
           .get(this.model, this.storageId(id)) as { grant_id: string | null } | undefined;
-        if (row?.grant_id) this.onRefreshReuse?.(row.grant_id);
+        if (row?.grant_id) await this.onRefreshReuse?.(row.grant_id);
       }
       throw new errors.InvalidGrant('credential already consumed');
     }
@@ -162,7 +162,7 @@ export class OidcAdapter {
   }
 
   async revokeByGrantId(grantId: string): Promise<void> {
-    if (this.model === 'RefreshToken') this.onRefreshReuse?.(grantId);
+    if (this.model === 'RefreshToken') await this.onRefreshReuse?.(grantId);
     this.sqlite
       .prepare('DELETE FROM oidc_artifacts WHERE model = ? AND grant_id = ?')
       .run(this.model, grantId);

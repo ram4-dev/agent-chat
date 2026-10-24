@@ -3,6 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 const host = '127.0.0.1';
 const port = 4319;
 const externalOrigin = process.env['AGENT_CHAT_E2E_BASE_URL'];
+const chromiumExecutable = process.env['PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH'];
 
 /**
  * The real-route check boots the production server entrypoint against a fresh
@@ -18,6 +19,7 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL: externalOrigin ?? `http://${host}:${port}`,
+    ...(chromiumExecutable ? { launchOptions: { executablePath: chromiumExecutable } } : {}),
   },
   projects: [
     {

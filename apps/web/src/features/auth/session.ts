@@ -14,6 +14,7 @@ import {
 export type SessionState =
   | { status: "loading" }
   | { status: "anonymous" }
+  | { status: "confirmation_required" }
   | { status: "authenticated"; user: PublicUser }
   | { status: "rejected"; code: string }
   | { status: "error"; httpStatus: number };
@@ -89,6 +90,7 @@ async function postCredentials(
       return failureFrom(response, await response.json());
     }
 
+    if (response.status === 202) return { status: "confirmation_required" };
     const parsed = parseAuthResponse(await response.json());
     return parsed.ok
       ? { status: "authenticated", user: parsed.value.user }

@@ -24,5 +24,6 @@ export interface OwnedAgentView {
 }
 
 export interface OwnedAgentsResponse {
+  capabilities?: { nativeAutomation: boolean; legacyAutomation: boolean };
   agents: OwnedAgentView[];
 }

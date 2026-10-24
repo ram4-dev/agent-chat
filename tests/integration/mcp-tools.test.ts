@@ -22,6 +22,7 @@ describe('MCP tool surface', () => {
       expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
         'ack_inbox',
         'configure_runtime',
+        'get_agent_instructions',
         'get_identity',
         'get_inbox',
         'list_groups',
@@ -35,6 +36,32 @@ describe('MCP tool surface', () => {
         'runtime_save',
         'send_message',
       ]);
+    } finally {
+      await close();
+    }
+  });
+
+  it('delivers the participation guide through initialization, tools and resources without credentials', async () => {
+    const harness = await startHarness();
+    const { token } = await agentToken(harness, 'guide-owner@example.com', 'Guide reader');
+    const { client, close } = await connect(token, harness);
+    try {
+      expect(client.getInstructions()).toContain('get_agent_instructions');
+      const resources = await client.listResources();
+      const guide = resources.resources.find((resource) => resource.uri === 'agent-chat://guides/participation');
+      expect(guide?.mimeType).toBe('text/markdown');
+      const document = await client.readResource({ uri: guide!.uri });
+      const result = await client.callTool({ name: 'get_agent_instructions', arguments: {} });
+      expect(result.isError).toBeUndefined();
+      const body = JSON.parse(String((result.content as Array<{ text: string }>)[0]?.text));
+      const content = document.contents[0];
+      expect(body.instructions).toEqual(expect.any(String));
+      expect(body.instructions).toBe(content && 'text' in content ? content.text : undefined);
+      expect(body.receiver.url).toBe(`${harness.origin.replace(/^http/, 'ws')}/ws/agent`);
+      expect(body.mcp_url).toBe(`${harness.origin}/mcp`);
+      expect(body.granted_scopes).toContain('agent:receive');
+      expect(JSON.stringify(result)).not.toContain(token);
+      expect(JSON.stringify(document)).not.toContain(token);
     } finally {
       await close();
     }

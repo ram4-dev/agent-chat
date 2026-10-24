@@ -1,111 +1,93 @@
-import type { FastifyInstance } from 'fastify';
-import {
-  BROWSER_SOCKET_PATH,
-  SESSION_COOKIE_NAME,
-  type BrowserEvent,
-  type PublicUser,
-} from '@agent-chat/contracts';
+import { createHash, randomUUID } from 'node:crypto';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { BROWSER_SOCKET_PATH, SESSION_COOKIE_NAME, type BrowserEvent, type PublicUser } from '@agent-chat/contracts';
 import type { WebSocket } from 'ws';
 import type { AuthModule } from '../../modules/auth/index.js';
 import type { GroupsModule } from '../../modules/groups/index.js';
-import type { LiveDeliveryHub } from '../../realtime/hub.js';
+import type { AsyncPort, ApplicationHub, SocketLeases } from '../../services.js';
 import { isSameOriginRequest } from '../http/origin-guard.js';
 import { sendError } from '../http/error-envelope.js';
 import { readCookie } from '../http/cookie.js';
 
 export interface BrowserSocketDependencies {
-  auth: AuthModule;
-  groups: GroupsModule;
-  hub: LiveDeliveryHub;
-  /** Maximum concurrent sockets for one human session. */
+  auth: AsyncPort<AuthModule>;
+  groups: AsyncPort<GroupsModule>;
+  hub: ApplicationHub;
   maxSocketsPerSession: number;
+  socketLeases?: SocketLeases;
 }
 
-/**
- * Browser realtime socket.
- *
- * Origin is checked before upgrade. An invalid session is closed without a
- * private frame. Every delivery rechecks the session and current membership;
- * no client-supplied group subscription can grant access.
- *
- * The socket is an optimization over HTTP: a client that reconnects catches up
- * with a cursor read, so a dropped frame is never lost data.
- */
-export function registerBrowserSocket(
-  app: FastifyInstance,
-  { auth, groups, hub, maxSocketsPerSession }: BrowserSocketDependencies,
-): void {
+/** Authenticate before upgrade; recheck session and membership before every frame. */
+export function registerBrowserSocket(app: FastifyInstance, { auth, groups, hub, maxSocketsPerSession, socketLeases }: BrowserSocketDependencies): void {
   const openSockets = new Map<string, number>();
-
-  app.get(BROWSER_SOCKET_PATH, { websocket: true, preValidation: async (request, reply) => {
-    if (!isSameOriginRequest({ method: 'POST', origin: request.headers.origin, host: request.headers.host })) {
-      return sendError(reply, 403, 'forbidden');
-    }
-  } }, (socket, request) => {
-    const token = readCookie(request.headers.cookie, SESSION_COOKIE_NAME);
-
-    let user: PublicUser;
-    try {
-      user = auth.resolveSession(token);
-    } catch {
-      // Closing without a frame keeps an unauthenticated handshake from
-      // learning anything about the endpoint.
-      socket.close(4401, 'unauthenticated');
-      return;
-    }
-
-    const open = openSockets.get(token!) ?? 0;
-    if (open >= maxSocketsPerSession) {
-      socket.close(4429, 'too many sockets');
-      return;
-    }
-    openSockets.set(token!, open + 1);
-
-    const memberships = groups.listGroups(user.id);
-    const groupIds = memberships.map(({ group }) => group.id);
-    const authorized = (groupId: string) => {
+  const approved = new WeakMap<FastifyRequest, { user: PublicUser; token: string; leaseId: string }>();
+  app.get(BROWSER_SOCKET_PATH, {
+    websocket: true,
+    preValidation: async (request, reply) => {
+      if (!isSameOriginRequest({ method: 'POST', origin: request.headers.origin, host: request.headers.host })) return sendError(reply, 403, 'forbidden');
+      const token = readCookie(request.headers.cookie, SESSION_COOKIE_NAME);
+      let user: PublicUser;
+      try { user = await auth.resolveSession(token); }
+      catch { return; }
+      const leaseId = randomUUID();
+      if (socketLeases) {
+        const principal = `human:${createHash('sha256').update(token!).digest('hex')}`;
+        if (!await socketLeases.reserve(principal, leaseId, maxSocketsPerSession)) return sendError(reply, 429, 'rate_limited');
+      } else if ((openSockets.get(token!) ?? 0) >= maxSocketsPerSession) return sendError(reply, 429, 'rate_limited');
+      openSockets.set(token!, (openSockets.get(token!) ?? 0) + 1);
+      approved.set(request, { user, token: token!, leaseId });
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        const count = (openSockets.get(token!) ?? 1) - 1;
+        if (count <= 0) openSockets.delete(token!); else openSockets.set(token!, count);
+        void socketLeases?.release(leaseId).catch(() => {});
+      };
+      request.raw.socket.once('close', release);
+      reply.raw.once('finish', release);
+    },
+  }, (socket, request) => {
+    const approval = approved.get(request);
+    if (!approval) { socket.close(4401, 'unauthenticated'); return; }
+    const { user, token, leaseId } = approval;
+    const authorized = async (groupId: string) => {
       try {
-        auth.resolveSession(token);
-        groups.getGroupDetail({ userId: user.id, groupId });
+        await auth.resolveSession(token);
+        await groups.getGroupDetail({ userId: user.id, groupId });
         return true;
       } catch { return false; }
     };
-    const unsubscribers = [
-      hub.subscribeMessages((message) => {
-        if (authorized(message.groupId)) send(socket, { type: 'message.created', message });
+    const unsubscribe = [
+      hub.subscribeMessages(async (message) => {
+        if (await authorized(message.groupId)) send(socket, { type: 'message.created', message });
       }),
-      hub.subscribeAgentState((agentId) => {
-        for (const { group } of groups.listGroups(user.id)) {
-          if (authorized(group.id) && groups.getGroupDetail({ userId: user.id, groupId: group.id })
-            .members.some((member) => member.kind === 'agent' && member.id === agentId)) {
+      hub.subscribeAgentState(async (agentId) => {
+        for (const { group } of await groups.listGroups(user.id)) {
+          if (await authorized(group.id) && (await groups.getGroupDetail({ userId: user.id, groupId: group.id })).members.some((member) => member.kind === 'agent' && member.id === agentId)) {
             send(socket, { type: 'agent.connection.changed', agentId });
             break;
           }
         }
       }),
     ];
-
-    socket.on('close', () => {
-      for (const unsubscribe of unsubscribers) {
-        unsubscribe();
-      }
-      const remaining = (openSockets.get(token!) ?? 1) - 1;
-      if (remaining <= 0) {
-        openSockets.delete(token!);
-      } else {
-        openSockets.set(token!, remaining);
-      }
-    });
-
-    // The ready frame tells the client which groups it will receive, so the UI
-    // never has to guess whether a silent socket is connected or empty.
-    send(socket, { type: 'ready', groupIds });
+    const heartbeat = socketLeases ? setInterval(() => {
+      void (async () => {
+        try {
+          await auth.resolveSession(token);
+          if (!await socketLeases.renew(leaseId)) socket.close(4401, 'unauthenticated');
+        } catch { socket.close(4401, 'unauthenticated'); }
+      })();
+    }, 2000) : undefined;
+    heartbeat?.unref();
+    socket.once('close', () => { for (const stop of unsubscribe) stop(); if (heartbeat) clearInterval(heartbeat); });
+    // Async and synchronous modules share the same adapter during migration.
+    Promise.resolve(groups.listGroups(user.id)).then((memberships) => {
+      send(socket, { type: 'ready', groupIds: memberships.map(({ group }) => group.id) });
+    }).catch(() => socket.close(4401, 'unauthenticated'));
   });
 }
 
 function send(socket: WebSocket, event: BrowserEvent): void {
-  // 1 is OPEN; anything else would throw and must not break the fan-out.
-  if (socket.readyState === 1) {
-    socket.send(JSON.stringify(event));
-  }
+  if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(event));
 }

@@ -4,7 +4,7 @@ import type Database from 'better-sqlite3';
 import { nativeProofPayload, nativeResultPayload, type NativeDeliveryView, type NativeGrant, type NativeResult, type NativeTerminalProof, type NativeTicket } from '@agent-chat/contracts';
 import { DomainError } from '../errors.js';
 import type { NativeAccessModule } from '../native-access/index.js';
-import type { ApplicationServices } from '../../services.js';
+import type { LocalApplicationServices as ApplicationServices } from '../../services.js';
 import { runImmediateTransaction } from '../../persistence/client.js';
 
 interface Row {

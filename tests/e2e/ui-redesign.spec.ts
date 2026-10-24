@@ -322,9 +322,21 @@ test("agent management identifies existing group membership after adding and rel
   await expect(
     page.getByRole("button", { name: "Agregar a Equipo", exact: true }),
   ).toHaveCount(0);
-  await page.reload();
-  await agents(page);
-  await expect(member).toBeDisabled();
+  let resumeGroups!: () => void;
+  const groupsGate = new Promise<void>((resolve) => { resumeGroups = resolve; });
+  await page.route('**/api/groups', async (route) => {
+    if (route.request().method() === 'GET') await groupsGate;
+    await route.continue();
+  });
+  try {
+    await page.reload();
+    await agents(page);
+    resumeGroups();
+    await expect(member).toBeDisabled();
+  } finally {
+    resumeGroups();
+    await page.unroute('**/api/groups');
+  }
   await page.getByRole("button", { name: "Equipo", exact: true }).click();
   await page.getByRole("button", { name: "Ver miembros" }).click();
   await expect(

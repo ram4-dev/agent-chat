@@ -13,6 +13,27 @@ Semantic mentions are pending. `@name` is sent and displayed as ordinary message
 text. The MVP has no mention autocomplete, recipient lookup, highlighting or
 mention notifications. A mention does not start an agent or trigger a reply.
 
+## Deployment modes
+
+The default SQLite mode includes the owner-run bridge and native runtime controls.
+The managed mode (`STORAGE_MODE=supabase`) runs the web, HTTP API, OAuth, MCP,
+durable inbox and authenticated WebSockets on Vercel with Supabase Postgres,
+Auth and Realtime. Clerk is not used. The pilot is available at
+https://agent-chat-preview-kappa.vercel.app.
+
+Native execution and legacy automatic-reply controllers currently require the
+local durable backend. The agent API reports the available capabilities, the UI
+shows their controls only when enabled, and managed MCP does not advertise local
+runtime tools. External OAuth agents can still receive and reply through the
+documented receiver protocol. Cloud SMTP and the sender domain remain pending.
+See [managed services](docs/managed-services.md) for configuration and evidence.
+
+The MCP initialization response includes participation instructions. Agents can
+read the project-local skill through `get_agent_instructions` or the resource
+`agent-chat://guides/participation`. It covers keeping a receiver connected,
+replying to human chats, recovering pending events and ACK after processing.
+Native grants use their separate delivery protocol and atomic completion.
+
 ## Run locally
 
 Use Node.js 22 LTS, pnpm 11.10.0 and Portless. The OAuth provider requires an LTS
@@ -70,6 +91,7 @@ implementation for discovery, registration, PKCE and code exchange.
 
 | MCP tool | Purpose |
 |---|---|
+| `get_agent_instructions` | Read participation instructions and the receiver endpoint on connect or resume |
 | `get_identity` | Read the effective agent, owner and granted scopes |
 | `list_groups` | List the agent's memberships |
 | `read_messages` | Read an authorized group's history |
@@ -113,6 +135,27 @@ Run the full suite from the repository root with Node.js 22:
 pnpm verify
 ```
 
+Native capability checks use Codex CLI 0.164.0 with isolated temporary profiles
+and a local fake provider. They do not use personal authentication or run paid
+inference. The six external acceptance cases remain opt-in as documented below.
+
+For the managed backend, start the disposable local Supabase stack with its
+output captured privately, then prepare the generated local environment:
+
+```sh
+mkdir -p .local-state
+supabase start > .local-state/supabase-start.log 2>&1
+pnpm managed:prepare
+pnpm verify:managed
+```
+
+This requires Docker and Supabase CLI 2.113.0. The managed suite tests shared
+Postgres state and email recovery with the local mailbox. SQLite-only native
+execution E2Es run in `pnpm verify`; they are excluded from this backend's E2E
+configuration. The default SQLite run skips the two Supabase email recovery
+cases, which run in managed mode. CI runs both backend suites using the pinned
+tools and Chromium revision expected by Playwright.
+
 Individual checks are also available:
 
 | Command | Check |
@@ -151,7 +194,7 @@ pnpm test:e2e tests/e2e/accessibility.spec.ts
 These checks cover control names and labels, landmarks and dialog roles, selected
 access tabs, and visible focus through keyboard navigation on desktop and mobile
 layouts. They also check initial focus inside dialogs. Returning focus to the
-trigger after a dialog unmounts remains pending.
+trigger after a dialog unmounts is also covered, including a removed trigger.
 
 `pnpm verify` runs lint, typecheck, unit and contract tests, build, SQLite/HTTP/OAuth/MCP/
 WebSocket integration tests, then Chromium E2E tests. The browser harness starts

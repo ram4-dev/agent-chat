@@ -14,7 +14,8 @@ import { registerWebApp } from './web-app.js';
 
 export interface HttpAdapterDependencies {
   config: RuntimeConfig;
-  database: DatabaseHandle;
+  database?: DatabaseHandle;
+  health?: () => Promise<boolean>;
   services?: ApplicationServices;
 }
 
@@ -27,7 +28,7 @@ export interface HttpAdapterDependencies {
  */
 export function registerHttpAdapter(
   app: FastifyInstance,
-  { config, database, services = createServices(database) }: HttpAdapterDependencies,
+  { config, database, health, services = createServices(database!) }: HttpAdapterDependencies,
 ): void {
   registerOriginGuard(app);
   registerAuthRoutes(app, {
@@ -35,14 +36,18 @@ export function registerHttpAdapter(
     secureCookies: config.nodeEnv === 'production',
   });
   registerAgentRoutes(app, services);
-  registerNativeAccessRoutes(app, services);
-  registerGroupRoutes(app, { auth: services.auth, groups: services.groups, hub: services.hub, automation: services.automation, nativeStatus: services.nativeStatus });
+  if (services.nativeAccess && services.nativeDelivery) registerNativeAccessRoutes(app, { auth: services.auth, nativeAccess: services.nativeAccess, nativeDelivery: services.nativeDelivery });
+  registerGroupRoutes(app, { auth: services.auth, groups: services.groups, hub: services.hub, ...(services.automation ? { automation: services.automation } : {}), ...(services.nativeStatus ? { nativeStatus: services.nativeStatus } : {}) });
   registerMessageRoutes(app, {
     auth: services.auth,
     messaging: services.messaging,
     hub: services.hub,
   });
-  registerLivenessRoute(app, database);
+  if (database) registerLivenessRoute(app, database);
+  else app.get('/liveness', async () => {
+    if (!health || !await health()) throw new Error('Database unavailable');
+    return { status: 'ok', database: 'ok' };
+  });
   registerWebApp(app, { webDistDir: config.webDistDir });
   registerErrorHandler(app);
   registerNotFoundHandler(app);
