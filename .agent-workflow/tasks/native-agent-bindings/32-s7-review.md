@@ -34,3 +34,12 @@ Los412 PASS son evidencia del autor, no del reviewer. Servidor temporal de verif
 Revisión estática de36958cb contra dd57fba, HEAD e6991f0 solo documental. F1 y F2 cerrados de forma acotada. F3 parcial: con pausa, bloqueo externo y jobs locales vacíos desaparecía la indicación de pausa. Hallazgo medio S7-F3-r2. Hashes protegidos coincidentes y árbol limpio; sin suites ni servicios del reviewer.
 
 La corrección del autor amplía el aviso de pausa al bloqueo externo; el contenido ajeno sigue ausente. Regresión HTTP/modelo con binding pausado, blockedElsewhere=true y jobs=[] y comprobación de navegador de ambos indicadores simultáneos. El cierre independiente queda pendiente.
+
+## Solicitud r3
+
+Estado: en curso. Snapshot5d3afdd437f92640ab792b54667fa518bd33aab9 contra e6991f0. Revisión de solo lectura del fix S7-F3-r2 con brief original, findings, respuestas y alcance conservados. Codex gpt-6.1-sol, reasoningEffort=high/serviceTier=default, async/shared.
+
+- clientRequestId:native-bindings-s7-status-review-r3-20261024.
+- taskId:node:delegated-task:command%3Amcp%3A1bd8506e-58f0-4b1b-8ef4-39ee3ce5c936%3Adelegate-task%3Anative-bindings-s7-status-review-r3-20261024.
+
+Los412 PASS son evidencia del autor. Servidor temporal cerrado, servicios ajenos conservados. Sin activación real ni cambios OAuth/~/.hermes/mensajes/push/PR. El dictamen r3 sigue pendiente.
