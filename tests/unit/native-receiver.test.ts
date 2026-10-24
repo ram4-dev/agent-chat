@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import type { NativeDeliveryView } from '@agent-chat/contracts';
 import { processNativeNext, type NativeCallPort } from '../../apps/bridge/src/native/receiver';
 import type { NativeRuntimePort } from '../../apps/bridge/src/native/runtime';
-const delivery: NativeDeliveryView = { ticket: { eventId: 'e', claim: 'c', controllerId: 'controller', epoch: 1 }, bindingId: 'b', conversationGeneration: 1, targetId: 't', groupId: 'g', agentId: 'a', state: 'claimed', started: false, cancelStarted: false, startKey: 'key', runRef: null, conversationRef: null, incoming: { id: 'm', groupId: 'g', text: 'Incoming', createdAt: '', author: { kind: 'human', id: 'u', displayName: 'User' } }, result: null, receipt: null };
+const delivery: NativeDeliveryView = { bindingRevision: 1, ticket: { eventId: 'e', claim: 'c', controllerId: 'controller', epoch: 1 }, bindingId: 'b', conversationGeneration: 1, targetId: 't', groupId: 'g', agentId: 'a', state: 'claimed', started: false, cancelStarted: false, startKey: 'key', runRef: null, conversationRef: null, incoming: { id: 'm', groupId: 'g', text: 'Incoming', createdAt: '', author: { kind: 'human', id: 'u', displayName: 'User' } }, result: null, receipt: null };
 function fixture(onCall?: (name: string) => void) {
   const calls: string[] = []; let starts = 0;
   const control: NativeCallPort = { async call<T>(name: string): Promise<T> { calls.push(name); onCall?.(name); return (name === 'native_next' ? { delivery: { ...delivery } } : name === 'read_messages' ? { messages: [] } : {}) as T; } };

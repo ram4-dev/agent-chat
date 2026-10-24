@@ -8,7 +8,7 @@ import { createServices } from '../../apps/server/src/services';
 import { createNativeDeliveryModule } from '../../apps/server/src/modules/native-delivery';
 const databases: DatabaseHandle[] = [];
 afterEach(() => databases.splice(0).forEach(db => db.close()));
-function setup() {
+function setup(provider: 'hermes' | 'grok_bot' = 'hermes') {
   const db = createDatabase({ path: ':memory:', busyTimeoutMs: 1000 }); databases.push(db);
   migrateFromDirectory(db.sqlite, resolve('db/migrations'));
   const owner = randomUUID();
@@ -18,7 +18,7 @@ function setup() {
   const groupB = services.groups.createGroup({ userId: owner, name: 'B' }).group.id;
   const keys = generateKeyPairSync('ed25519'); const publicKey = keys.publicKey.export({ type: 'spki', format: 'pem' }).toString();
   const targetId = randomUUID();
-  services.nativeAccess.repository.registerTarget({ id: targetId, ownerUserId: owner, provider: 'hermes', connectorId: 'fixture', nativeRef: 'profile', contextMode: 'native_per_group' });
+  services.nativeAccess.repository.registerTarget({ id: targetId, ownerUserId: owner, provider, connectorId: 'fixture', nativeRef: 'profile', contextMode: 'native_per_group' });
   services.nativeAccess.setProofKey(owner, targetId, publicKey);
   db.sqlite.prepare('UPDATE native_runtime_targets SET capabilities_json=? WHERE id=?').run(JSON.stringify({ groupIsolation: 'verified', durableResults: 'verified', approvals: 'verified', toolCatalog: 'verified', nativeVisibility: 'verified' }), targetId);
   let time = Date.now(); const delivery = createNativeDeliveryModule(db.sqlite, services.nativeAccess, services, () => time);
@@ -27,7 +27,7 @@ function setup() {
     for (const groupId of [groupA, groupB]) services.groups.admitAgent({ userId: owner, groupId, agentId: agent.id });
     const client = randomUUID(); db.sqlite.prepare('INSERT INTO oauth_clients(client_id,client_name,redirect_uris) VALUES(?,?,?)').run(client, 'fixture', '[]');
     const connection = services.agents.createConnection({ agentId: agent.id, oauthClientId: client });
-    const binding = services.nativeAccess.createOwnedBinding(owner, { agentId: agent.id, targetId, groupIds: [groupA, groupB] });
+    const binding = services.nativeAccess.createOwnedBinding(owner, { agentId: agent.id, targetId, groupIds: provider === 'grok_bot' ? [groupA] : [groupA, groupB] });
     const challenge = services.nativeAccess.createChallenge(owner, { kind: 'automatic', connectionId: connection.id, bindingId: binding.id, revision: 1, targetId, scopes: ['native:read','native:claim','native:start','native:complete'] });
     const grant = services.nativeAccess.consumeChallenge(connection.id, challenge.challenge, { bindingId: binding.id, revision: 1, targetId });
     delivery.configureOwner(owner, binding.id, 1, true);
@@ -195,4 +195,41 @@ it('dispatches cancellation once without equating its acceptance with quiescence
   s.delivery.reconcile(s.proof(d));
   expect(s.delivery.get(s.first.connectionId, d.ticket.eventId).state).toBe('cancel_requested');
   expect(s.delivery.suppressOwner(s.owner, d.ticket.eventId).receipt?.disposition).toBe('suppressed');
+});
+
+it('Grok task begin is separate from wake dispatch, consumed once and fenced across restart', () => {
+  const s = setup('grok_bot'); const d = s.claim();
+  expect(() => s.delivery.grokBegin(s.first.connectionId, d.ticket, d.startKey)).toThrow();
+  s.delivery.begin(s.first.connectionId, d.ticket);
+  expect(() => s.delivery.grokBegin(s.first.connectionId, d.ticket, randomUUID())).toThrow();
+  expect(() => s.delivery.save(s.first.connectionId, d.ticket, s.result(d), s.proof(d, s.result(d)))).toThrow();
+  expect(s.delivery.grokBegin(s.first.connectionId, d.ticket, d.startKey).authorized).toBe(true);
+  expect(() => s.delivery.grokBegin(s.first.connectionId, d.ticket, d.startKey)).toThrow();
+  const controller = randomUUID(); const { epoch } = s.delivery.open(s.first.connectionId, controller);
+  const recovered = s.delivery.next(s.first.connectionId, controller, epoch).delivery!;
+  expect(() => s.delivery.grokBegin(s.first.connectionId, recovered.ticket, d.startKey)).toThrow();
+  const r = s.result(recovered); const evidence = s.proof(recovered, r);
+  s.delivery.save(s.first.connectionId, recovered.ticket, r, evidence);
+  expect(s.delivery.running(s.first.connectionId, recovered.ticket, evidence.data.runRef)).toEqual({ recorded: true });
+  expect(s.delivery.finish(s.first.connectionId, recovered.ticket).disposition).toBe('published');
+});
+it('Grok begin rejects owner pause, suppressed work, revoked membership and non-Grok runtimes', () => {
+  const suppressed = setup('grok_bot'); const sd = suppressed.claim(); suppressed.delivery.begin(suppressed.first.connectionId, sd.ticket);
+  suppressed.delivery.suppressOwner(suppressed.owner, sd.ticket.eventId);
+  expect(() => suppressed.delivery.grokBegin(suppressed.first.connectionId, sd.ticket, sd.startKey)).toThrow();
+  const other = setup(); const od = other.claim(); other.delivery.begin(other.first.connectionId, od.ticket);
+  expect(() => other.delivery.grokBegin(other.first.connectionId, od.ticket, od.startKey)).toThrow();
+  const s = setup('grok_bot'); const d = s.claim(); s.delivery.begin(s.first.connectionId, d.ticket);
+  s.delivery.configureOwner(s.owner, s.first.bindingId, 1, false);
+  expect(() => s.delivery.grokBegin(s.first.connectionId, d.ticket, d.startKey)).toThrow();
+  s.delivery.configureOwner(s.owner, s.first.bindingId, 1, true);
+  s.services.groups.removeAgentMember({ userId: s.owner, groupId: s.groupA, agentId: s.first.agentId });
+  expect(() => s.delivery.grokBegin(s.first.connectionId, d.ticket, d.startKey)).toThrow();
+});
+
+it('keeps a Grok binding disabled when it covers more than one group', () => {
+  const s = setup('grok_bot');
+  s.delivery.configureOwner(s.owner, s.first.bindingId, 1, false);
+  const updated = s.services.nativeAccess.repository.replaceVersion({ ownerUserId: s.owner, bindingId: s.first.bindingId, expectedRevision: 1, targetId: s.targetId, groupIds: [s.groupA, s.groupB] });
+  expect(() => s.delivery.configureOwner(s.owner, s.first.bindingId, updated.revision, true)).toThrow();
 });

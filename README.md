@@ -340,3 +340,8 @@ The installed-Hermes capability E2E and its requirements are documented in
 [Native runtime capabilities](docs/native-runtime-capabilities.md).
 
 The Hermes native profile adapter, recovery plugin, controller configuration and isolated E2E checks are documented in [Hermes native adapter](docs/hermes-native-adapter.md). Personal-profile activation remains pending.
+
+The Grok webhook notification adapter and native return protocol are documented in
+[Grok notifications](docs/grok-notifications.md). Its deterministic E2E uses a local
+fake webhook; real activation remains gated on native terminal evidence and a
+separate automatic grant. Existing OAuth connections are unchanged.

@@ -82,3 +82,9 @@ Lint/typecheck/build/diff check PASS;153 unit+15 contratos+193 integración+30 E
 Revisión r1 encontró major de autor y minor de retención ociosa. El cliente/fingerprint ahora envían author; el E2E observa _turn_author en AIAgent original y comprueba IDs exactos de ambos humanos en la misma sesión, también tras reinicio. Mantenimiento horario elimina cuerpos/pruebas confirmados vencidos sin reinicio, preserva pendientes y tombstones, y se detiene en close. Regresión de ocho días con temporizadores controlados y comprobación directa de SQLite.
 
 Lint/typecheck/build/diff check PASS;153 unit+15 contratos+193 integración+30 E2E=391 PASS, un skip legacy real por opt-in. Suite E2E completa2.2min, DB nueva native-s4-r2-verification.db, Portless agent-chat-native-s4-r2-check. Detalles en20-s4-review-fixes.md. Revisión independiente r2 pendiente; aceptación personal y S0 global permanecen pendientes.
+
+## S5: notificaciones webhook de Grok
+
+Implementación aislada en feat/grok-notifications desde40ab8b8. Journal de despacho FULL/consumo único, envelope opaco, HTTPS/DNS/IP/TLS restringidos, native_grok_begin remoto separado, callbacks nativos durables y publicación+ACK existentes. Prueba desde navegador con supervisor real y webhook falso, duplicados, respuesta perdida, B vacío, pausa y silencio. Guía docs/grok-notifications.md y plantilla integrations/grok/agent-chat-routine.md.
+
+Lint/typecheck/build/diff check PASS;159 unit+15 contratos+199 integración+26 E2E=399 PASS,6 skips explícitos para no tocar Hermes ni usar modelo real. E2E final45.8s. Primer intento tuvo un timeout de readiness en el servidor temporal de un test nativo existente; se mejoró sincronización/diagnóstico y pasó la repetición completa sin aumentar timeouts. Evidencia y límites en27-s5-verification.md. Activación real bloqueada por decisiones/capacidades de26; conexiones reales y producción intactas. Revisión independiente pendiente.

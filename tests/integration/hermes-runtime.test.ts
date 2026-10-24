@@ -23,7 +23,7 @@ it('Hermes adapter preserves native configuration, recovers with an empty journa
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No test endpoint');
   const config = { targetId: 'target', profileRef: 'alpha', origin: `http://127.0.0.1:${address.port}`, token: 'synthetic', signingKey: keys.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString() };
-  const delivery: NativeDeliveryView = { ticket: { eventId: 'event', controllerId: 'controller', claim: 'claim', epoch: 1 }, targetId: 'target', bindingId: 'binding', agentId: 'agent', groupId: 'group', conversationGeneration: 2, conversationRef: null, state: 'start_uncertain', started: true, cancelStarted: false, startKey: 'start-one', runRef: null, result: null, receipt: null, incoming: { id: 'message', groupId: 'group', text: 'hello', createdAt: '', author: { kind: 'human', id: 'human', displayName: 'Person' } } };
+  const delivery: NativeDeliveryView = { bindingRevision: 1, ticket: { eventId: 'event', controllerId: 'controller', claim: 'claim', epoch: 1 }, targetId: 'target', bindingId: 'binding', agentId: 'agent', groupId: 'group', conversationGeneration: 2, conversationRef: null, state: 'start_uncertain', started: true, cancelStarted: false, startKey: 'start-one', runRef: null, result: null, receipt: null, incoming: { id: 'message', groupId: 'group', text: 'hello', createdAt: '', author: { kind: 'human', id: 'human', displayName: 'Person' } } };
   const query = { ...delivery, eventId: 'event' };
   const signal = new AbortController().signal;
   vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });

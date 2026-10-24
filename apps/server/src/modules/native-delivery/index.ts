@@ -9,7 +9,7 @@ import { runImmediateTransaction } from '../../persistence/client.js';
 interface Row {
   event_id: string; binding_id: string; binding_revision: number; target_id: string; agent_id: string; group_id: string;
   grant_id: string; controller_id: string; controller_epoch: number; claim: string; start_key: string; started: number;
-  state: string; cancel_started: number; native_run_ref: string | null; proof_public_key: string; terminal_confirmed: number; owner_suppressed: number;
+  state: string; provider_started: number; cancel_started: number; native_run_ref: string | null; proof_public_key: string; terminal_confirmed: number; owner_suppressed: number;
   evidence_hash: string | null; result_hash: string | null; result_text: string | null; decision: NativeResult['decision'] | null; conversation_ref: string | null;
   disposition: 'published' | 'no_reply' | 'suppressed' | null; message_id: string | null;
 }
@@ -48,7 +48,7 @@ export function createNativeDeliveryModule(sqlite: Database.Database, access: Na
   function view(r: Row): NativeDeliveryView {
     const source = r.state !== 'done' ? sqlite.prepare('SELECT message_id FROM inbox_events WHERE id=?').get(r.event_id) as { message_id: string } | undefined : undefined;
     const mapping = sqlite.prepare('SELECT generation FROM native_conversations WHERE binding_id=? AND revision=? AND group_id=? ORDER BY generation DESC LIMIT 1').get(r.binding_id, r.binding_revision, r.group_id) as { generation: number };
-    return { conversationGeneration: mapping.generation, ticket: { eventId: r.event_id, claim: r.claim, epoch: r.controller_epoch, controllerId: r.controller_id },
+    return { bindingRevision: r.binding_revision, conversationGeneration: mapping.generation, ticket: { eventId: r.event_id, claim: r.claim, epoch: r.controller_epoch, controllerId: r.controller_id },
       bindingId: r.binding_id, targetId: r.target_id, agentId: r.agent_id, groupId: r.group_id,
       incoming: source ? ports.inbox.eventForMessage(r.agent_id, source.message_id)?.message ?? null : null,
       state: r.state, started: r.started === 1, cancelStarted: r.cancel_started === 1, startKey: r.start_key, runRef: r.native_run_ref,
@@ -98,6 +98,7 @@ export function createNativeDeliveryModule(sqlite: Database.Database, access: Na
           const key = sqlite.prepare('SELECT proof_public_key FROM native_runtime_targets WHERE id=?').get(target.id) as { proof_public_key: string | null };
           if (!key.proof_public_key || Object.values(target.capabilities).some(status => status !== 'verified')) throw fail();
           const groups = sqlite.prepare('SELECT group_id FROM native_binding_groups WHERE binding_id=? AND revision=? AND enabled=1').all(bindingId, binding.revision) as { group_id: string }[];
+          if (target.provider === 'grok_bot' && groups.length !== 1) throw fail();
           if (!groups.length || !ports.agents.isActiveAgent(binding.agentId) || groups.some(g => !ports.groups.listGroupsForAgent(binding.agentId).some(m => m.group.id === g.group_id))) throw fail();
         }
         sqlite.prepare('UPDATE native_bindings SET enabled=? WHERE id=?').run(value ? 1 : 0, bindingId);
@@ -173,9 +174,21 @@ export function createNativeDeliveryModule(sqlite: Database.Database, access: Na
         return { state: row(eventId)!.state };
       });
     },
+    grokBegin(connectionId: string, ticket: NativeTicket, startKey: string) {
+      return tx(() => {
+        const r = claimed(connectionId, ticket, 'native:start'); enabled(r.binding_id);
+        const target = sqlite.prepare('SELECT provider FROM native_runtime_targets WHERE id=?').get(r.target_id) as { provider: string };
+        if (target.provider !== 'grok_bot' || !r.started || r.provider_started || r.start_key !== startKey || r.owner_suppressed ||
+            !['start_uncertain','running','awaiting_approval','needs_review'].includes(r.state) || !allowedSender(r)) throw fail();
+        // Separate from webhook dispatch: duplicates and delayed wakes cannot obtain another task start.
+        sqlite.prepare('UPDATE native_deliveries SET provider_started=1 WHERE event_id=?').run(r.event_id);
+        return { authorized: true, delivery: view(row(r.event_id)!) };
+      });
+    },
     running(connectionId: string, ticket: NativeTicket, runRef: string) {
       return tx(() => {
         const r = claimed(connectionId, ticket, 'native:start');
+        if (['result_saved','done'].includes(r.state) && r.native_run_ref === runRef) return { recorded: true };
         if (!r.started || !['start_uncertain','running','awaiting_approval'].includes(r.state) || (r.native_run_ref && r.native_run_ref !== runRef)) throw fail();
         sqlite.prepare("UPDATE native_deliveries SET state='running',native_run_ref=? WHERE event_id=?").run(runRef, r.event_id);
         return { recorded: true };
@@ -192,6 +205,8 @@ export function createNativeDeliveryModule(sqlite: Database.Database, access: Na
     save(connectionId: string, ticket: NativeTicket, result: NativeResult, evidence: NativeTerminalProof) {
       return tx(() => {
         const r = claimed(connectionId, ticket, 'native:complete');
+        const target = sqlite.prepare('SELECT provider FROM native_runtime_targets WHERE id=?').get(r.target_id) as { provider: string };
+        if (target.provider === 'grok_bot' && !r.provider_started) throw fail();
         proof(r, evidence);
         const hash = digest(result);
         if (evidence.data.terminal !== 'completed' || evidence.data.resultHash !== hash ||

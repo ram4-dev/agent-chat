@@ -23,7 +23,9 @@ test('native supervisor recovers after dispatch, a lost publication response and
     const server = child('portless', [`native-delivery-${randomUUID().slice(0,8)}`, process.execPath, 'tests/fixtures/native-delivery/server.mjs'], { ...process.env, DATABASE_PATH: serverDb, OIDC_JWKS_PATH: join(root, 'oidc-jwks.json'), LOG_LEVEL: 'warn' }); children.push(server.process);
     await expect.poll(() => server.output()).toMatch(/PORTLESS_URL=https?:\/\//);
     const origin = /PORTLESS_URL=(https?:\/\/\S+)/.exec(server.output())![1]!;
-    await expect.poll(async () => { try { return (await page.request.get(`${origin}/liveness`)).ok(); } catch { return false; } }).toBe(true);
+    // Portless announces its mapping before the child has listened; wait for the owned server's readiness first.
+    await expect.poll(() => server.output()).toContain('"fixtureServerReady":true');
+    await expect.poll(async () => { try { return (await page.request.get(`${origin}/liveness`)).ok(); } catch { return false; } }).toBe(true).catch(error => { throw new Error(`Owned native fixture startup failed: ${server.output().slice(-3000)}`, { cause: error }); });
     await page.goto(origin); await signUp(page, 'native-supervisor@example.com', 'Native E2E');
     const identity = await authorizeAgent(page, origin);
     await page.goto(origin); const groupId = await createGroup(page, 'Supervisor nativo'); await addAgent(page, 'Scout');

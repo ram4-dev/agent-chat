@@ -21,7 +21,7 @@ const server = createServer(async (request, response) => {
     }
     const upstream = await globalThis.fetch(url, { method: request.method, headers, signal: cancelled.signal, ...(body.length ? { body } : {}) });
     const content = Buffer.from(await upstream.arrayBuffer());
-    if (tool === 'native_finish' && process.env.NATIVE_LOST_RESPONSE && !existsSync(process.env.NATIVE_LOST_RESPONSE)) {
+    if (tool === (process.env.NATIVE_DROP_TOOL ?? 'native_finish') && process.env.NATIVE_LOST_RESPONSE && !existsSync(process.env.NATIVE_LOST_RESPONSE)) {
       // The upstream has committed and replied; discard only its first response.
       writeFileSync(process.env.NATIVE_LOST_RESPONSE, 'lost'); response.destroy(); return;
     }

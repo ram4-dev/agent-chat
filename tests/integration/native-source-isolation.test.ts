@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { mkdtemp, writeFile, readFile, rm, symlink, mkdir, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -34,8 +34,12 @@ it('archives committed source without private env, local modifications, untracke
 
 it('cleans temporary Hermes discovery data when discovery rejects', async () => {
   const parent = await mkdtemp(join(tmpdir(), 'native-discovery-cleanup-'));
+  const bin = join(parent, 'bin'); await mkdir(bin);
+  await writeFile(join(bin, 'hermes'), '#!/bin/sh\nexit 1\n', { mode: 0o700 });
+  const homes = join(parent, 'homes'); await mkdir(homes);
+  vi.stubEnv('PATH', `${bin}:${process.env['PATH'] ?? ''}`);
   try {
-    await expect(nativeHermes('/nonexistent/native-hermes-source', parent)).rejects.toThrow('Isolated Hermes discovery failed');
-    expect(await readdir(parent)).toEqual([]);
-  } finally { await rm(parent, { recursive: true, force: true }); }
+    await expect(nativeHermes('/nonexistent/native-hermes-source', homes)).rejects.toThrow('Isolated Hermes discovery failed');
+    expect(await readdir(homes)).toEqual([]);
+  } finally { vi.unstubAllEnvs(); await rm(parent, { recursive: true, force: true }); }
 });
