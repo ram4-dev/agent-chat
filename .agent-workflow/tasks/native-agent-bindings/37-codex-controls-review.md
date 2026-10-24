@@ -1,4 +1,6 @@
-# Revisión independiente de controles, ensayo y gate Codex r1
+# Revisiones independientes de controles, ensayo y gate Codex
+
+Estado actual: P1/P2/P3 cerrados estáticamente en r2, sin nuevos hallazgos. Los estados pendientes de abajo forman parte del registro histórico de las rondas.
 
 R1 completada: P1 destino con trim, P2 error fuera del diálogo y P3 reserva retenida al fallar. Correcciones del autor en curso. Snapshot622156f1be2f4d8c26e515ebb22ea2fdf7f75da4 contra2e04ceb, rama feat/codex-native-controls, worktree aislado registrado en35. Solo lectura, Codex gpt-6.1-sol, reasoningEffort=high/serviceTier=default, async/shared.
 
@@ -26,3 +28,12 @@ En curso, sin dictamen. Snapshot8633c66d8e0b5375878d827efad5f808537715a2 contra8
 - taskId:node:delegated-task:command%3Amcp%3A1bd8506e-58f0-4b1b-8ef4-39ee3ce5c936%3Adelegate-task%3Anative-bindings-codex-controls-review-r2-20261024.
 
 416 PASS y6 skips son evidencia del autor. Servidor temporal cerrado, servicios previos conservados. S6 automático y aceptaciones reales siguen pendientes; sin OAuth/~/.hermes/mensajes/push/PR.
+
+
+## Dictamen r2 recibido: cierre del incremento
+
+Sin nuevos hallazgos concretos sobre8633c66d8e0b5375878d827efad5f808537715a2 contra81fa746. P1 alto cerrado: temporal privado, validación, modo0600 y publicación por link sin reemplazo. P2 medio cerrado: alert dentro del diálogo, exigido por E2E tras409. P3 bajo cerrado: finally sobre apertura/backup y limpieza exclusiva del temporal, con regresión de fuentes inválidas y reintento.
+
+Reviewer verificó hashes protegidos inicio/cierre y snapshot, árbol limpio y diff-check PASS. HEAD0d71d14 era solo documental. Revisión exclusivamente estática, sin escrituras, suites o servicios.416 PASS y6 skips son evidencia del autor.
+
+No quedan hallazgos abiertos de estas dos rondas para controles y ensayo de migración. El marcador y módulo offline no autorizan producción. S6 automático sigue no implementado/no habilitado; Grok real y Hermes personal conservan sus pendientes. No es aprobación humana, aceptación real ni cierre global de S6/S7/S8.

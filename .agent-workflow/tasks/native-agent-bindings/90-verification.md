@@ -132,3 +132,9 @@ Lint/typecheck/build/diff-check PASS;165 unit+15 contratos+208 integración+27 E
 Revisión r1 de622156f encontró P1 destino recortado por SQLite, P2 error fuera del diálogo y P3 destino incompleto retenido. Copia en temporal privado con ruta validada, permisos0600 y publicación por enlace atómico sin reemplazo; limpieza exclusiva del temporal ante error. Regresión CLI de espacios, destino existente, fuentes inválidas, limpieza y reintento. Alert de acción ahora dentro del diálogo; E2E lo exige con selector del diálogo.
 
 Lint/typecheck/build/diff-check PASS;165 unit+15 contratos+209 integración+27 E2E=416 PASS,6 skips explícitos. E2E final1.3min, Portless agent-chat-codex-controls/Node22.23.3 y DB nueva codex-controls-review-fixes.db. Detalles en38-controls-review-fixes.md. Cierre independiente pendiente. S6 y Grok reales mantienen sus bloqueos, sin OAuth/~/.hermes/mensajes/push/PR.
+
+## Cierre independiente de controles y ensayo de copia/migración
+
+R2 cerró P1/P2/P3 por inspección estática de8633c66 contra81fa746, sin nuevos hallazgos. Hashes protegidos, árbol limpio y diff-check verificados; no ejecutó suites. Última suite del autor:416 PASS,6 skips explícitos, lint/typecheck/build PASS. El cierre documental no modifica código ni requiere repetir esa suite.
+
+Registro en37-codex-controls-review.md. Se cierra el incremento de controles/consentimiento y ensayo aislado; S6 automático sigue bloqueado/no implementado, con evidencia en docs/codex-native-status.md. Grok real y Hermes personal siguen pendientes. No se autoriza producción ni se declara cierre global. Sin push, PR, OAuth, ~/.hermes ni mensajes reales.
