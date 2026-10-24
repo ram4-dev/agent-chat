@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { authorizeAgent, mcpClient, payload } from './helpers/agent';
-import { signUp, createGroup, addAgent, selectGroup, send } from './helpers/ui';
-import type { NativeGrant } from '@agent-chat/contracts';
+import { signUp, createGroup, addAgent, selectGroup, send, agents } from './helpers/ui';
+import { GROUP_PATHS, type NativeGrant } from '@agent-chat/contracts';
 
 test('owner pairs separate interactive and automatic OAuth connections; browser sees explicit identity without consuming inbox', async ({ page, baseURL }) => {
   const origin = baseURL!;
@@ -31,12 +31,31 @@ test('owner pairs separate interactive and automatic OAuth connections; browser 
     const { events } = payload<{ events: { eventId: string }[] }>(await automatic.callTool({ name: 'get_inbox', arguments: {} }));
     expect(events.length).toBeGreaterThan(0);
     expect((await automatic.callTool({ name: 'ack_inbox', arguments: { event_id: events[0]!.eventId } })).isError).toBe(true);
-    const interactiveChallenge = await post('/api/native/pairings', { kind: 'interactive', connectionId: interactiveConnection.connectionId, scopes: ['native:read', 'native:send'], selections: [{ agentId: interactiveConnection.agentId, groupIds: [a] }] });
+    const { agent: secondIdentity } = await post('/api/agents', { name: 'Otra identidad' });
+    expect((await page.request.post(GROUP_PATHS.agentMember(a,secondIdentity.id), { headers: { origin } })).ok()).toBe(true);
+    await page.reload(); await agents(page);
+    await page.getByRole('button',{name:'Autorizar identidades para una sesión',exact:true}).click();
+    const consent=page.getByRole('dialog',{name:'Autorizar identidades para una sesión',exact:true});
+    await consent.getByLabel('Conexión de la sesión',{exact:true}).selectOption(interactiveConnection.connectionId);
+    await consent.getByRole('checkbox',{name:'Scout',exact:true}).check();
+    await consent.getByRole('checkbox',{name:'Otra identidad',exact:true}).check();
+    await page.screenshot({path:'.local-state/native-consent-selection.png',fullPage:true});
+    await page.route('**/api/native/pairings',route=>route.fulfill({status:503,json:{}}));
+    await consent.getByRole('button',{name:'Preparar permiso de lectura y envío'}).click();
+    await expect(consent.getByRole('alert')).toBeVisible();
+    await page.unroute('**/api/native/pairings');
+    await consent.getByRole('button',{name:'Preparar permiso de lectura y envío'}).click();
+    const interactiveChallenge={challenge:await consent.getByLabel('Código de asociación nativa',{exact:true}).inputValue()};
+    await consent.getByRole('button',{name:'Cerrar autorización'}).click();
+    await selectGroup(page,'Native A');
     const { grant } = payload<{ grant: NativeGrant }>(await interactive.callTool({ name: 'pair_native', arguments: { challenge: interactiveChallenge.challenge } }));
+    expect(grant.selections.map(s=>s.agentId).sort()).toEqual([interactiveConnection.agentId,secondIdentity.id].sort());
     expect((await interactive.callTool({ name: 'send_message', arguments: { group_id: a, text: 'Sin identidad', idempotency_key: randomUUID() } })).isError).toBe(true);
     expect((await interactive.callTool({ name: 'send_message', arguments: { as_agent_id: interactiveConnection.agentId, group_id: b, text: 'Grupo ajeno al grant', idempotency_key: randomUUID() } })).isError).toBe(true);
     payload(await interactive.callTool({ name: 'send_message', arguments: { as_agent_id: interactiveConnection.agentId, group_id: a, text: 'Respuesta interactiva con identidad explícita', idempotency_key: 'native-e2e-interactive' } }));
     await expect(page.getByRole('list', { name: 'Mensajes' })).toContainText('Respuesta interactiva con identidad explícita');
+    payload(await interactive.callTool({ name: 'send_message', arguments: { as_agent_id: secondIdentity.id, group_id: a, text: 'Mensaje de la segunda identidad', idempotency_key: 'native-second-identity' } }));
+    await expect(page.getByRole('list', { name: 'Mensajes' })).toContainText('Mensaje de la segunda identidad');
     await page.screenshot({ path: '.local-state/native-access-02-explicit-identity.png', fullPage: true });
     const remaining = payload<{ events: { eventId: string }[] }>(await automatic.callTool({ name: 'get_inbox', arguments: {} }));
     expect(remaining.events.map(e => e.eventId)).toContain(events[0]!.eventId);

@@ -65,6 +65,20 @@ test('owner sees native coverage, capabilities, empty activity and recoverable s
     await expect(panel.getByRole('status')).toHaveText(label);
     await expect(panel.getByText('Respuestas nativas pausadas. El turno pendiente conserva su estado hasta confirmar su finalización.')).toBeVisible();
     await expect(panel.getByRole('list').getByText(label, { exact: true })).toBeVisible();
+    if(pending==='cancel_requested') {
+      const cancelPath='**/api/native/deliveries/synthetic-pending/cancel';
+      await page.route(cancelPath,route=>route.fulfill({status:409,json:{error:'conflict'}}));
+      await panel.getByRole('button',{name:'Pedir cancelación',exact:true}).click();
+      const dialog=page.getByRole('dialog',{name:'Pedir cancelación del turno',exact:true});
+      await dialog.getByRole('button',{name:'Confirmar acción'}).click();
+      await expect(panel.getByRole('alert')).toContainText('No pudimos aplicar el cambio');
+      await dialog.getByRole('button',{name:'Volver',exact:true}).click(); await page.unroute(cancelPath);
+      const suppressPath='**/api/native/deliveries/synthetic-pending/suppress';
+      await page.route(suppressPath,route=>route.fulfill({json:{state:'needs_review',receipt:null}}));
+      await panel.getByRole('button',{name:'Confirmar sin publicar',exact:true}).click();
+      await page.getByRole('dialog',{name:'Confirmar sin publicar',exact:true}).getByRole('button',{name:'Confirmar acción'}).click();
+      await expect(page.getByRole('dialog')).toHaveCount(0); await page.unroute(suppressPath);
+    }
     await page.unroute(endpoint);
   }
   await page.route(endpoint, route => route.fulfill({ json: { native: { ...snapshot, blockedElsewhere: true, jobs: [] } } }));

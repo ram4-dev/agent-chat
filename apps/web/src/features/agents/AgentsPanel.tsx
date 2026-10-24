@@ -8,6 +8,7 @@ import {
 } from "@agent-chat/contracts";
 import { Avatar, CopyField, Icon, Modal, errorMessage } from "../../shared/ui";
 
+import { NativeConsentPanel } from "./NativeConsentPanel";
 import { NativeAutomationPanel } from "./NativeAutomationPanel";
 import { AutomationPanel } from "./AutomationPanel";
 
@@ -188,6 +189,7 @@ export function AgentsPanel({
             </button>
           </div>
         )}
+        {agents && groupId && <NativeConsentPanel key={groupId} agents={agents} groupId={groupId} groupName={groupName ?? "este grupo"} groupAgentIds={groupAgentIds} />}
         <ul className="agent-grid" aria-label="Agentes propios">
           {agents?.map((agent) => (
             <li

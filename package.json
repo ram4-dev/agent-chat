@@ -19,7 +19,8 @@
     "dev": "pnpm build && portless agent-chat pnpm --filter @agent-chat/server start",
     "bridge:doctor": "pnpm --filter @agent-chat/bridge build && node apps/bridge/dist/doctor.js",
     "bridge:start": "node apps/bridge/dist/supervisor.js",
-    "bridge:capabilities": "pnpm --filter @agent-chat/bridge build && node apps/bridge/dist/native-capabilities.js"
+    "bridge:capabilities": "pnpm --filter @agent-chat/bridge build && node apps/bridge/dist/native-capabilities.js",
+    "bridge:codex-native-check": "pnpm --filter @agent-chat/bridge build && node apps/bridge/dist/native-codex-check.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

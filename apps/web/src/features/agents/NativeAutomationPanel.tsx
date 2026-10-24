@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Modal } from '../../shared/ui';
 import type { NativeStatusView, NativeCapabilities } from '@agent-chat/contracts';
 const providers = { grok_bot: 'Grok Bot', hermes: 'Hermes', codex: 'Codex', legacy_codex: 'Codex legacy' };
 const capabilityLabels: Record<keyof NativeCapabilities, string> = { groupIsolation: 'Contexto entre grupos', durableResults: 'Resultados durables', approvals: 'Aprobaciones nativas', toolCatalog: 'Herramientas del profile', nativeVisibility: 'Historial nativo' };
@@ -26,6 +27,14 @@ export function nativeJobLabel(job: NativeStatusView['jobs'][number]): string {
   return job.state === 'done' ? 'Finalizado sin recibo disponible' : job.state === 'result_saved' ? 'Resultado guardado; publicación pendiente' : job.state === 'needs_review' ? 'Revisión necesaria' : job.state === 'awaiting_approval' ? 'Esperando aprobación' : job.state === 'start_uncertain' ? 'Inicio pendiente de confirmar' : job.state === 'cancel_requested' ? 'Cancelación pendiente de verificar' : job.state === 'running' ? 'Procesamiento autorizado; resultado pendiente' : job.state === 'claimed' ? 'Mensaje reservado; inicio pendiente' : 'Entrega pendiente';
 }
 export function NativeAutomationPanel({ agentId, groupId, name }: { agentId: string; groupId: string; name: string }) {
+  const [pendingAction, setPendingAction] = useState<{ eventId: string; action: 'cancel' | 'suppress' }>();
+  const [busy, setBusy] = useState(false); const [feedback, setFeedback] = useState('');
+  async function mutate(path: string, method: string, body?: object) {
+    setBusy(true); setFeedback('');
+    try { const response = await fetch(path, { method, ...(body ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) }); if (!response.ok) throw new Error(); setPendingAction(undefined); setRetry(v => v + 1); }
+    catch { setFeedback('No pudimos aplicar el cambio. Revisá el estado y reintentá.'); }
+    finally { setBusy(false); }
+  }
   const [refreshing, setRefreshing] = useState(false);
   const [state, setState] = useState<NativeStatusView>(); const [error, setError] = useState(false); const [retry, setRetry] = useState(0);
   useEffect(() => {
@@ -55,6 +64,9 @@ export function NativeAutomationPanel({ agentId, groupId, name }: { agentId: str
     {error ? <><p role="alert">No pudimos consultar el estado nativo.</p><button className="button secondary" onClick={() => setRetry(value => value + 1)}>Reintentar estado nativo</button></> : <p role="status">{state ? refreshing ? 'Actualizando estado nativo…' : nativeStatusLabel(state) : 'Consultando estado nativo…'}</p>}
     {state && <>
       {!state.binding.enabled && (state.blockedElsewhere || state.jobs.some(job => job.state !== 'done')) && <p>Respuestas nativas pausadas. El turno pendiente conserva su estado hasta confirmar su finalización.</p>}
+      <p className="muted">Los controles de activación y pausa aplican a todos los grupos de esta revisión del receptor.</p>
+      <button className="button secondary" disabled={busy || !state.group.covered || (!state.binding.enabled && Object.values(state.target.capabilities).some(value => value !== 'verified'))} onClick={() => { void mutate(`/api/native/bindings/${state.binding.id}`, 'PATCH', { revision: state.binding.revision, enabled: !state.binding.enabled }); }}>{state.binding.enabled ? 'Pausar respuestas nativas' : 'Activar respuestas nativas'}</button>
+      {!state.binding.enabled && Object.values(state.target.capabilities).some(value => value !== 'verified') && <p>Para activar faltan capacidades verificadas del receptor.</p>}
       <dl>
         <dt>Bot o profile</dt><dd><code>{state.target.nativeRef}</code></dd>
         <dt>Conector</dt><dd>{state.target.connectorId}</dd>
@@ -69,6 +81,7 @@ export function NativeAutomationPanel({ agentId, groupId, name }: { agentId: str
         {state.jobs.length === 0 && <p>Todavía no hay entregas nativas en este grupo.</p>}
         <ol aria-label={`Actividad nativa de ${name}`}>{state.jobs.map(job => <li key={job.eventId}>
           <strong>{nativeJobLabel(job)}</strong>
+          {job.state !== 'done' && <div><button className="button secondary" disabled={busy} onClick={() => setPendingAction({ eventId: job.eventId, action: 'cancel' })}>Pedir cancelación</button><button className="button secondary" disabled={busy} onClick={() => setPendingAction({ eventId: job.eventId, action: 'suppress' })}>Confirmar sin publicar</button></div>}
           {job.contentExpired ? <p>Contenido vencido; recibo conservado.</p> : <>{job.input !== null && <p>Entrada: {job.input}</p>}{job.output && <p>Salida: {job.output}</p>}</>}
           {job.receipt?.messageId && <p>Mensaje: <code>{job.receipt.messageId}</code></p>}
           {job.runRef && <p>Ejecución: <code>{job.runRef}</code></p>}
@@ -76,5 +89,11 @@ export function NativeAutomationPanel({ agentId, groupId, name }: { agentId: str
         </li>)}</ol>
       </details>
     </>}
+    {feedback && <p role="alert">{feedback}</p>}
+    {pendingAction && <Modal title={pendingAction.action === 'cancel' ? 'Pedir cancelación del turno' : 'Confirmar sin publicar'} onClose={() => { if (!busy) setPendingAction(undefined); }}>
+      <p>{pendingAction.action === 'cancel' ? 'La solicitud no garantiza que el proceso haya terminado. El turno seguirá reservado hasta verificarlo.' : 'La entrega se confirmará sin publicar una respuesta. Un turno incierto conserva su reserva hasta verificar su finalización.'}</p>
+      <button className="button secondary" disabled={busy} onClick={() => setPendingAction(undefined)}>Volver</button>
+      <button className="button primary" disabled={busy} onClick={() => { void mutate(`/api/native/deliveries/${pendingAction.eventId}/${pendingAction.action}`, 'POST'); }}>Confirmar acción</button>
+    </Modal>}
   </section>;
 }

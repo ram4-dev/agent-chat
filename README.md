@@ -349,3 +349,8 @@ separate automatic grant. Existing OAuth connections are unchanged.
 The read-only native receiver panel, its access rules and the meaning of contact,
 processing and publication states are described in
 [Native notification status](docs/native-notification-status.md).
+
+Native controls and the disposable-copy migration rehearsal are described in
+[Native trial migration](docs/native-trial-migration.md). The installed Codex
+App Server currently rejects named profiles; its exact gate and verification
+commands are recorded in [Codex native status](docs/codex-native-status.md).

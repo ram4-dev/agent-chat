@@ -118,3 +118,11 @@ Lint/typecheck/build/diff check PASS;165 unit+15 contratos+205 integración+27 E
 R3 cerró S7-F3-r2 por inspección estática de5d3afdd contra e6991f0, sin nuevos hallazgos. F1/F2 mantienen cierre r2. Hashes protegidos y árbol limpio verificados por reviewer; no ejecutó suites. Última suite del autor:412 PASS,6 skips explícitos, lint/typecheck/build PASS. Este cierre documental no cambia código ni requiere repetir esa suite.
 
 Registro completo en32-s7-review.md. Se cierra este incremento de consulta; quedan S6, restoS7/S8 y aceptación real. Grok continúa sin habilitar hasta demostrar terminal/challenge/red y definir operación24/7. Sin push, PR, OAuth, ~/.hermes ni mensajes reales.
+
+## S6: gate Codex y trabajo independiente de controles/migración
+
+Nueva rama feat/codex-native-controls desde2e04ceb, Worktrunk aislado. Codex0.164.0 App Server rechaza --profile; esquema no tiene selector y selector legacy también se rechaza. S6 automático permanece bloqueado: no se entrega adaptador que ignore el profile o suplante políticas/modelo. Diagnóstico sin inferencia y prueba de dos profiles CLI con proveedor falso/personas/herramientas distintas. Esto no acredita receptor nativo ni aceptación personal.
+
+Se completó trabajo independiente: controles nativos de activación/pausa y cancelación/supresión con confirmación/errores; consentimiento interactivo UI para varias identidades del grupo con conexión separada; ensayo de copia/migración/rollback con fuente readonly, guardas de quiescencia, publicación+ACK idempotentes y legado conservado y pausado. No se modifican OAuth existentes. Detalles en35/36 y docs/codex-native-status.md,docs/native-trial-migration.md.
+
+Lint/typecheck/build/diff-check PASS;165 unit+15 contratos+208 integración+27 E2E=415 PASS,6 skips explícitos (Hermes instalado/modelo real). E2E final1.2min con Node22.23.3, Portless agent-chat-codex-controls y DB nueva codex-controls-final-r2.db. Selección de dos identidades, errores/reintentos y controles probados en navegador; captura de consentimiento sin challenge inspeccionada y alineación de checkboxes corregida. Revisión independiente pendiente. Sin push/PR/OAuth/~/.hermes/mensajes reales. Grok real y decisiones de Rama permanecen anotados en26/36 y guía de migración.

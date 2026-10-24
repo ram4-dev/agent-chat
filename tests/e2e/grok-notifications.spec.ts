@@ -70,6 +70,11 @@ test('Grok wake-up from the browser waits for callback, survives restart and los
     await agents(page);
     const nativePanel = page.getByRole('region', { name: 'Receptor nativo de Scout', exact: true });
     await expect(nativePanel.getByRole('status')).toHaveText('Notificación aceptada; inicio del bot pendiente');
+    await nativePanel.getByRole('button',{name:'Pausar respuestas nativas'}).click();
+    await expect(nativePanel.getByRole('button',{name:'Activar respuestas nativas'})).toBeVisible();
+    await expect(nativePanel.getByText('Respuestas nativas pausadas. El turno pendiente conserva su estado hasta confirmar su finalización.')).toBeVisible();
+    await nativePanel.getByRole('button',{name:'Activar respuestas nativas'}).click();
+    await expect(nativePanel.getByRole('button',{name:'Pausar respuestas nativas'})).toBeVisible();
     await nativePanel.getByText('Ver actividad nativa', { exact: true }).click();
     await expect(nativePanel.getByText('Respuesta publicada', { exact: true })).toHaveCount(0);
     await selectGroup(page, 'Supervisor nativo');
