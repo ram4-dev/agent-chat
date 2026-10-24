@@ -2,7 +2,7 @@
 
 The adapter connects Agent Chat to the API server of one explicitly selected Hermes profile. It sends native runs without overriding the profile's model, instructions, toolset or approval policy. Its session key is `agent-chat:<binding>:<group>:<generation>`; participants in a group share that session while their real author IDs are preserved through the native `author` request field.
 
-This implementation is under review. Production activation and acceptance with an owner-selected profile remain pending. The automated tests use Hermes source at `d923a5eb487a17c0a68801bba9ef0f56c81040a8`, disposable profiles and a fake inference provider. They do not establish compatibility with other Hermes releases or prove continuous availability of a personal Mac.
+Independent static review of the isolated adapter is complete. Production activation and acceptance with an owner-selected profile remain pending. The automated tests use Hermes source at `d923a5eb487a17c0a68801bba9ef0f56c81040a8`, disposable profiles and a fake inference provider. They do not establish compatibility with other Hermes releases or prove continuous availability of a personal Mac.
 
 ## Recovery plugin
 

@@ -64,3 +64,28 @@ it('Hermes adapter preserves native configuration, recovers with an empty journa
     profileRef = 'wrong-profile'; await expect(runtime.describe()).rejects.toThrow('not verified');
   } finally { await runtime.close(); expect(vi.getTimerCount()).toBe(0); vi.useRealTimers(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(root, { recursive: true, force: true }); }
 });
+
+it.each([
+ ['awaiting_approval','reply','pending output','awaiting_approval'],
+ ['cancelled','reply','partial output','unknown'],
+ ['failed','reply','partial output','unknown'],
+ ['interrupted','reply','partial output','unknown'],
+ ['completed','reply','','unknown'],
+ ['completed','no_reply','unexpected body','unknown'],
+] as const)('does not sign or recover an unconfirmed Hermes result: %s/%s',async(state,decision,text,expected)=>{
+ const root=await mkdtemp(join(tmpdir(),'hermes-unconfirmed-'));const keys=generateKeyPairSync('ed25519');let posts=0;
+ const server=createServer((request,response)=>{
+  if(request.method==='POST')posts++;
+  response.setHeader('content-type','application/json');response.end(JSON.stringify(request.url?.endsWith('/capabilities')?{protocol:1,profileRef:'alpha',supportedSource:true,durable:true,readOnlyKeyLookup:true,normalCompletionQuiescent:true,cancelQuiescence:false}:{state,profileRef:'alpha',runRef:'run-one',decision,text}));
+ });
+ let runtime:Awaited<ReturnType<typeof createHermesRuntime>>|undefined;
+ try{
+  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const address=server.address();if(!address||typeof address==='string')throw new Error('No fixture endpoint');
+  runtime=await createHermesRuntime({targetId:'target',profileRef:'alpha',origin:`http://127.0.0.1:${address.port}`,token:'synthetic',signingKey:keys.privateKey.export({type:'pkcs8',format:'pem'}).toString()},root);
+  // Read-only recovery from an empty local journal must not create a run or trust partial output.
+  const query={eventId:'event',targetId:'target',startKey:'key',runRef:'run-one',bindingId:'binding',groupId:'group',conversationGeneration:1,conversationRef:null,incoming:{id:'message',groupId:'group',text:'Inbound',createdAt:'',author:{kind:'human' as const,id:'person',displayName:'Person'}}};
+  expect(await runtime.observe(query,new AbortController().signal)).toEqual({state:expected});
+  await expect(runtime.recoverResult(query,new AbortController().signal)).rejects.toThrow('unavailable');
+  expect(await runtime.unconfirmedResults!()).toEqual([]);expect(posts).toBe(0);expect(runtime.cancel).toBeUndefined();
+ }finally{await runtime?.close();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
+});

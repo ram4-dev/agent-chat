@@ -42,3 +42,27 @@ it('confirms a local result only after the server has returned its durable recei
   await expect(processNativeNext(failed, s.runtime, { consume: () => false }, 'controller', 1, 't', new AbortController().signal)).rejects.toThrow('lost response');
   expect(calls).toEqual([]);
 });
+
+it.each([
+  ['awaiting_approval', 'awaiting_approval'],
+  ['start_uncertain', 'unknown'],
+  ['cancel_requested', 'unknown'],
+] as const)('keeps %s blocked without generation, result recovery or publication', async (state, observed) => {
+  const s=fixture();const operations:{name:string;args:object}[]=[];
+  const control:NativeCallPort={async call<T>(name:string,args:object):Promise<T>{operations.push({name,args});return {delivery:{...delivery,started:true,state}} as T;}};
+  s.runtime.observe=async()=>({state:observed});
+  s.runtime.recoverResult=async()=>{throw new Error('Nonterminal observation must not recover output');};
+  const result=await processNativeNext(control,s.runtime,{consume:()=>{throw new Error('Spent authorization must not be consumed again');}},'controller',1,'t',new AbortController().signal);
+  expect(result).toBe('blocked');expect(s.starts()).toBe(0);
+  expect(operations.some(o=>['native_begin','native_running','native_save','native_finish','native_reconcile'].includes(o.name))).toBe(false);
+  if(state==='awaiting_approval')expect(operations).toContainEqual({name:'native_pending',args:{ticket:delivery.ticket,state:'awaiting_approval'}});
+  if(state==='cancel_requested')expect(operations.some(o=>o.name==='native_pending')).toBe(false);
+});
+it('reconciles terminal evidence after cancellation without publishing a completed reply',async()=>{
+ const s=fixture();const operations:string[]=[];
+ const control:NativeCallPort={async call<T>(name:string):Promise<T>{operations.push(name);return {delivery:{...delivery,started:true,cancelStarted:true,state:'cancel_requested'}} as T;}};
+ s.runtime.observe=async()=>({state:'terminal',proof:{data:{eventId:'e',targetId:'t',startKey:'key',runRef:'native-run',terminal:'completed',resultHash:'synthetic-result-digest'},signature:'synthetic-proof-forwarded-to-server-validation'}});
+ s.runtime.recoverResult=async()=>{throw new Error('Cancellation must not publish a result');};
+ expect(await processNativeNext(control,s.runtime,{consume:()=>false},'controller',1,'t',new AbortController().signal)).toBe('blocked');
+ expect(operations).toContain('native_reconcile');expect(operations).not.toContain('native_save');expect(operations).not.toContain('native_finish');expect(s.starts()).toBe(0);
+});

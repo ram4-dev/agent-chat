@@ -354,3 +354,8 @@ Native controls and the disposable-copy migration rehearsal are described in
 [Native trial migration](docs/native-trial-migration.md). The installed Codex
 App Server currently rejects named profiles; its exact gate and verification
 commands are recorded in [Codex native status](docs/codex-native-status.md).
+
+The six external E2E skips, their local contract coverage and the exact decisions
+needed for each remaining acceptance are listed in
+[External validation](docs/external-validation.md). Local tests do not replace
+installed-runtime or real-inference acceptance.
