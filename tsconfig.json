@@ -14,5 +14,5 @@
     "declaration": false,
     "sourceMap": false
   },
-  "include": ["tests/**/*.ts", "tests/**/*.tsx", "vitest.config.ts", "playwright.config.ts"]
+  "include": ["tests/**/*.ts", "tests/**/*.tsx", "src/**/*.ts", "vitest.config.ts", "playwright.config.ts", "playwright.managed.config.ts"]
 }

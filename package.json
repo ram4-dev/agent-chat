@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@11.10.0",
   "engines": {
-    "node": ">=22"
+    "node": "22.x"
   },
   "scripts": {
     "lint": "eslint .",
@@ -16,7 +16,12 @@
     "test:contracts": "vitest run --project contracts",
     "test:e2e": "playwright test",
     "verify": "pnpm lint && pnpm typecheck && pnpm test:unit && pnpm test:contracts && pnpm build && pnpm test:integration && pnpm test:e2e",
-    "dev": "pnpm build && portless agent-chat pnpm --filter @agent-chat/server start"
+    "dev": "pnpm build && portless agent-chat pnpm --filter @agent-chat/server start",
+    "managed:prepare": "node scripts/prepare-managed-local.mjs",
+    "test:e2e:managed": "playwright test --config=playwright.managed.config.ts",
+    "dev:managed": "pnpm build && portless agent-chat-managed node --env-file=.local-state/managed.env apps/server/dist/main.js",
+    "test:managed": "node --env-file=.local-state/managed.env node_modules/vitest/vitest.mjs run --project managed",
+    "verify:managed": "pnpm lint && pnpm typecheck && pnpm test:unit && pnpm test:contracts && pnpm build && pnpm test:integration && pnpm test:managed && pnpm test:e2e:managed"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -26,9 +31,13 @@
     "@types/ws": "^8.18.2",
     "drizzle-orm": "^0.45.4",
     "eslint": "^10.12.0",
+    "jose": "^6.2.12",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.71.2",
     "vitest": "^5.0.4",
     "ws": "^8.22.0"
+  },
+  "dependencies": {
+    "fastify": "^5.12.7"
   }
 }

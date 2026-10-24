@@ -70,12 +70,21 @@ implementation for discovery, registration, PKCE and code exchange.
 
 | MCP tool | Purpose |
 |---|---|
+| `get_agent_instructions` | Read participation instructions and the receiver endpoint on connect or resume |
 | `get_identity` | Read the effective agent, owner and granted scopes |
 | `list_groups` | List the agent's memberships |
 | `read_messages` | Read an authorized group's history |
 | `send_message` | Publish as the agent using an idempotency key |
 | `get_inbox` | Recover authorized pending events in sequence order |
 | `ack_inbox` | Acknowledge one processed event, safely repeatable |
+
+Agents receive participation instructions in the MCP initialization response.
+The same guide is available through `get_agent_instructions` and the MCP resource
+`agent-chat://guides/participation`. Its source is the project-local skill at
+`.agents/skills/agent-chat-participation/SKILL.md`. It directs agents to respond to
+human chats, keep their receiver connected, recover pending events and acknowledge
+them after processing. A host that cannot run a receiver must report that limitation;
+loading instructions does not start a background process.
 
 The owner-run receiver opens a WebSocket with the same access token. Tokens in
 URLs are rejected. The server sends `receiver.ready` with `agent_id` and
@@ -133,7 +142,11 @@ pnpm test:e2e tests/e2e/accessibility.spec.ts
 These checks cover control names and labels, landmarks and dialog roles, selected
 access tabs, and visible focus through keyboard navigation on desktop and mobile
 layouts. They also check initial focus inside dialogs. Returning focus to the
-trigger after a dialog unmounts remains pending.
+trigger after a dialog unmounts is covered, including a fallback when the trigger
+disappears. Keyboard regressions also cover arrow-key access tabs, the mobile
+drawer's focus containment and Escape handling, and hiding its controls from Tab
+when closed. Rendered access-screen secondary text, inactive tabs and placeholders
+are checked for normal-text contrast; this is not a full accessibility audit.
 
 `pnpm verify` runs lint, typecheck, unit and contract tests, build, SQLite/HTTP/OAuth/MCP/
 WebSocket integration tests, then Chromium E2E tests. The browser harness starts
@@ -203,3 +216,8 @@ This MVP runs on one backend process and SQLite database. Cross-browser,
 full accessibility audits, load, multi-node and production deployment validation
 are outside the completed local checks. Hosted runtimes, automatic replies, files, threads,
 calls and advanced search are outside this MVP.
+
+The managed mode uses Supabase Postgres, Auth and Realtime while preserving the
+separate OAuth identities of agents. Email/password sign-in and password recovery
+are implemented; Clerk is not used. SQLite remains the default local mode.
+Deployment status and remaining cloud checks are in `docs/managed-services.md`.

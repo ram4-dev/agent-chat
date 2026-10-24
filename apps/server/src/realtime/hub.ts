@@ -1,6 +1,6 @@
 import type { MessageView } from '@agent-chat/contracts';
 
-export type MessageListener = (message: MessageView) => void;
+export type MessageListener = (message: MessageView) => void | Promise<void>;
 
 export interface LiveDeliveryHub {
   /**
@@ -19,6 +19,7 @@ export interface LiveDeliveryHub {
   publishMessage(message: MessageView): void;
   subscribeMessages(listener: MessageListener): () => void;
   subscribeAgentState(listener: (agentId: string) => void): () => void;
+  publishAgentState(agentId: string): void;
   receiverCount(connectionId: string): number;
   receiverIsConnected(agentId: string): boolean;
   attachReceiver(agentId: string, connectionId: string, close: () => void): () => void;
@@ -40,10 +41,13 @@ export function createLiveDeliveryHub(): LiveDeliveryHub {
   const agentState = new Set<(agentId: string) => void>();
   const receivers = new Set<{ agentId: string; connectionId: string; close(): void }>();
   const changed = (agentId: string) => {
-    for (const listener of agentState) listener(agentId);
+    for (const listener of agentState) {
+      try { void Promise.resolve(listener(agentId)).catch(() => {}); } catch { /* Delivery is retried by the durable surfaces. */ }
+    }
   };
 
   return {
+    publishAgentState: changed,
     subscribeMessages(listener) {
       allMessages.add(listener);
       return () => { allMessages.delete(listener); };
@@ -90,7 +94,7 @@ export function createLiveDeliveryHub(): LiveDeliveryHub {
     publishMessage(message) {
       for (const listener of [...(listeners.get(message.groupId) ?? []), ...allMessages]) {
         try {
-          listener(message);
+          void Promise.resolve(listener(message)).catch(() => {});
         } catch {
           // One failing listener must not stop the others.
         }

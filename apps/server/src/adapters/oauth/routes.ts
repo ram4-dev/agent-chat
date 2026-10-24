@@ -32,6 +32,7 @@ type RawRequest = Parameters<ReturnType<Provider['callback']>>[0];
 export async function registerOidcRoutes(
   app: FastifyInstance,
   provider: Provider,
+  platformProxy = false,
 ): Promise<void> {
   const callback = provider.callback();
 
@@ -65,7 +66,7 @@ export async function registerOidcRoutes(
           // Koa has a boolean proxy setting. Enforce the narrower loopback trust
           // boundary before it sees forwarded headers from an external socket.
           const remote = request.raw.socket.remoteAddress;
-          if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(remote ?? '')) {
+          if (!platformProxy && !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(remote ?? '')) {
             for (const name of ['x-forwarded-proto', 'x-forwarded-host', 'x-forwarded-for', 'x-forwarded-port']) delete request.raw.headers[name];
           }
 

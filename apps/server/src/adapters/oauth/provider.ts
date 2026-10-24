@@ -1,12 +1,13 @@
 import { readFileSync } from 'node:fs';
-import Provider from 'oidc-provider';
+import Provider, { errors } from 'oidc-provider';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import type Database from 'better-sqlite3';
 import { LIMITS } from '@agent-chat/contracts';
 import { AGENT_SCOPES } from '../../modules/agents/index.js';
 import type { AgentsModule } from '../../modules/agents/index.js';
-import { createOidcAdapterFactory } from '../../persistence/oidc-adapter.js';
-import { readConnectionClaims } from './grant-claims.js';
+import { createSqliteOAuthStore, type OAuthStore } from '../../persistence/oauth-store.js';
+import type { AsyncPort } from '../../services.js';
+import { isAgentResource } from './resource.js';
 
 /** The paths the provider owns. They are registered explicitly on Fastify. */
 export const OIDC_ROUTE_PATHS = [
@@ -39,8 +40,9 @@ export interface OidcProviderOptions {
    */
   issuer: string;
   trustProxy?: boolean;
-  sqlite: Database.Database;
-  agents: AgentsModule;
+  sqlite?: Database.Database;
+  store?: OAuthStore;
+  agents: AsyncPort<AgentsModule>;
   /** Signing material; generated for local use when omitted. */
   jwks?: { keys: JWK[] };
   /** Cookie encryption keys. Omitted means a generated pair. */
@@ -62,20 +64,23 @@ export async function createOidcProvider({
   issuer,
   trustProxy = false,
   sqlite,
+  store: configuredStore,
   agents,
   jwks,
   cookieKeys,
   interactionsUrl,
   logLevel,
 }: OidcProviderOptions): Promise<Provider> {
+  if (!configuredStore && !sqlite) throw new Error('OAuth persistence is required');
+  const store = configuredStore ?? createSqliteOAuthStore(sqlite!);
   const provider = new Provider(issuer, {
-    adapter: createOidcAdapterFactory(sqlite, (grantId) => {
-      const claims = readConnectionClaims(sqlite, agents, grantId);
-      if (claims) agents.revokeCompromisedConnection(claims.connectionId);
+    adapter: store.adapterFactory(async (grantId) => {
+      const claims = await store.claims(grantId, agents);
+      if (claims) await agents.revokeCompromisedConnection(claims.connectionId);
     }) as never,
     findAccount: async (_ctx, accountId, token) => {
-      if (token?.grantId && readConnectionClaims(sqlite, agents, token.grantId) === undefined) return undefined;
-      const user = sqlite.prepare('SELECT id FROM users WHERE id = ?').get(accountId);
+      if (token?.grantId && (await store.claims(token.grantId, agents)) === undefined) return undefined;
+      const user = await store.hasUser(accountId);
       return user ? { accountId, claims: async () => ({ sub: accountId }) } : undefined;
     },
     clients: [],
@@ -107,12 +112,15 @@ export async function createOidcProvider({
         // resource granted at the authorization request is never applied to the
         // issued access token, so it stays opaque instead of carrying the agent.
         useGrantedResource: () => true,
-        getResourceServerInfo: (_ctx, resource) => ({
+        getResourceServerInfo: (_ctx, resource) => {
+          if (!isAgentResource(resource, issuer)) throw new errors.InvalidTarget();
+          return {
           scope: [...AGENT_SCOPES].join(' '),
-          audience: resource,
+          audience: issuer,
           accessTokenFormat: 'jwt',
           jwt: { sign: { alg: 'EdDSA' } },
-        }),
+          };
+        },
       },
     },
     // Every client is treated as public, so PKCE is the only proof of
@@ -157,7 +165,7 @@ export async function createOidcProvider({
         return {};
       }
 
-      const claims = readConnectionClaims(sqlite, agents, token.grantId);
+      const claims = (await store.claims(token.grantId, agents));
       return claims === undefined
         ? {}
         : { agent_id: claims.agentId, connection_id: claims.connectionId };

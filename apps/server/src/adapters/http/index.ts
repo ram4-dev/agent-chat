@@ -13,7 +13,8 @@ import { registerWebApp } from './web-app.js';
 
 export interface HttpAdapterDependencies {
   config: RuntimeConfig;
-  database: DatabaseHandle;
+  database?: DatabaseHandle;
+  health?: () => Promise<boolean>;
   services?: ApplicationServices;
 }
 
@@ -26,7 +27,7 @@ export interface HttpAdapterDependencies {
  */
 export function registerHttpAdapter(
   app: FastifyInstance,
-  { config, database, services = createServices(database) }: HttpAdapterDependencies,
+  { config, database, health, services = createServices(database!) }: HttpAdapterDependencies,
 ): void {
   registerOriginGuard(app);
   registerAuthRoutes(app, {
@@ -40,7 +41,11 @@ export function registerHttpAdapter(
     messaging: services.messaging,
     hub: services.hub,
   });
-  registerLivenessRoute(app, database);
+  if (database) registerLivenessRoute(app, database);
+  else app.get('/liveness', async () => {
+    if (!health || !await health()) throw new Error('Database unavailable');
+    return { status: 'ok', database: 'ok' };
+  });
   registerWebApp(app, { webDistDir: config.webDistDir });
   registerErrorHandler(app);
   registerNotFoundHandler(app);

@@ -113,3 +113,29 @@ it('agent credentials cannot mutate owner resources or choose another author', a
     expect(csrf.statusCode).toBe(403);
   } finally { await close(); }
 });
+
+it('MCP tools enforce the scopes embedded in the token, including inbox and sends', async () => {
+  const key = generateKeyPairSync('ed25519');
+  const jwk = { ...key.privateKey.export({ format: 'jwk' }), alg: 'EdDSA', use: 'sig', kid: 'scope-test' };
+  const h = await startHarness({ keys: [jwk] });
+  const owner = await agentToken(h, 'tool-scopes@example.com', 'Scoped');
+  const original = JSON.parse(Buffer.from(owner.token.split('.')[1]!, 'base64url').toString());
+  const header = Buffer.from(JSON.stringify({ alg: 'EdDSA', kid: 'scope-test' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({ ...original, scope: 'agent:read' })).toString('base64url');
+  const input = `${header}.${payload}`;
+  const token = `${input}.${sign(null, Buffer.from(input), key.privateKey).toString('base64url')}`;
+  const { client, close } = await connect(token, h);
+  try {
+    expect((await client.callTool({ name: 'list_groups', arguments: {} })).isError).not.toBe(true);
+    for (const request of [
+      { name: 'send_message', arguments: { group_id: 'not-a-member', text: 'Denied', idempotency_key: 'scope-denial' } },
+      { name: 'get_inbox', arguments: {} },
+      { name: 'ack_inbox', arguments: { event_id: 'not-an-event' } },
+    ]) {
+      const result = await client.callTool(request);
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([{ type: 'text', text: 'forbidden' }]);
+    }
+    expect((h.database.sqlite.prepare('SELECT count(*) AS total FROM messages').get() as { total: number }).total).toBe(0);
+  } finally { await close(); }
+});

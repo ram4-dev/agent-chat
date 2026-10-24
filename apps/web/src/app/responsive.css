@@ -9,7 +9,7 @@
   background: #f7f9f7;
   font-synthesis: none;
   --ink: #21352b;
-  --muted: #7b8780;
+  --muted: #58675e;
   --line: #e6ebe7;
   --green: #2c6248;
   --light-green: #edf5ee;
@@ -63,12 +63,13 @@ select {
 input:focus,
 textarea:focus,
 select:focus {
-  border-color: #5a8d70;
+  border-color: #3e7251;
   box-shadow: 0 0 0 3px #5a8d7015;
 }
 input::placeholder,
 textarea::placeholder {
-  color: #9ba59e;
+  color: #647168;
+  opacity: 1;
 }
 textarea {
   resize: vertical;
@@ -76,7 +77,7 @@ textarea {
 button:focus-visible,
 a:focus-visible,
 summary:focus-visible {
-  outline: 3px solid #86b39a;
+  outline: 3px solid #3f7754;
   outline-offset: 3px;
 }
 h1,
@@ -558,7 +559,7 @@ button {
   font-size: 12px;
   font-weight: 550;
   padding: 9px;
-  color: #89958b;
+  color: #5b6c5f;
 }
 .segmented .selected {
   background: #fff;
@@ -714,6 +715,10 @@ button {
 }
 .sidebar .icon-button {
   color: #779581;
+}
+.sidebar :is(button, input, a, summary):focus-visible {
+  outline: 3px solid #add4b9;
+  outline-offset: 3px;
 }
 .sidebar .icon-button:hover {
   background: #ffffff0a;
@@ -1090,12 +1095,12 @@ button {
   padding: 4px 5px;
 }
 .owner-label {
-  color: #75896e;
+  color: #536b4a;
   font-size: 10px;
 }
 .self-label {
   font-size: 10px;
-  color: #9ca89d;
+  color: #62725f;
 }
 .composer-area {
   padding: 15px 30px 16px;

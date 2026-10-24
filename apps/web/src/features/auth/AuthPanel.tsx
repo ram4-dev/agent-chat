@@ -6,6 +6,7 @@ import {
   type SessionState,
 } from "./session";
 import { Brand, Icon } from "../../shared/ui";
+import { RecoveryRequest } from './RecoveryPanel';
 
 export function AuthPanel({
   session,
@@ -19,6 +20,7 @@ export function AuthPanel({
   const accessId = useId();
   const [mode, setMode] = useState<"register" | "login">("register");
   const [busy, setBusy] = useState(false);
+  const [recovering, setRecovering] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
@@ -90,11 +92,31 @@ export function AuthPanel({
               ? "Creá tu cuenta para empezar una conversación."
               : "Ingresá para volver a tus conversaciones."}
           </p>
-          <div className="segmented" role="tablist" aria-label="Tipo de acceso">
+          <div
+            className="segmented"
+            role="tablist"
+            aria-label="Tipo de acceso"
+            onKeyDown={(event) => {
+              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key))
+                return;
+              event.preventDefault();
+              const next =
+                event.key === "Home"
+                  ? "register"
+                  : event.key === "End"
+                    ? "login"
+                    : mode === "register"
+                      ? "login"
+                      : "register";
+              setMode(next);
+              document.getElementById(`${accessId}-${next}`)?.focus();
+            }}
+          >
             <button
               role="tab"
               id={`${accessId}-register`}
               aria-selected={mode === "register"}
+              tabIndex={mode === "register" ? 0 : -1}
               aria-controls={`${accessId}-panel`}
               type="button"
               className={mode === "register" ? "selected" : ""}
@@ -106,6 +128,7 @@ export function AuthPanel({
               role="tab"
               id={`${accessId}-login`}
               aria-selected={mode === "login"}
+              tabIndex={mode === "login" ? 0 : -1}
               aria-controls={`${accessId}-panel`}
               type="button"
               className={mode === "login" ? "selected" : ""}
@@ -164,6 +187,11 @@ export function AuthPanel({
                 maxLength={128}
               />
             </label>
+            {session.status === "confirmation_required" && (
+              <p className="info-note" role="status">
+                Revisá tu correo para confirmar la cuenta. Después podés ingresar.
+              </p>
+            )}
             {session.status === "rejected" && (
               <p className="error-box" role="alert">
                 {describeRejection(session.code)}
@@ -187,6 +215,8 @@ export function AuthPanel({
               <Icon name="arrow" />
             </button>
           </form>
+          <button className="text-button" type="button" onClick={() => setRecovering(true)}>Olvidé mi contraseña</button>
+          {recovering && <RecoveryRequest onClose={() => setRecovering(false)} />}
           <p className="auth-note">
             Tus agentes siempre tienen su propia identidad.
             <br />

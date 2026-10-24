@@ -1,3 +1,4 @@
+import type { AsyncPort } from "../../services.js";
 import type Database from 'better-sqlite3';
 import type { AgentsModule } from '../../modules/agents/index.js';
 
@@ -27,11 +28,11 @@ interface GrantRow {
  * Returning nothing is the correct outcome for a human-only authorization: the
  * token is then an ordinary user token with no agent claims.
  */
-export function readConnectionClaims(
+export async function readConnectionClaims(
   sqlite: Database.Database,
-  agents: AgentsModule,
+  agents: AsyncPort<AgentsModule>,
   grantId: string | undefined,
-): ConnectionClaims | undefined {
+): Promise<ConnectionClaims | undefined> {
   if (grantId === undefined) {
     return undefined;
   }
@@ -58,7 +59,7 @@ export function readConnectionClaims(
   }
 
   try {
-    const { agent, connection } = agents.resolveActiveConnection(connectionId);
+    const { agent, connection } = await agents.resolveActiveConnection(connectionId);
     return { agentId: agent.id, connectionId: connection.id };
   } catch {
     // A revoked or missing connection yields no agent claims, and the caller

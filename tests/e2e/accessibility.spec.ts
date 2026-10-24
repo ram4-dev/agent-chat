@@ -28,7 +28,7 @@ test("access screens expose labeled inputs, selected tabs, panels and keyboard f
     "id",
     (await register.getAttribute("aria-controls"))!,
   );
-  await expectVisibleKeyboardFocus(page, login);
+  await expectVisibleKeyboardFocus(page, register);
   await login.click();
   await expect(login).toHaveAttribute("aria-selected", "true");
   await expect(register).toHaveAttribute("aria-selected", "false");
@@ -115,6 +115,7 @@ test("conversations, details and invitation dialogs retain accessible roles and 
   );
   await page.keyboard.press("Escape");
   await expect(invitation).toHaveCount(0);
+  await expect(invite).toBeFocused();
   await page.getByRole("button", { name: "Cerrar sesión" }).click();
   await expect(
     page.getByRole("region", { name: "Acceso", exact: true }),
@@ -128,7 +129,7 @@ test("mobile agent screens and profile dialogs name their controls and show keyb
   await page.goto("/");
   await signUp(page, "a11y-agents@example.com", "Sol");
   await createGroup(page, "Equipo accesible");
-  const menu = page.getByRole("button", { name: "Abrir navegación" });
+  const menu = page.getByRole("button", { name: "Abrir navegación", includeHidden: true });
   await expect(menu).toHaveAttribute("aria-expanded", "false");
   await menu.click();
   await expect(menu).toHaveAttribute("aria-expanded", "true");

@@ -13,3 +13,5 @@ test-results/
 *.db-wal
 *.db-shm
 .local-state/
+.vercel/
+src/vercel-assets.generated.js
