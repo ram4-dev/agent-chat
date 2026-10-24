@@ -51,3 +51,16 @@ export interface NativeDeliveryView {
   conversationGeneration: number; state: string; started: boolean; cancelStarted: boolean; startKey: string; runRef: string | null; conversationRef: string | null;
   incoming: MessageView | null; result: NativeResult | null; receipt: { disposition: 'published' | 'no_reply' | 'suppressed'; messageId: string | null } | null;
 }
+
+export interface NativeAgentSummary { bindingId: string; revision: number; provider: NativeProvider; enabled: boolean }
+export interface NativeStatusView {
+  binding: { id: string; revision: number; enabled: boolean };
+  target: Pick<NativeRuntimeTarget, 'provider' | 'connectorId' | 'nativeRef' | 'contextMode' | 'capabilities' | 'verifiedAt'>;
+  group: { id: string; covered: boolean };
+  controller: { presence: 'recent' | 'stale' | 'unknown'; authorized: boolean; lastContactAt: number | null };
+  blockedElsewhere: boolean;
+  observedAt: number;
+  jobs: { eventId: string; state: string; started: boolean; providerStarted: boolean; input: string | null; output: string | null;
+    decision: NativeResult['decision'] | null; receipt: NativeDeliveryView['receipt']; contentExpired: boolean;
+    runRef: string | null; conversationRef: string | null; createdAt: number; completedAt: number | null }[];
+}

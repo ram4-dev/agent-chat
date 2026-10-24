@@ -94,3 +94,9 @@ Lint/typecheck/build/diff check PASS;159 unit+15 contratos+199 integración+26 E
 R1 de7df1c25 encontró un minor documental:binding/revisión/target no son campos de get_identity. La plantilla y guía ahora verifican identidad/clase/scopes en esa herramienta y mapping/grupo en native_delivery. Fixture añade la consulta real por MCP y el E2E exige identity_verified en cada entrega sintética. Sin cambiar respuestas productivas o permisos.
 
 Lint/typecheck/build/diff check PASS;159 unit+15 contratos+199 integración+26 E2E=399 PASS,6 skip explícitos. E2E completo44.1s, DB nueva grok-r2-verification-20261024.db y Portless agent-chat-grok-r2-check. S5-F1 corregido por autor; sin inventar revisión independiente adicional. R1 sin hallazgos mayores. Activación real y decisiones de26 siguen pendientes; restricciones del usuario intactas.
+
+## S7: observabilidad nativa de consulta
+
+Incremento independiente desde737b60d en feat/native-notification-status. API del dueño con membresía actual, señal de controlador diferenciada de ejecución/entrega, panel en español con capacidades/cobertura/actividad y recibos, errores/vacíos/foco móvil. No habilita consumidores ni cambia conexiones. Detalles de alcance y evidencia en30-s7-observability-receipt.md,31-s7-observability-verification.md y docs/native-notification-status.md.
+
+Lint/typecheck/build/diff check PASS;162 unit+15 contratos+204 integración+27 E2E=408 PASS,6 skips explícitos (5 Hermes instalado,1 Codex real). E2E final48.6s con Portless agent-chat-native-status, Node22.23.3 y DB nueva. Capturas desktop/móvil/publicación inspeccionadas. Revisión independiente pendiente. S6 y resto de S7/S8 no se declaran bloqueados por Grok. Activación real sigue sujeta a26; sin OAuth/~/.hermes/mensajes reales/push/PR.

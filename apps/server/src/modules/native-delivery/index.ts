@@ -110,10 +110,14 @@ export function createNativeDeliveryModule(sqlite: Database.Database, access: Na
         const g = grant(connectionId);
         if (!g.scopes.includes('native:claim')) throw fail('forbidden');
         const current = sqlite.prepare('SELECT * FROM native_binding_controllers WHERE binding_id=?').get(g.bindingId) as { controller_id: string; grant_id: string; epoch: number } | undefined;
-        if (current?.controller_id === controllerId && current.grant_id === g.id) return { epoch: current.epoch };
+        if (current?.controller_id === controllerId && current.grant_id === g.id) {
+          sqlite.prepare('UPDATE native_binding_controllers SET last_contact_at=? WHERE binding_id=?').run(now(), g.bindingId);
+          return { epoch: current.epoch };
+        }
         const epoch = (current?.epoch ?? 0) + 1;
         sqlite.prepare(`INSERT INTO native_binding_controllers(binding_id,grant_id,controller_id,epoch) VALUES(?,?,?,?)
           ON CONFLICT(binding_id) DO UPDATE SET grant_id=excluded.grant_id,controller_id=excluded.controller_id,epoch=excluded.epoch`).run(g.bindingId, g.id, controllerId, epoch);
+        sqlite.prepare('UPDATE native_binding_controllers SET last_contact_at=? WHERE binding_id=?').run(now(), g.bindingId);
         return { epoch };
       });
     },
@@ -121,6 +125,7 @@ export function createNativeDeliveryModule(sqlite: Database.Database, access: Na
       return tx(() => {
         const g = grant(connectionId); controller(g, controllerId, epoch); enabled(g.bindingId!);
         if (!g.scopes.includes('native:claim') || !g.scopes.includes('native:read')) throw fail('forbidden');
+        sqlite.prepare('UPDATE native_binding_controllers SET last_contact_at=? WHERE binding_id=?').run(now(), g.bindingId);
         const active = sqlite.prepare("SELECT * FROM native_deliveries WHERE target_id=? AND state NOT IN ('queued','done')").get(g.targetId) as Row | undefined;
         if (active) {
           try { authorize(connectionId, active, 'native:claim'); access.requireAccess(connectionId, 'native:read', active.agent_id, active.group_id); }

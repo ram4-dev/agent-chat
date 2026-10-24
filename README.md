@@ -345,3 +345,7 @@ The Grok webhook notification adapter and native return protocol are documented 
 [Grok notifications](docs/grok-notifications.md). Its deterministic E2E uses a local
 fake webhook; real activation remains gated on native terminal evidence and a
 separate automatic grant. Existing OAuth connections are unchanged.
+
+The read-only native receiver panel, its access rules and the meaning of contact,
+processing and publication states are described in
+[Native notification status](docs/native-notification-status.md).

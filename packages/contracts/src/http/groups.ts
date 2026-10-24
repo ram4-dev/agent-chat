@@ -38,6 +38,7 @@ export interface HumanMember {
 }
 
 export interface AgentMember {
+  nativeReceiverConfigured?: boolean;
   receiverConnected?: boolean;
   kind: 'agent';
   id: string;
@@ -262,6 +263,7 @@ function parseMember(raw: unknown): Parsed<Member> {
     ok: true,
     value: {
       kind: 'agent',
+      ...(typeof raw['nativeReceiverConfigured'] === 'boolean' ? { nativeReceiverConfigured: raw['nativeReceiverConfigured'] } : {}),
       ...(typeof raw['receiverConnected'] === 'boolean' ? { receiverConnected: raw['receiverConnected'] } : {}),
       id: raw['id'] as string,
       displayName: raw['displayName'] as string,

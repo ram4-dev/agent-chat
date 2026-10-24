@@ -320,7 +320,7 @@ export function GroupDetails({
                   className={`receiver-label ${member.receiverConnected ? "connected" : ""}`}
                 >
                   <i />
-                  {member.receiverConnected
+                  {member.nativeReceiverConfigured ? "Receptor nativo configurado" : member.receiverConnected
                     ? "Receptor activo"
                     : "Sin receptor activo"}
                 </span>

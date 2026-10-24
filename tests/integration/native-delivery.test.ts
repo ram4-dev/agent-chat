@@ -1,3 +1,4 @@
+import { createNativeStatusModule } from '../../apps/server/src/modules/native-status';
 import { afterEach, expect, it } from 'vitest';
 import { createHash, generateKeyPairSync, randomUUID, sign } from 'node:crypto';
 import { resolve } from 'node:path';
@@ -44,7 +45,7 @@ function setup(provider: 'hermes' | 'grok_bot' = 'hermes') {
     return { data, signature: sign(null, Buffer.from(nativeProofPayload(data)), keys.privateKey).toString('base64url') };
   };
   const claim = () => { send(); return first.next().delivery!; };
-  return { db, owner, services, delivery, targetId, groupA, groupB, first, identity, send, result, proof, claim, advance: (days: number) => { time += days * 86400_000; } };
+  return { db, owner, services, delivery, targetId, groupA, groupB, first, identity, send, result, proof, claim, clock: () => time, advance: (days: number) => { time += days * 86400_000; } };
 }
 it('requires verified capabilities and an owner-approved enable; grants cannot activate a target', () => {
   const s = setup();
@@ -232,4 +233,46 @@ it('keeps a Grok binding disabled when it covers more than one group', () => {
   s.delivery.configureOwner(s.owner, s.first.bindingId, 1, false);
   const updated = s.services.nativeAccess.repository.replaceVersion({ ownerUserId: s.owner, bindingId: s.first.bindingId, expectedRevision: 1, targetId: s.targetId, groupIds: [s.groupA, s.groupB] });
   expect(() => s.delivery.configureOwner(s.owner, s.first.bindingId, updated.revision, true)).toThrow();
+});
+
+it('native owner status separates recent contact, stale registration, pause and revoked authority without changing jobs', () => {
+  const s = setup(); const status = createNativeStatusModule(s.db.sqlite, s.services, s.clock);
+  expect(status.ownerState(s.owner, s.first.agentId, s.groupA)?.controller).toMatchObject({ presence: 'recent', authorized: true });
+  s.advance(1 / 1440);
+  expect(status.ownerState(s.owner, s.first.agentId, s.groupA)?.controller.presence).toBe('stale');
+  s.first.next(); expect(status.ownerState(s.owner, s.first.agentId, s.groupA)?.controller.presence).toBe('recent');
+  s.delivery.configureOwner(s.owner, s.first.bindingId, 1, false);
+  expect(status.ownerState(s.owner, s.first.agentId, s.groupA)?.binding.enabled).toBe(false);
+  s.services.nativeAccess.revoke(s.owner, s.first.grantId);
+  expect(status.ownerState(s.owner, s.first.agentId, s.groupA)?.controller).toEqual({ presence: 'unknown', authorized: false, lastContactAt: null });
+  expect(s.db.sqlite.prepare('SELECT COUNT(*) AS n FROM native_deliveries').get()).toEqual({ n: 0 });
+});
+it('owner activity uses receipt evidence, hides expired content and never returns terminal proof or key material', () => {
+  const s = setup(); const status = createNativeStatusModule(s.db.sqlite, s.services, s.clock);
+  const d = s.claim(); s.delivery.begin(s.first.connectionId, d.ticket);
+  const r = s.result(d); s.delivery.save(s.first.connectionId, d.ticket, r, s.proof(d, r));
+  expect(status.ownerState(s.owner, s.first.agentId, s.groupA)?.jobs[0]).toMatchObject({ state: 'result_saved', input: 'hello', output: 'Native answer', receipt: null });
+  const receipt = s.delivery.finish(s.first.connectionId, d.ticket);
+  const complete = status.ownerState(s.owner, s.first.agentId, s.groupA)!;
+  expect(complete.jobs[0]?.receipt).toEqual(receipt);
+  expect(JSON.stringify(complete)).not.toMatch(/signature|proof_public_key|terminal_proof|scopes_json/);
+  s.advance(8); s.delivery.retain();
+  expect(status.ownerState(s.owner, s.first.agentId, s.groupA)?.jobs[0]).toMatchObject({ contentExpired: true, input: null, output: null, receipt });
+});
+it('native owner status hides other groups and refuses a non-owner or a human who lost group membership', () => {
+  const s = setup(); const status = createNativeStatusModule(s.db.sqlite, s.services, s.clock);
+  const d = s.claim(); s.delivery.begin(s.first.connectionId, d.ticket);
+  const r = s.result(d, 'PRIVATE-A-OUTPUT'); s.delivery.save(s.first.connectionId, d.ticket, r, s.proof(d, r));
+  const other = status.ownerState(s.owner, s.first.agentId, s.groupB)!;
+  expect(other.blockedElsewhere).toBe(true); expect(other.jobs).toEqual([]); expect(JSON.stringify(other)).not.toContain('PRIVATE-A-OUTPUT');
+  expect(() => status.ownerState(randomUUID(), s.first.agentId, s.groupA)).toThrow();
+  const human = randomUUID(); s.db.sqlite.prepare('INSERT INTO users(id,email,password_hash,display_name) VALUES(?,?,?,?)').run(human, `${human}@example.com`, 'fixture', 'Other');
+  s.db.sqlite.prepare('UPDATE group_human_memberships SET user_id=? WHERE group_id=? AND user_id=?').run(human, s.groupA, s.owner);
+  expect(() => status.ownerState(s.owner, s.first.agentId, s.groupA)).toThrow();
+});
+it('native owner activity hides jobs when the agent is removed even if its owner still belongs to the group', () => {
+  const s = setup(); const status = createNativeStatusModule(s.db.sqlite, s.services, s.clock); s.claim();
+  s.services.groups.removeAgentMember({ userId: s.owner, groupId: s.groupA, agentId: s.first.agentId });
+  const view = status.ownerState(s.owner, s.first.agentId, s.groupA)!;
+  expect(view.group.covered).toBe(false); expect(view.jobs).toEqual([]); expect(view.controller.presence).toBe('unknown');
 });

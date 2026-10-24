@@ -1,3 +1,4 @@
+import { createNativeStatusModule, type NativeStatusModule } from './modules/native-status/index.js';
 import { createNativeDeliveryModule, type NativeDeliveryModule } from './modules/native-delivery/index.js';
 import { createNativeAccessModule, type NativeAccessModule } from './modules/native-access/index.js';
 import { createAutomationModule, type AutomationModule } from './modules/automation/index.js';
@@ -40,6 +41,7 @@ export interface ApplicationServices {
   automation: AutomationModule;
   nativeAccess: NativeAccessModule;
   nativeDelivery: NativeDeliveryModule;
+  nativeStatus: NativeStatusModule;
 }
 
 /**
@@ -115,7 +117,8 @@ export function createServices(database: DatabaseHandle): ApplicationServices {
   const automation = createAutomationModule(database.sqlite, { agents, groups, inbox, messaging, hub });
   const nativeAccess = createNativeAccessModule(database.sqlite, { agents, groups, messaging, hub, closeReceivers: (connectionId) => hub.closeReceivers({ connectionId }) });
   const nativeDelivery = createNativeDeliveryModule(database.sqlite, nativeAccess, { agents, groups, messaging, inbox, hub });
-  return { identity, auth, agents, groups, inbox, messaging, hub, automation, nativeAccess, nativeDelivery };
+  const nativeStatus = createNativeStatusModule(database.sqlite, { agents, groups, nativeAccess });
+  return { identity, auth, agents, groups, inbox, messaging, hub, automation, nativeAccess, nativeDelivery, nativeStatus };
 }
 
 const SYSTEM_CLOCK = { now: (): Date => new Date() };

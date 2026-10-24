@@ -8,6 +8,7 @@ import {
 } from "@agent-chat/contracts";
 import { Avatar, CopyField, Icon, Modal, errorMessage } from "../../shared/ui";
 
+import { NativeAutomationPanel } from "./NativeAutomationPanel";
 import { AutomationPanel } from "./AutomationPanel";
 
 type Confirmation = { path: string; label: string; wholeAgent: boolean };
@@ -225,18 +226,18 @@ export function AgentsPanel({
                 <Icon name="bot" />
                 <div>
                   <strong>
-                    {agent.receiverConnected
+                    {agent.nativeRuntime ? "Receptor nativo configurado" : agent.receiverConnected
                       ? "Receptor activo"
                       : "Sin receptor activo"}
                   </strong>
                   <span>
-                    {agent.receiverConnected
+                    {agent.nativeRuntime ? "Consultá el estado y los recibos nativos en cada grupo." : agent.receiverConnected
                       ? "Puede recibir eventos en vivo. El agente decide si responde."
                       : "Los eventos pendientes se recuperan al reconectar el runtime."}
                   </span>
                 </div>
               </div>
-              {groupId && groupAgentIds.includes(agent.id) && agent.status === "active" && <AutomationPanel agentId={agent.id} groupId={groupId} name={agent.name} />}
+              {groupId && groupAgentIds.includes(agent.id) && agent.status === "active" && (agent.nativeRuntime ? <NativeAutomationPanel agentId={agent.id} groupId={groupId} name={agent.name} /> : <AutomationPanel agentId={agent.id} groupId={groupId} name={agent.name} />)}
               <details className="agent-connections">
                 <summary>
                   <span>Conexiones de {agent.name}</span>

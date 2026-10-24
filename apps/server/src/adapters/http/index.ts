@@ -36,7 +36,7 @@ export function registerHttpAdapter(
   });
   registerAgentRoutes(app, services);
   registerNativeAccessRoutes(app, services);
-  registerGroupRoutes(app, { auth: services.auth, groups: services.groups, hub: services.hub, automation: services.automation });
+  registerGroupRoutes(app, { auth: services.auth, groups: services.groups, hub: services.hub, automation: services.automation, nativeStatus: services.nativeStatus });
   registerMessageRoutes(app, {
     auth: services.auth,
     messaging: services.messaging,

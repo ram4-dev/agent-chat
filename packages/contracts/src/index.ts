@@ -96,5 +96,5 @@ export {
   NATIVE_PROVIDERS, UNKNOWN_NATIVE_CAPABILITIES, NATIVE_READ_SCOPE, NATIVE_AUTOMATIC_SCOPES, NATIVE_INTERACTIVE_SCOPES,
   type NativeScope, type NativeSelection, type NativeConsent, type NativeGrant,
   type NativeProvider, type NativeContextMode, type CapabilityStatus,
-  type NativeCapabilities, type NativeRuntimeTarget, type NativeBinding,
+  type NativeCapabilities, type NativeRuntimeTarget, type NativeBinding, type NativeAgentSummary, type NativeStatusView,
 } from './domain/native-runtime.js';

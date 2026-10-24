@@ -1,3 +1,4 @@
+import type { NativeAgentSummary } from '../domain/native-runtime.js';
 export const AGENT_PATHS = {
   collection: '/api/agents',
   one: (id: string) => `/api/agents/${id}`,
@@ -12,6 +13,7 @@ export interface OwnedAgentView {
   avatarUrl: string | null;
   status: 'active' | 'revoked';
   receiverConnected: boolean;
+  nativeRuntime?: NativeAgentSummary | null;
   connections: {
     id: string;
     oauthClientId: string;

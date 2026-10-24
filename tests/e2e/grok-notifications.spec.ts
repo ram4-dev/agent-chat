@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { createDatabase } from '../../apps/server/src/persistence/client';
 import { authorizeAgent, mcpClient, payload } from './helpers/agent';
-import { signUp, createGroup, addAgent, send } from './helpers/ui';
+import { signUp, createGroup, addAgent, send, agents, selectGroup } from './helpers/ui';
 
 test('Grok wake-up from the browser waits for callback, survives restart and lost replies, and publishes only once', async ({ page }) => {
   test.setTimeout(90000);
@@ -22,6 +22,7 @@ test('Grok wake-up from the browser waits for callback, survives restart and los
     await writeFile(join(root, 'oidc-jwks.json'), JSON.stringify({ keys: [{ ...oidcKey, alg: 'EdDSA', use: 'sig', kid: 'fixture' }] }), { mode: 0o600 });
     const server = child('portless', [`native-delivery-${randomUUID().slice(0,8)}`, process.execPath, 'tests/fixtures/native-delivery/server.mjs'], { ...process.env, DATABASE_PATH: serverDb, OIDC_JWKS_PATH: join(root, 'oidc-jwks.json'), LOG_LEVEL: 'warn' }); children.push(server.process);
     await expect.poll(() => server.output()).toMatch(/PORTLESS_URL=https?:\/\//);
+    await expect.poll(() => server.output()).toContain('fixtureServerReady');
     const origin = /PORTLESS_URL=(https?:\/\/\S+)/.exec(server.output())![1]!;
     await expect.poll(async () => { try { return (await page.request.get(`${origin}/liveness`)).ok(); } catch { return false; } }).toBe(true);
     await page.goto(origin); await signUp(page, 'native-supervisor@example.com', 'Native E2E');
@@ -66,6 +67,12 @@ test('Grok wake-up from the browser waits for callback, survives restart and los
     expect(rows()[0]).toMatchObject({ started: 1, provider_started: 0, message_id: null });
     expect(provider().runs[0]?.result).toBeNull();
     expect(payload<{ receipt: unknown }>(await client.callTool({ name: 'native_delivery', arguments: { eventId: rows()[0]!.event_id } })).receipt).toBeNull();
+    await agents(page);
+    const nativePanel = page.getByRole('region', { name: 'Receptor nativo de Scout', exact: true });
+    await expect(nativePanel.getByRole('status')).toHaveText('Notificación aceptada; inicio del bot pendiente');
+    await nativePanel.getByText('Ver actividad nativa', { exact: true }).click();
+    await expect(nativePanel.getByText('Respuesta publicada', { exact: true })).toHaveCount(0);
+    await selectGroup(page, 'Supervisor nativo');
     const envelope = JSON.parse(provider().requests[0]!.body) as Record<string, unknown>;
     expect(Object.keys(envelope).sort()).toEqual(['bindingId','eventId','revision','startKey','targetId','version']);
     // Restart the real supervisor with an empty store while the provider has accepted but not executed.
@@ -78,6 +85,12 @@ test('Grok wake-up from the browser waits for callback, survives restart and los
     await expect.poll(() => rows()[0]?.state).toBe('done');
     expect(rows()[0]?.provider_started).toBe(1);
     expect(provider().runs.filter(r => r.result)).toHaveLength(1);
+    await agents(page);
+    await nativePanel.getByText('Ver actividad nativa', { exact: true }).click();
+    await expect(nativePanel.getByText('Respuesta publicada', { exact: true })).toBeVisible();
+    await expect(nativePanel.getByText('Salida: Grok simulado: Uno', { exact: true })).toBeVisible();
+    await page.screenshot({ path: '.local-state/native-status-published.png', fullPage: true });
+    await selectGroup(page, 'Supervisor nativo');
     // Duplicate webhook: the provider's durable result is reused, not regenerated.
     expect((await page.request.post(webhookOrigin, { headers: { authorization: `Bearer ${wakeToken}` }, data: envelope })).status()).toBe(200);
     await send(page, 'Dos'); await expect(page.getByText('Grok simulado: Dos', { exact: true })).toBeVisible();

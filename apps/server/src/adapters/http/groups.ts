@@ -1,3 +1,4 @@
+import type { NativeStatusModule } from '../../modules/native-status/index.js';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import {
   DOMAIN_ERROR_CODES,
@@ -25,6 +26,7 @@ export interface GroupRoutesDependencies {
   groups: GroupsModule;
   hub: LiveDeliveryHub;
   automation?: AutomationModule;
+  nativeStatus?: NativeStatusModule;
 }
 
 /**
@@ -36,7 +38,7 @@ export interface GroupRoutesDependencies {
  */
 export function registerGroupRoutes(
   app: FastifyInstance,
-  { auth, groups, hub, automation }: GroupRoutesDependencies,
+  { auth, groups, hub, automation, nativeStatus }: GroupRoutesDependencies,
 ): void {
   const session = (request: { headers: { cookie?: string } }): string =>
     auth.resolveSession(readCookie(request.headers.cookie, SESSION_COOKIE_NAME)).id;
@@ -87,7 +89,7 @@ export function registerGroupRoutes(
             createdAt: detail.group.createdAt,
           },
           members: detail.members.map((member) => member.kind === 'agent'
-            ? { ...member, receiverConnected: hub.receiverIsConnected(member.id) || automation?.groupConnected(member.id, request.params.groupId) === true } : member),
+            ? { ...member, ...(nativeStatus?.hasBinding(member.id) ? { nativeReceiverConfigured: true } : {}), receiverConnected: hub.receiverIsConnected(member.id) || automation?.groupConnected(member.id, request.params.groupId) === true } : member),
           role: detail.role,
         } satisfies GroupDetailResponse);
       }),

@@ -1,0 +1,42 @@
+import { expect, test } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
+import { signUp, createGroup, addAgent, agents, selectGroup } from './helpers/ui';
+import { expectNamedControls, expectVisibleKeyboardFocus } from './helpers/accessibility';
+
+test('owner sees native coverage, capabilities, empty activity and recoverable status errors', async ({ page }) => {
+  await page.goto('/'); await signUp(page, `status-${randomUUID()}@example.com`, 'Estado');
+  const origin = new URL(page.url()).origin;
+  const post = async (path: string, data: unknown) => {
+    const response = await page.request.post(`${origin}${path}`, { headers: { origin }, data });
+    expect(response.status()).toBe(201); return response.json();
+  };
+  const { agent } = await post('/api/agents', { name: 'Vista' });
+  await page.reload(); const groupId = await createGroup(page, 'Estado nativo'); await addAgent(page, 'Vista');
+  const { target } = await post('/api/native/targets', { provider: 'grok_bot', connectorId: 'Nube de prueba', nativeRef: 'bot-de-prueba', contextMode: 'shared_bot_context' });
+  await post('/api/native/bindings', { agentId: agent.id, targetId: target.id, groupIds: [groupId] });
+  await page.reload(); await agents(page);
+  const panel = page.getByRole('region', { name: 'Receptor nativo de Vista', exact: true });
+  await expect(panel.getByRole('status')).toHaveText('Respuestas nativas pausadas');
+  await expect(panel.getByRole('heading')).toHaveText('Grok Bot en este grupo');
+  await expect(panel.getByText('bot-de-prueba', { exact: true })).toBeVisible();
+  await panel.getByText('Ver capacidades registradas', { exact: true }).click();
+  await expect(panel.getByText('Sin verificar', { exact: true })).toHaveCount(5);
+  await panel.getByText('Ver actividad nativa', { exact: true }).click();
+  await expect(panel.getByText('Todavía no hay entregas nativas en este grupo.')).toBeVisible();
+  await expectNamedControls(panel);
+  await page.screenshot({ path: '.local-state/native-status-desktop.png', fullPage: true });
+  const endpoint = `**/api/agents/${agent.id}/native-status/*`;
+  await page.route(endpoint, route => route.fulfill({ status: 503, body: '{}' }));
+  await expect(panel.getByRole('alert')).toHaveText('No pudimos consultar el estado nativo.', { timeout: 7000 });
+  await expect(panel.getByText('bot-de-prueba', { exact: true })).toHaveCount(0);
+  const retry = panel.getByRole('button', { name: 'Reintentar estado nativo' });
+  await expectVisibleKeyboardFocus(page, retry);
+  await page.unroute(endpoint); await retry.click();
+  await expect(panel.getByRole('status')).toHaveText('Respuestas nativas pausadas');
+  await selectGroup(page, 'Estado nativo'); await createGroup(page, 'Otro grupo'); await addAgent(page, 'Vista');
+  await agents(page);
+  await expect(panel.getByRole('status')).toHaveText('Este grupo no está habilitado para este receptor');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: '.local-state/native-status-mobile.png', fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

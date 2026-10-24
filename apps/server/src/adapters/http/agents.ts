@@ -7,15 +7,18 @@ import { DomainError } from '../../modules/errors.js';
 import { readCookie } from './cookie.js';
 import { sendError } from './error-envelope.js';
 
-export function registerAgentRoutes(app: FastifyInstance, { auth, agents, hub, automation }: ApplicationServices): void {
+export function registerAgentRoutes(app: FastifyInstance, { auth, agents, hub, automation, nativeStatus }: ApplicationServices): void {
   const owner = (cookie?: string) => auth.resolveSession(readCookie(cookie, SESSION_COOKIE_NAME)).id;
   app.get(AGENT_PATHS.collection, (req, reply) => run(reply, () => {
     const ownerUserId = owner(req.headers.cookie);
-    return { agents: agents.listOwnedAgents(ownerUserId).map((agent) => ({
-      ...agent, receiverConnected: hub.receiverIsConnected(agent.id) || automation.agentConnected(agent.id),
+    return { agents: agents.listOwnedAgents(ownerUserId).map((agent) => {
+      const nativeRuntime = nativeStatus.summary(ownerUserId, agent.id);
+      return { ...agent, ...(nativeRuntime ? { nativeRuntime } : {}), receiverConnected: hub.receiverIsConnected(agent.id) || automation.agentConnected(agent.id),
       connections: agents.listConnections(agent.id, ownerUserId),
-    } satisfies OwnedAgentView)) } satisfies OwnedAgentsResponse;
+    } satisfies OwnedAgentView; }) } satisfies OwnedAgentsResponse;
   }));
+  app.get<{ Params: { agentId: string; groupId: string } }>('/api/agents/:agentId/native-status/:groupId', (req, reply) => run(reply, () =>
+    reply.header('cache-control', 'private, no-store').send({ native: nativeStatus.ownerState(owner(req.headers.cookie), req.params.agentId, req.params.groupId) })));
   app.get<{ Params: { agentId: string; groupId: string } }>('/api/agents/:agentId/automation/:groupId', (req, reply) => run(reply, () =>
     automation.ownerState(owner(req.headers.cookie), req.params.agentId, req.params.groupId)));
   app.patch<{ Params: { agentId: string; groupId: string } }>('/api/agents/:agentId/automation/:groupId', (req, reply) => run(reply, () => {

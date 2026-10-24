@@ -2510,3 +2510,21 @@ button {
     scroll-behavior: auto !important;
   }
 }
+
+.native-status-panel {
+  margin-top: 18px;
+  border-top: 1px solid #e2e8dd;
+  padding-top: 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.native-status-panel h4 { margin: 0 0 8px; font-size: 14px; }
+.native-status-panel [role="status"] { font-weight: 600; }
+.native-status-panel dl { margin: 12px 0; }
+.native-status-panel dt { color: #66775e; font-size: 12px; margin-top: 8px; }
+.native-status-panel dd { margin: 0; }
+.native-status-panel summary { cursor: pointer; padding: 8px 0; }
+.native-status-panel ol { padding-left: 20px; }
+.native-status-panel li + li { margin-top: 16px; }
+.native-status-panel li p { white-space: pre-wrap; margin: 6px 0; }
