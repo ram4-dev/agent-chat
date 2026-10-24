@@ -25,7 +25,9 @@
     "bridge:doctor": "pnpm --filter @agent-chat/bridge build && node apps/bridge/dist/doctor.js",
     "bridge:start": "node apps/bridge/dist/supervisor.js",
     "bridge:capabilities": "pnpm --filter @agent-chat/bridge build && node apps/bridge/dist/native-capabilities.js",
-    "bridge:codex-native-check": "pnpm --filter @agent-chat/bridge build && node apps/bridge/dist/native-codex-check.js"
+    "bridge:codex-native-check": "pnpm --filter @agent-chat/bridge build && node apps/bridge/dist/native-codex-check.js",
+    "bridge:managed": "pnpm --filter @agent-chat/bridge build && node apps/bridge/dist/managed/main.js",
+    "bridge:managed:login": "pnpm bridge:managed --login"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
