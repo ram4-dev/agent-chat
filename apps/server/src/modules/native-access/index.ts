@@ -1,3 +1,4 @@
+import { assertPublicAgentIdempotencyKey } from '../messaging/agent-idempotency.js';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { NATIVE_AUTOMATIC_SCOPES, NATIVE_INTERACTIVE_SCOPES, type NativeConsent, type NativeGrant, type NativeScope, type NativeSelection } from '@agent-chat/contracts';
@@ -100,6 +101,7 @@ export function createNativeAccessModule(sqlite: Database.Database, deps: {
       const sent = runImmediateTransaction(sqlite, () => {
         const grant = requireAccess(connectionId, 'native:send', input.agentId, input.groupId);
         if (grant.kind !== 'interactive') throw deny();
+        assertPublicAgentIdempotencyKey(input.idempotencyKey);
         const sent = deps.messaging.send({ author: { kind: 'agent', id: input.agentId }, groupId: input.groupId, text: input.text, idempotencyKey: input.idempotencyKey });
         if (!sent.replayed) sqlite.prepare(`INSERT INTO audit_events(id,actor_kind,actor_id,action,target_kind,target_id,outcome,metadata)
           VALUES(?,'agent',?,'native.interactive.sent','message',?,'allowed',?)`).run(randomUUID(), input.agentId, sent.message.id, JSON.stringify({ grantId: grant.id, connectionId }));

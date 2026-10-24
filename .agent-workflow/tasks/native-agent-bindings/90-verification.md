@@ -138,3 +138,11 @@ Lint/typecheck/build/diff-check PASS;165 unit+15 contratos+209 integración+27 E
 R2 cerró P1/P2/P3 por inspección estática de8633c66 contra81fa746, sin nuevos hallazgos. Hashes protegidos, árbol limpio y diff-check verificados; no ejecutó suites. Última suite del autor:416 PASS,6 skips explícitos, lint/typecheck/build PASS. El cierre documental no modifica código ni requiere repetir esa suite.
 
 Registro en37-codex-controls-review.md. Se cierra el incremento de controles/consentimiento y ensayo aislado; S6 automático sigue bloqueado/no implementado, con evidencia en docs/codex-native-status.md. Grok real y Hermes personal siguen pendientes. No se autoriza producción ni se declara cierre global. Sin push, PR, OAuth, ~/.hermes ni mensajes reales.
+
+## Coexistencia interactiva durante turno automático activo
+
+Pendiente explícito S6 independiente de profiles/credenciales: escritura interactiva mientras existe job automático. Rama feat/native-coexistence desde d51cf92. Nueva regresión reprodujo colisión: un envío público con clave native:<eventId> impedía finish por conflicto de idempotencia. Helper central preserva claves automáticas existentes y reserva ese prefijo frente a send_message legacy/nativo. No cambia OAuth, autorización, estados ni datos persistidos; las colisiones históricas requieren revisión del dueño.
+
+Integración y navegador con supervisor real/webhook falso verifican turno running, envío explícito, replay sin auditoría duplicada, conflicto e identidad no concedida rechazados, revocación interactiva, ledger/claim/fence/inbox intactos y finalización automática original una sola vez. Todos los datos/conexiones son fixtures temporales, sin inferencia o mensajes reales. Detalles en39/40 y docs/native-trial-migration.md.
+
+Lint/typecheck/build/diff-check PASS;165 unit+15 contratos+210 integración+27 E2E=417 PASS,6 skips explícitos. E2E completo1.3min con Portless/Node22 y DB nueva. Revisión independiente pendiente. S6 automático, Hermes personal, Grok real y host24/7 siguen pendientes con accesos/decisiones indicados en40. No se declara cierre global; sin push a main, PR, OAuth o ~/.hermes.

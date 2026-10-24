@@ -289,3 +289,27 @@ it('expires suppressed unstarted input by completion age without requiring a res
   s.delivery.retain();
   expect(status.ownerState(s.owner, s.first.agentId, s.groupA)?.jobs[0]).toMatchObject(expected);
 });
+
+it('interactive publication and revocation preserve an active automatic claim, inbox and exactly-once audit', () => {
+  const s=setup();const d=s.claim();s.delivery.begin(s.first.connectionId,d.ticket);s.delivery.running(s.first.connectionId,d.ticket,'active-native-run');
+  const clientId=randomUUID();s.db.sqlite.prepare('INSERT INTO oauth_clients(client_id,client_name,redirect_uris) VALUES(?,?,?)').run(clientId,'interactive-fixture','[]');
+  const connection=s.services.agents.createConnection({agentId:s.first.agentId,oauthClientId:clientId});
+  const challenge=s.services.nativeAccess.createChallenge(s.owner,{kind:'interactive',connectionId:connection.id,scopes:['native:read','native:send'],selections:[{agentId:s.first.agentId,groupIds:[s.groupA]}]});
+  const grant=s.services.nativeAccess.consumeChallenge(connection.id,challenge.challenge,{});
+  const publish=(key:string,text='Interactive reply')=>s.services.nativeAccess.publishInteractive(connection.id,{agentId:s.first.agentId,groupId:s.groupA,text,idempotencyKey:key});
+  const snapshot=s.db.sqlite.prepare('SELECT * FROM native_deliveries WHERE event_id=?').get(d.ticket.eventId);
+  expect(()=>publish(`native:${d.ticket.eventId}`)).toThrow(/reserved/i);
+  expect(()=>publish(`native:${d.ticket.eventId}`,'Native answer')).toThrow(/reserved/i);
+  const sent=publish('interactive-live');const replay=publish('interactive-live');expect(replay.replayed).toBe(true);expect(replay.message.id).toBe(sent.message.id);
+  expect(()=>publish('interactive-live','Conflicting retry')).toThrow();
+  expect(s.db.sqlite.prepare('SELECT * FROM native_deliveries WHERE event_id=?').get(d.ticket.eventId)).toEqual(snapshot);
+  expect(s.db.sqlite.prepare('SELECT acknowledged_at FROM inbox_events WHERE id=?').get(d.ticket.eventId)).toEqual({acknowledged_at:null});
+  const audit=s.db.sqlite.prepare("SELECT actor_kind,actor_id,metadata FROM audit_events WHERE action='native.interactive.sent'").all() as {actor_kind:string;actor_id:string;metadata:string}[];
+  expect(audit).toHaveLength(1);expect(audit[0]).toMatchObject({actor_kind:'agent',actor_id:s.first.agentId});expect(JSON.parse(audit[0]!.metadata)).toEqual({grantId:grant.id,connectionId:connection.id});
+  s.services.nativeAccess.revoke(s.owner,grant.id);expect(()=>publish('after-revoke')).toThrow();
+  expect(s.db.sqlite.prepare('SELECT * FROM native_deliveries WHERE event_id=?').get(d.ticket.eventId)).toEqual(snapshot);
+  d.runRef='active-native-run';const result=s.result(d);s.delivery.save(s.first.connectionId,d.ticket,result,s.proof(d,result));
+  const receipt=s.delivery.finish(s.first.connectionId,d.ticket);expect(receipt.messageId).not.toBe(sent.message.id);expect(s.delivery.finish(s.first.connectionId,d.ticket)).toEqual(receipt);
+  expect(s.db.sqlite.prepare('SELECT acknowledged_at FROM inbox_events WHERE id=?').get(d.ticket.eventId)).not.toEqual({acknowledged_at:null});
+  expect(s.db.sqlite.prepare("SELECT count(*) AS n FROM audit_events WHERE action='native.interactive.sent'").get()).toEqual({n:1});
+});

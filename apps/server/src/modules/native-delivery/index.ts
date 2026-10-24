@@ -1,3 +1,4 @@
+import { nativePublicationKey } from '../messaging/agent-idempotency.js';
 import { createHash, createPublicKey, randomUUID, verify } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { nativeProofPayload, nativeResultPayload, type NativeDeliveryView, type NativeGrant, type NativeResult, type NativeTerminalProof, type NativeTicket } from '@agent-chat/contracts';
@@ -239,7 +240,7 @@ export function createNativeDeliveryModule(sqlite: Database.Database, access: Na
         if (r.state !== 'result_saved' || !r.terminal_confirmed) throw fail();
         if (r.owner_suppressed) { finishSuppressed(r); return view(row(r.event_id)!).receipt!; }
         enabled(r.binding_id);
-        if (r.decision === 'reply') published = ports.messaging.send({ author: { kind: 'agent', id: r.agent_id }, groupId: r.group_id, text: r.result_text!, idempotencyKey: `native:${r.event_id}` });
+        if (r.decision === 'reply') published = ports.messaging.send({ author: { kind: 'agent', id: r.agent_id }, groupId: r.group_id, text: r.result_text!, idempotencyKey: nativePublicationKey(r.event_id) });
         ports.inbox.acknowledge({ agentId: r.agent_id, eventId: r.event_id });
         sqlite.prepare(`UPDATE native_deliveries SET state='done',disposition=?,message_id=?,completed_at=? WHERE event_id=?`)
           .run(r.decision === 'reply' ? 'published' : 'no_reply', published?.message.id ?? null, now(), r.event_id);

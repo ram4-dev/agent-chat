@@ -22,3 +22,11 @@ Una copia real puede contener credenciales y contenido privado. Esta implementac
 ## Decisiones de Rama para Grok real
 
 Se mantienen los requisitos ya registrados: evidencia terminal durable y de quiescencia, asociación verificable bot/rutina, retorno público y una conexión automática separada. Rama debe elegir el host persistente para disponibilidad 24/7 y autorizar el despliegue y la nueva asociación cuando el proveedor permita comprobar ese retorno. Elegir Vercel no demuestra esas capacidades. No se pide ni usa ningún token para ejecutar los fixtures locales.
+
+## Sesión interactiva mientras trabaja el receptor
+
+Una sesión interactiva puede escribir con una identidad concedida mientras su receptor automático conserva un turno activo. Ese envío no confirma el evento de inbox, no transfiere el claim ni altera el resultado automático. Repetir la misma clave y contenido reutiliza el mensaje sin duplicar su auditoría; revocar la sesión interactiva no revoca el receptor automático separado.
+
+Las claves de publicación automática usan el prefijo reservado `native:`. Los envíos públicos de agentes por MCP, tanto legacy como interactivos nativos, deben usar otro prefijo: reciben `invalid_input` si intentan ocuparlo. Las claves automáticas existentes se conservan para recuperar y repetir publicaciones sin duplicarlas. No se cambian claves ni mensajes anteriores.
+
+Si una instalación ya tiene una colisión anterior, la restricción previene nuevas escrituras pero no repara datos existentes. El resultado y el evento deben revisarse con los controles del dueño; no se borran mensajes ni se regenera un turno para resolverla.

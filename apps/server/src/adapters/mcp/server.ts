@@ -1,3 +1,4 @@
+import { assertPublicAgentIdempotencyKey } from '../../modules/messaging/agent-idempotency.js';
 import type { NativeDeliveryModule } from '../../modules/native-delivery/index.js';
 import { createNativeMcpServer } from './native-server.js';
 import type { NativeAccessModule } from '../../modules/native-access/index.js';
@@ -168,6 +169,7 @@ export function createMcpServer({
     async ({ group_id, text, idempotency_key }) =>
       guard(() => {
         if (automation.isRuntimeConnection(credential().connectionId)) return refused('conflict');
+        assertPublicAgentIdempotencyKey(idempotency_key);
       const { message, replayed } = messaging.send({
           author: { kind: 'agent', id: credential().agentId },
           groupId: group_id,
