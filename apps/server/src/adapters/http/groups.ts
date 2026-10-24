@@ -1,5 +1,6 @@
 import type { AutomationModule } from '../../modules/automation/index.js';
 import type { NativeStatusModule } from '../../modules/native-status/index.js';
+import type { NotificationsModule } from '../../notifications/module.js';
 import type { AsyncPort } from "../../services.js";
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { DOMAIN_ERROR_CODES, GROUP_PATHS, parseAcceptInvitationRequest, parseCreateGroupRequest, type AcceptedInvitationResponse, type CreateGroupResponse, type GroupDetailResponse, type GroupListResponse, type InvitationResponse, type OkResponse, } from '@agent-chat/contracts';
@@ -15,7 +16,7 @@ export interface GroupRoutesDependencies {
     groups: AsyncPort<GroupsModule>;
     hub: ApplicationHub;
     automation?: AutomationModule;
-    nativeStatus?: NativeStatusModule;
+    nativeStatus?: NativeStatusModule; notifications?: NotificationsModule;
 }
 /**
  * The private-group routes.
@@ -24,7 +25,7 @@ export interface GroupRoutesDependencies {
  * decision to the module: the adapter never decides whether a caller may see a
  * group, so a new route cannot forget a membership check.
  */
-export function registerGroupRoutes(app: FastifyInstance, { auth, groups, hub, automation, nativeStatus }: GroupRoutesDependencies): void {
+export function registerGroupRoutes(app: FastifyInstance, { auth, groups, hub, automation, nativeStatus, notifications }: GroupRoutesDependencies): void {
     const session = async (request: {
         headers: {
             cookie?: string;
@@ -70,7 +71,7 @@ export function registerGroupRoutes(app: FastifyInstance, { auth, groups, hub, a
                 createdAt: detail.group.createdAt,
             },
             members: await Promise.all(detail.members.map(async (member) => member.kind === 'agent'
-                ? { ...member, ...(nativeStatus?.hasBinding(member.id) ? { nativeReceiverConfigured: true } : {}), receiverConnected: await hub.receiverIsConnected(member.id) || automation?.groupConnected(member.id, request.params.groupId) === true } : member)),
+                ? { ...member, ...(notifications?{notificationActive:await notifications.isActive(member.id)}:{}), ...(nativeStatus?.hasBinding(member.id) ? { nativeReceiverConfigured: true } : {}), receiverConnected: await hub.receiverIsConnected(member.id) || automation?.groupConnected(member.id, request.params.groupId) === true } : member)),
             role: detail.role,
         } satisfies GroupDetailResponse);
     }));

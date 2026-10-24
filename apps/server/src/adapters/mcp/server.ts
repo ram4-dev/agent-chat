@@ -17,7 +17,9 @@ import type { ApplicationHub } from '../../services.js';
 import type { AgentCredential } from './auth.js';
 import { McpUnauthenticated } from './auth.js';
 import { AGENT_GUIDE, AGENT_GUIDE_URI, MCP_INSTRUCTIONS, agentReceiverUrl } from './instructions.js';
+import type { NotificationsModule } from '../../notifications/module.js';
 export interface McpServices {
+    notifications?: NotificationsModule;
     agents: AsyncPort<AgentsModule>;
     inbox: AsyncPort<InboxModule>;
     groups: AsyncPort<GroupsModule>;
@@ -34,6 +36,8 @@ export interface McpCredentialContext {
 /** The tool names this surface exposes, kept in one place for the contract test. */
 export const MCP_TOOL_NAMES = [
     'get_agent_instructions',
+    'setup_notifications', 'get_notification_status', 'confirm_notification_delivery',
+    'get_notification_reply_receipt',
     'pair_native', 'configure_runtime', 'runtime_begin', 'runtime_next', 'runtime_open', 'runtime_save', 'runtime_finish', 'runtime_fail',
     'get_identity',
     'list_groups',
@@ -65,7 +69,7 @@ function refused(code: string): TextResult {
  * through the modules, so no tool can reach data the application's own routes
  * would refuse.
  */
-export function createMcpServer({ agents, groups, inbox, messaging, identity, hub, automation, nativeAccess, nativeDelivery }: McpServices, rawCredential: () => AgentCredential, issuer: string): McpServer {
+export function createMcpServer({ agents, groups, inbox, messaging, identity, hub, automation, nativeAccess, nativeDelivery, notifications }: McpServices, rawCredential: () => AgentCredential, issuer: string): McpServer {
     if (nativeAccess?.classify(rawCredential().connectionId)) return createNativeMcpServer({ agents, groups, inbox, messaging, identity, hub, nativeAccess, ...(automation ? { automation } : {}), ...(nativeDelivery ? { nativeDelivery } : {}) }, rawCredential);
     const credential = () => {
         const value = rawCredential();
@@ -78,6 +82,29 @@ export function createMcpServer({ agents, groups, inbox, messaging, identity, hu
         if (!current.scopes.includes(scope)) throw new DomainError('forbidden', 403, 'Scope required');
         return current;
     };
+    server.registerTool('setup_notifications', {
+      description: 'Configure participation notifications. Detect available delivery methods, preserve this OAuth account, and return an owner-only private setup link. Never ask for OAuth tokens or webhook keys in chat.',
+      inputSchema: { platform: z.enum(['grokbot','generic']).optional(), can_keep_authenticated_receiver: z.boolean().optional(), can_create_webhook_routine: z.boolean().optional() },
+      annotations: { readOnlyHint: true, destructiveHint: false },
+    }, async ({ platform,can_keep_authenticated_receiver,can_create_webhook_routine }) => guard(async () => {
+      const principal=context('agent:receive');
+      return ok({ agent_id:principal.agentId,connection_id:principal.connectionId,
+        recommended:can_keep_authenticated_receiver?'websocket':notifications&&(platform==='grokbot'||can_create_webhook_routine)?'webhook':'polling',
+        host_capabilities:{authenticated_receiver:!!can_keep_authenticated_receiver,webhook_routine:platform==='grokbot'||!!can_create_webhook_routine},
+        capabilities:{ websocket:true,webhook:!!notifications,mcp_push_wake:false },
+        setup_url:`${issuer}/?notification_agent=${encodeURIComponent(principal.agentId)}&notification_connection=${encodeURIComponent(principal.connectionId)}&notification_platform=${platform??'generic'}`,
+        state:notifications?await notifications.status(principal):{configured:false,active:false},
+        instructions:platform==='grokbot'&&notifications?'Create a webhook-triggered routine on this Bot using only this selected MCP account. On every wake verify get_identity, compare agent_id and connection_id from the wake, call confirm_notification_delivery with delivery_id and challenge, if kind is probe stop after confirmation; if kind is wake process get_inbox, check get_notification_reply_receipt before generation, send replies with stable event idempotency keys, and ACK only after processing. Never disclose webhook credentials in chat. The owner registers the routine URL and key on setup_url and clicks Probar y activar. HTTP 200 alone is not verification.':'Keep one authenticated receiver, or register a host wake webhook privately. Confirm actual receipt before claiming notifications are active.' });
+    }));
+    server.registerTool('get_notification_status', {description:'Check webhook configuration and actual receipt confirmation for this OAuth connection. Does not return private credentials.',inputSchema:{},annotations:{readOnlyHint:true}},
+      async()=>guard(async()=>{const principal=context('agent:receive');return ok(notifications?await notifications.status(principal):{configured:false,active:false,webhook_available:false});}));
+    server.registerTool('confirm_notification_delivery', {description:'Confirm an actual wake received by the configured routine. This does not acknowledge or process inbox messages.',
+      inputSchema:{delivery_id:z.string().uuid(),challenge:z.string().regex(/^[0-9a-f]{48}$/)},annotations:{destructiveHint:false,idempotentHint:true,openWorldHint:false}},
+      async({delivery_id,challenge})=>guard(async()=>{const principal=context('agent:receive');return notifications?ok(await notifications.confirm(principal,delivery_id,challenge)):refused('conflict');}));
+    if(notifications)server.registerTool('get_notification_reply_receipt',{description:'Before generating a reply to a pending event, check whether the stable final reply was already published. Recover a lost response without posting a second answer.',
+      inputSchema:{event_id:z.string().min(1)},annotations:{readOnlyHint:true}},async({event_id})=>guard(async()=>{
+        context('agent:read');return ok(await notifications.replyReceipt(context('agent:inbox'),event_id));
+      }));
     server.registerResource('agent_chat_participation', AGENT_GUIDE_URI, {
         title: 'Respuestas y notificaciones de Agent Chat',
         description: 'Cómo responder chats, mantener el receptor activo y recuperar notificaciones pendientes.',

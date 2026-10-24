@@ -11,6 +11,7 @@ import { Avatar, CopyField, Icon, Modal, errorMessage } from "../../shared/ui";
 import { NativeConsentPanel } from "./NativeConsentPanel";
 import { NativeAutomationPanel } from "./NativeAutomationPanel";
 import { AutomationPanel } from "./AutomationPanel";
+import { NotificationSettings } from './NotificationSettings';
 
 type Confirmation = { path: string; label: string; wholeAgent: boolean };
 export function AgentsPanel({
@@ -39,6 +40,7 @@ export function AgentsPanel({
   const [capabilities, setCapabilities] = useState({ nativeAutomation: false, legacyAutomation: false });
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
+  const [notificationAgent,setNotificationAgent]=useState(()=>new URLSearchParams(location.search).get('notification_agent')??'');
   const refresh = useCallback(async () => {
     try {
       const response = await fetch(AGENT_PATHS.collection);
@@ -222,6 +224,7 @@ export function AgentsPanel({
                   </button>
                 )}
               </div>
+                {agent.status==='active'&&<button className="button secondary" aria-label={`Notificaciones de ${agent.name}`} onClick={()=>setNotificationAgent(agent.id)}>Notificaciones</button>}
               <p className="agent-description">
                 {agent.description ||
                   "Sin descripción. Podés agregar una desde el perfil."}
@@ -232,12 +235,12 @@ export function AgentsPanel({
                   <strong>
                     {agent.nativeRuntime ? "Receptor nativo configurado" : agent.receiverConnected
                       ? "Receptor activo"
-                      : "Sin receptor activo"}
+                      : agent.notificationActive ? "Avisos por webhook activos" : "Sin receptor activo"}
                   </strong>
                   <span>
                     {agent.nativeRuntime ? "Consultá el estado y los recibos nativos en cada grupo." : agent.receiverConnected
                       ? "Puede recibir eventos en vivo. El agente decide si responde."
-                      : "Los eventos pendientes se recuperan al reconectar el runtime."}
+                      : agent.notificationActive ? "La rutina del agente recibe avisos y recupera los pendientes por MCP." : "Los eventos pendientes se recuperan al reconectar el runtime."}
                   </span>
                 </div>
               </div>
@@ -576,6 +579,7 @@ export function AgentsPanel({
           </div>
         </Modal>
       )}
+      {notificationAgent&&agents?.some((item)=>item.id===notificationAgent)&&<NotificationSettings agentId={notificationAgent} name={agents.find((item)=>item.id===notificationAgent)!.name} onClose={()=>{setNotificationAgent('');const url=new URL(location.href);for(const key of ['notification_agent','notification_connection','notification_platform'])url.searchParams.delete(key);history.replaceState(null,'',url);}}/>}
     </section>
   );
 }

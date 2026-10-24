@@ -1,0 +1,56 @@
+import { randomUUID } from 'node:crypto';
+import { expect,test } from '@playwright/test';
+import { notificationHarness } from '../helpers/notification-harness';
+import { authorizeAgent,mcpClient,payload } from './helpers/agent';
+import { signUp,createGroup,addAgent,send } from './helpers/ui';
+
+for(const mobile of [false,true])test(`owner links a webhook privately and verifies actual receipt (${mobile?'mobile':'desktop'})`,async({page})=>{
+  test.skip(process.env['MANAGED_E2E']!=='1','Requires local Supabase and Vault');
+  if(mobile)await page.setViewportSize({width:390,height:844});
+  const h=await notificationHarness();let client:Awaited<ReturnType<typeof mcpClient>>|undefined;
+  try{
+    await page.goto(h.origin);await signUp(page,`notify-e2e-${randomUUID()}@example.com`,'Notification owner');
+    const agent=await authorizeAgent(page,h.origin);client=await mcpClient(h.origin,agent.token);
+    const setup=payload<{setup_url:string;recommended:string;capabilities:{mcp_push_wake:boolean}}>(await client.callTool({name:'setup_notifications',arguments:{platform:'grokbot',can_keep_authenticated_receiver:false}}));
+    expect(setup.recommended).toBe('webhook');expect(setup.capabilities.mcp_push_wake).toBe(false);
+    await page.goto(setup.setup_url);
+    const dialog=page.getByRole('dialog',{name:'Notificaciones de Scout'});await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel('Cliente MCP para notificaciones')).toHaveValue(agent.connectionId);
+    await dialog.getByLabel('URL del webhook',{exact:true}).fill('https://notifications.example.com/routine');
+    await dialog.getByLabel('Clave del webhook',{exact:true}).fill('fixture-webhook-key');
+    await dialog.getByRole('button',{name:'Guardar y probar',exact:true}).click();
+    await expect(dialog.getByText('Último aviso: Aceptado por la plataforma; esperando confirmación del agente.',{exact:true})).toBeVisible();
+    await expect(dialog.getByLabel('Clave del webhook',{exact:true})).toHaveValue('');
+    expect(h.delivered).toHaveLength(1);
+    expect(payload<{active:boolean}>(await client.callTool({name:'get_notification_status',arguments:{}})).active).toBe(false);
+    const probe=h.delivered[0]!;
+    const received=await client.callTool({name:'confirm_notification_delivery',arguments:{delivery_id:probe.delivery_id,challenge:probe.challenge}});
+    expect(payload<{active:boolean}>(received).active).toBe(true);
+    await expect(dialog.getByText('Notificaciones activas: recepción confirmada por el agente.',{exact:true})).toBeVisible();
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.screenshot({path:`.local-state/verification/notifications-${mobile?'mobile':'desktop'}.png`,fullPage:true});
+    const ownerResponse=await page.request.get(`${h.origin}/api/agents/${agent.agentId}/notifications`);
+    expect(JSON.stringify(await ownerResponse.json())).not.toContain('fixture-webhook-key');
+    await page.getByRole('button',{name:'Cerrar ventana',exact:true}).click();
+    await page.goto(h.origin);await expect(page.getByRole('main')).toHaveClass(/workspace/);
+    const groupId=await createGroup(page,'Avisos conectados');await addAgent(page,'Scout');
+    await expect(page.getByRole('list',{name:'Agentes del grupo'})).toContainText('Avisos por webhook activos');
+    if(mobile)await page.getByRole('button',{name:'Cerrar detalles',exact:true}).click();
+    await send(page,'Confirmá que el aviso te llegó.');
+    expect((await h.dispatch()).status).toBe(200);
+    const wake=h.delivered.find((item)=>item.kind==='wake')!;expect(wake).toBeDefined();
+    expect(JSON.stringify(wake)).not.toContain('Confirmá que');
+    expect(payload<{events:unknown[]}>(await client.callTool({name:'get_inbox',arguments:{}})).events).toHaveLength(1);
+    await client.callTool({name:'confirm_notification_delivery',arguments:{delivery_id:wake.delivery_id,challenge:wake.challenge}});
+    const inbox=payload<{events:Array<{eventId:string}>}>(await client.callTool({name:'get_inbox',arguments:{}}));
+    const reply={group_id:groupId,text:'El aviso llegó y fue procesado por la rutina.',idempotency_key:`reply:${inbox.events[0]!.eventId}:final`};
+    payload(await client.callTool({name:'send_message',arguments:reply}));
+    expect(payload<{published:boolean;message:{text:string}}>(await client.callTool({name:'get_notification_reply_receipt',arguments:{event_id:inbox.events[0]!.eventId}}))).toMatchObject({published:true,message:{text:reply.text}});
+    expect(payload<{replayed:boolean}>(await client.callTool({name:'send_message',arguments:reply})).replayed).toBe(true);
+    await expect(page.getByText(reply.text,{exact:true})).toBeVisible();
+    payload(await client.callTool({name:'ack_inbox',arguments:{event_id:inbox.events[0]!.eventId}}));
+    expect(payload<{events:unknown[]}>(await client.callTool({name:'get_inbox',arguments:{}})).events).toHaveLength(0);
+    const pause=await page.request.post(`${h.origin}/api/agents/${agent.agentId}/notifications/pause`,{headers:{origin:h.origin},data:{}});expect(pause.status()).toBe(200);
+    expect(payload<{active:boolean}>(await client.callTool({name:'get_notification_status',arguments:{}})).active).toBe(false);
+  }finally{await client?.close();await h.close();}
+});

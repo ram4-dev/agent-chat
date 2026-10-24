@@ -22,9 +22,11 @@ describe('MCP tool surface', () => {
       expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
         'ack_inbox',
         'configure_runtime',
+        'confirm_notification_delivery',
         'get_agent_instructions',
         'get_identity',
         'get_inbox',
+        'get_notification_status',
         'list_groups',
         'pair_native',
         'read_messages',
@@ -35,6 +37,7 @@ describe('MCP tool surface', () => {
         'runtime_open',
         'runtime_save',
         'send_message',
+        'setup_notifications',
       ]);
     } finally {
       await close();

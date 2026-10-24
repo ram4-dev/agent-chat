@@ -11,6 +11,7 @@ import { registerErrorHandler, registerNotFoundHandler } from './error-envelope.
 import { registerLivenessRoute } from './liveness.js';
 import { registerOriginGuard } from './origin-guard.js';
 import { registerWebApp } from './web-app.js';
+import { registerNotificationRoutes } from '../../notifications/routes.js';
 
 export interface HttpAdapterDependencies {
   config: RuntimeConfig;
@@ -36,8 +37,9 @@ export function registerHttpAdapter(
     secureCookies: config.nodeEnv === 'production',
   });
   registerAgentRoutes(app, services);
+  registerNotificationRoutes(app,services);
   if (services.nativeAccess && services.nativeDelivery) registerNativeAccessRoutes(app, { auth: services.auth, nativeAccess: services.nativeAccess, nativeDelivery: services.nativeDelivery });
-  registerGroupRoutes(app, { auth: services.auth, groups: services.groups, hub: services.hub, ...(services.automation ? { automation: services.automation } : {}), ...(services.nativeStatus ? { nativeStatus: services.nativeStatus } : {}) });
+  registerGroupRoutes(app, { ...(services.notifications?{notifications:services.notifications}:{}), auth: services.auth, groups: services.groups, hub: services.hub, ...(services.automation ? { automation: services.automation } : {}), ...(services.nativeStatus ? { nativeStatus: services.nativeStatus } : {}) });
   registerMessageRoutes(app, {
     auth: services.auth,
     messaging: services.messaging,

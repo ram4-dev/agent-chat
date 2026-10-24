@@ -13,6 +13,7 @@ export interface OwnedAgentView {
   avatarUrl: string | null;
   status: 'active' | 'revoked';
   receiverConnected: boolean;
+  notificationActive?: boolean;
   nativeRuntime?: NativeAgentSummary | null;
   connections: {
     id: string;
