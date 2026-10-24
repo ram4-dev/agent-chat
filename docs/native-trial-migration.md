@@ -13,7 +13,7 @@ node scripts/native-trial-copy.mjs SOURCE_FIXTURE.db NEW_COPY.db
 pnpm exec vitest run --project integration tests/integration/native-trial-migration.test.ts
 ```
 
-El helper abre la fuente en modo de lectura, usa SQLite backup y rechaza sobrescribir un destino existente. No arranca servicios, no activa consumidores y no ejecuta la transición por sí solo. La prueba llama `trialMigration` exclusivamente sobre la copia desechable, con un marcador explícito. Ese módulo no se registra como API HTTP/MCP.
+El helper valida las rutas, rechaza espacios exteriores y abre la fuente en modo de lectura. Genera SQLite backup en un directorio privado, fija permisos 0600 y publica mediante un enlace atómico que falla si el destino existe. SQLite nunca recibe el destino final del usuario. Ante un fallo se elimina únicamente el directorio temporal propio; el destino y los archivos existentes se conservan. No arranca servicios, no activa consumidores y no ejecuta la transición por sí solo. La prueba llama `trialMigration` exclusivamente sobre la copia desechable, con un marcador explícito. Ese módulo no se registra como API HTTP/MCP.
 
 La secuencia probada es pausa legacy, copia consistente, selección nativa desactivada, consentimiento nativo sintético, activación de un consumidor de prueba, publicación y ACK con recibo, pausa nativa y rollback con revisión nueva. Se conservan las tablas originales, la conversación legacy y los recibos nativos; legacy queda pausado hasta una activación explícita. El ensayo compara las conexiones y clientes OAuth de fuente y copia sin cambiar sus valores. Rechaza migrar con legacy activo y volver con trabajo nativo incierto. No se borran jobs, mensajes ni versiones.
 

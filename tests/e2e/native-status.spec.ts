@@ -71,7 +71,7 @@ test('owner sees native coverage, capabilities, empty activity and recoverable s
       await panel.getByRole('button',{name:'Pedir cancelación',exact:true}).click();
       const dialog=page.getByRole('dialog',{name:'Pedir cancelación del turno',exact:true});
       await dialog.getByRole('button',{name:'Confirmar acción'}).click();
-      await expect(panel.getByRole('alert')).toContainText('No pudimos aplicar el cambio');
+      await expect(dialog.getByRole('alert')).toContainText('No pudimos aplicar el cambio');
       await dialog.getByRole('button',{name:'Volver',exact:true}).click(); await page.unroute(cancelPath);
       const suppressPath='**/api/native/deliveries/synthetic-pending/suppress';
       await page.route(suppressPath,route=>route.fulfill({json:{state:'needs_review',receipt:null}}));

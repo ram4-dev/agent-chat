@@ -89,9 +89,10 @@ export function NativeAutomationPanel({ agentId, groupId, name }: { agentId: str
         </li>)}</ol>
       </details>
     </>}
-    {feedback && <p role="alert">{feedback}</p>}
+    {feedback && !pendingAction && <p role="alert">{feedback}</p>}
     {pendingAction && <Modal title={pendingAction.action === 'cancel' ? 'Pedir cancelación del turno' : 'Confirmar sin publicar'} onClose={() => { if (!busy) setPendingAction(undefined); }}>
       <p>{pendingAction.action === 'cancel' ? 'La solicitud no garantiza que el proceso haya terminado. El turno seguirá reservado hasta verificarlo.' : 'La entrega se confirmará sin publicar una respuesta. Un turno incierto conserva su reserva hasta verificar su finalización.'}</p>
+      {feedback && <p role="alert">{feedback}</p>}
       <button className="button secondary" disabled={busy} onClick={() => setPendingAction(undefined)}>Volver</button>
       <button className="button primary" disabled={busy} onClick={() => { void mutate(`/api/native/deliveries/${pendingAction.eventId}/${pendingAction.action}`, 'POST'); }}>Confirmar acción</button>
     </Modal>}

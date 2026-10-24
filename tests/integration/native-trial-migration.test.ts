@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { it,expect } from 'vitest';
 import { randomUUID, generateKeyPairSync, createHash, sign } from 'node:crypto';
-import { mkdtemp,rm } from 'node:fs/promises';
+import { mkdtemp,rm,writeFile,readFile,readdir,stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join,resolve } from 'node:path';
 import { nativeProofPayload,nativeResultPayload } from '@agent-chat/contracts';
@@ -40,4 +40,23 @@ it('migrates only a paused quiescent copy, publishes once and rolls back without
   expect(source.sqlite.prepare('SELECT * FROM agent_connections').all()).toEqual(copy.sqlite.prepare('SELECT * FROM agent_connections').all());
   expect(source.sqlite.prepare('SELECT * FROM oauth_clients').all()).toEqual(copy.sqlite.prepare('SELECT * FROM oauth_clients').all());
  } finally{copy?.close();source.close();await rm(root,{recursive:true,force:true});}
+});
+
+it('never overwrites a trimmed destination and removes only private failed backups',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'native-copy-safety-'));const source=join(root,'source.db');const existing=join(root,'existing.db');const target=join(root,'retry.db');
+ const db=createDatabase({path:source,busyTimeoutMs:1000});db.sqlite.exec('CREATE TABLE sentinel(value TEXT); INSERT INTO sentinel VALUES(\'fixture\')');db.close();
+ const run=(input:string,output:string)=>promisify(execFile)(process.execPath,['scripts/native-trial-copy.mjs',input,output]);
+ try{
+  await writeFile(existing,'EXISTING-DESTINATION');
+  for(const destination of [existing+' ',existing+'\t',' '+existing,existing]){
+   await expect(run(source,destination)).rejects.toThrow();expect(await readFile(existing,'utf8')).toBe('EXISTING-DESTINATION');
+  }
+  await expect(run(join(root,'missing.db'),target)).rejects.toThrow();
+  expect(await readdir(root)).toEqual(expect.not.arrayContaining(['retry.db']));
+  const corrupt=join(root,'corrupt.db');await writeFile(corrupt,'not a SQLite database');await expect(run(corrupt,target)).rejects.toThrow();
+  expect((await readdir(root)).some(name=>name.startsWith('.agent-chat-backup-'))).toBe(false);
+  expect((await readdir(root)).includes('retry.db')).toBe(false);
+  await run(source,target);expect((await stat(target)).mode & 0o777).toBe(0o600);const copied=createDatabase({path:target,busyTimeoutMs:1000});try{expect(copied.sqlite.prepare('SELECT value FROM sentinel').get()).toEqual({value:'fixture'});}finally{copied.close();}
+  expect((await readdir(root)).some(name=>name.startsWith('.agent-chat-backup-'))).toBe(false);
+ }finally{await rm(root,{recursive:true,force:true});}
 });
