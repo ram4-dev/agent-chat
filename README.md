@@ -338,3 +338,5 @@ provider, preserving its configured persona, workspace rules and advertised tool
 It does not enable automatic native replies or change the existing receiver.
 The installed-Hermes capability E2E and its requirements are documented in
 [Native runtime capabilities](docs/native-runtime-capabilities.md).
+
+The Hermes native profile adapter, recovery plugin, controller configuration and isolated E2E checks are documented in [Hermes native adapter](docs/hermes-native-adapter.md). Personal-profile activation remains pending.

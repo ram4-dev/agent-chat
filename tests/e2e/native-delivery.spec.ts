@@ -1,5 +1,5 @@
-import { stripVTControlCharacters } from 'node:util';
-import { spawn, type ChildProcess } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
+import { child, stop } from '../helpers/native-process';
 import { createInterface } from 'node:readline';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
@@ -10,30 +10,6 @@ import { expect, test } from '@playwright/test';
 import { createDatabase } from '../../apps/server/src/persistence/client';
 import { authorizeAgent, mcpClient, payload } from './helpers/agent';
 import { signUp, createGroup, addAgent, send } from './helpers/ui';
-
-const ownership = new WeakMap<ChildProcess, { closed: boolean; childPid: () => number | undefined }>();
-function child(command: string, args: string[], env: NodeJS.ProcessEnv) {
-  const childEnv = { ...env };
-  // Invoking the installed CLI, not a package download through pnpm exec.
-  if (command === 'portless') delete childEnv['npm_command'];
-  const process = spawn(command, args, { env: childEnv, detached: true, stdio: ['ignore','pipe','pipe'] });
-  let output = '';
-  process.stdout!.on('data', chunk => { output += String(chunk); });
-  process.stderr!.on('data', chunk => { output += String(chunk); });
-  const state = { closed: false, childPid: () => { const value = /"fixturePid":(\d+)/.exec(stripVTControlCharacters(output))?.[1]; return value ? Number(value) : undefined; } };
-  ownership.set(process, state); process.once('close', () => { state.closed = true; });
-  return { process, output: () => stripVTControlCharacters(output) };
-}
-async function stop(process: ChildProcess) {
-  const state = ownership.get(process)!;
-  if (state.closed) return;
-  const childPid = state.childPid();
-  const signal = (pid: number | undefined, kind: NodeJS.Signals) => { if (pid) { try { globalThis.process.kill(pid, kind); } catch { /* Already closed. */ } } };
-  signal(childPid, 'SIGTERM');
-  process.kill('SIGTERM');
-  const timer = setTimeout(() => { signal(childPid ? -childPid : undefined, 'SIGKILL'); signal(process.pid ? -process.pid : undefined, 'SIGKILL'); }, 3000);
-  await new Promise<void>(resolve => process.once('close', () => resolve())); clearTimeout(timer);
-}
 
 test('native supervisor recovers after dispatch, a lost publication response and a reconnect window without regenerating', async ({ page }) => {
   test.setTimeout(90_000);

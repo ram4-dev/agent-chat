@@ -21,6 +21,7 @@ export async function processNativeNext(control: NativeCallPort, runtime: Native
   if (d.targetId !== targetId) throw new Error('Native target mismatch');
   if (d.state === 'result_saved') {
     await control.call('native_finish', { ticket: d.ticket }, signal);
+    await runtime.confirmedReceipt?.(d.ticket.eventId, d.startKey);
     return 'processed';
   }
   if (!d.started && d.state === 'cancel_requested') return 'blocked';
@@ -40,7 +41,7 @@ export async function processNativeNext(control: NativeCallPort, runtime: Native
     d.runRef = accepted.runRef;
   }
   if (signal.aborted) return 'idle';
-  const query = { eventId: d.ticket.eventId, targetId: d.targetId, startKey: d.startKey, runRef: d.runRef };
+  const query = { eventId: d.ticket.eventId, targetId: d.targetId, startKey: d.startKey, runRef: d.runRef, bindingId: d.bindingId, groupId: d.groupId, conversationGeneration: d.conversationGeneration, conversationRef: d.conversationRef, incoming: d.incoming };
   if (d.state === 'cancel_requested' && !d.cancelStarted && runtime.cancel) {
     await control.call('native_cancel_begin', { ticket: d.ticket }, signal);
     if (signal.aborted) return 'idle';
@@ -60,6 +61,7 @@ export async function processNativeNext(control: NativeCallPort, runtime: Native
   if (signal.aborted) return 'idle';
   await control.call('native_save', { ticket: d.ticket, result, proof: observation.proof }, signal);
   await control.call('native_finish', { ticket: d.ticket }, signal);
+  await runtime.confirmedReceipt?.(d.ticket.eventId, d.startKey);
   return 'processed';
 }
 
@@ -98,6 +100,13 @@ export async function runNativeReceiver(modulePath: string, directory: string): 
     } };
     const controllerId = randomUUID();
     const { epoch } = await control.call<{ epoch: number }>('native_open', { controllerId });
+    for (const item of await runtime.unconfirmedResults?.() ?? []) {
+      if (shutdown.signal.aborted) break;
+      try {
+        const current = await control.call<{ receipt: unknown }>('native_delivery', { eventId: item.eventId }, shutdown.signal);
+        if (current.receipt) await runtime.confirmedReceipt?.(item.eventId, item.startKey);
+      } catch { /* Revoked/unavailable content retains its unconfirmed local result. */ }
+    }
     console.log(JSON.stringify({ type: 'native.ready', controllerId, epoch, pid: process.pid }));
     while (!shutdown.signal.aborted) {
       const status = await processNativeNext(control, runtime, { consume: (key) => journal!.prepare('INSERT OR IGNORE INTO consumed_starts(start_key) VALUES(?)').run(key).changes === 1 }, controllerId, epoch, description.targetId, shutdown.signal);

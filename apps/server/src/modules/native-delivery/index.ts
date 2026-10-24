@@ -47,7 +47,8 @@ export function createNativeDeliveryModule(sqlite: Database.Database, access: Na
   }
   function view(r: Row): NativeDeliveryView {
     const source = r.state !== 'done' ? sqlite.prepare('SELECT message_id FROM inbox_events WHERE id=?').get(r.event_id) as { message_id: string } | undefined : undefined;
-    return { ticket: { eventId: r.event_id, claim: r.claim, epoch: r.controller_epoch, controllerId: r.controller_id },
+    const mapping = sqlite.prepare('SELECT generation FROM native_conversations WHERE binding_id=? AND revision=? AND group_id=? ORDER BY generation DESC LIMIT 1').get(r.binding_id, r.binding_revision, r.group_id) as { generation: number };
+    return { conversationGeneration: mapping.generation, ticket: { eventId: r.event_id, claim: r.claim, epoch: r.controller_epoch, controllerId: r.controller_id },
       bindingId: r.binding_id, targetId: r.target_id, agentId: r.agent_id, groupId: r.group_id,
       incoming: source ? ports.inbox.eventForMessage(r.agent_id, source.message_id)?.message ?? null : null,
       state: r.state, started: r.started === 1, cancelStarted: r.cancel_started === 1, startKey: r.start_key, runRef: r.native_run_ref,

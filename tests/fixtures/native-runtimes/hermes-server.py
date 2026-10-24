@@ -82,6 +82,11 @@ async def main():
         import hermes_bootstrap  # noqa: F401; installed dependency loader, temporary root only
         from aiohttp import web
 
+        mode = os.environ.get("NATIVE_FIXTURE_MODE", "default")
+        persona = os.environ.get("NATIVE_FIXTURE_PERSONA", "capability fixture persona")
+        provider_gate = threading.Event()
+        approval_target = home / "approval-target"
+        approval_target.mkdir(exist_ok=True)
         requests = []
         generation = uuid.uuid4().hex
         report_lock = threading.Lock()
@@ -108,13 +113,27 @@ async def main():
                          if m.get("role") == "user"), "")
             text = (json.dumps({"decision": "no_reply", "text": ""}) if last == "SILENT"
                     else f"native fixture reply {generation}:{body['fixture_sequence']}")
-            message = {"role": "assistant", "content": text}
+            if mode == "approval" and body.get("stream"):
+                if "BLOCK_NATIVE" in str(last):
+                    await asyncio.to_thread(provider_gate.wait, 30)
+                if "SILENT_NATIVE" in str(last):
+                    text = "[SILENT]"
+                if "APPROVAL_NATIVE" in str(last):
+                    if any(m.get("role") == "tool" for m in body["messages"]):
+                        text = "Native approval completed"
+                    else:
+                        command = f'rm -rf -- "{approval_target}"'
+                        message = {"role": "assistant", "content": "Solicitando aprobación nativa.", "tool_calls": [{"index": 0, "id": "native-approval-tool", "type": "function", "function": {"name": "terminal", "arguments": json.dumps({"command": command})}}]}
+                if "APPROVAL_NATIVE" not in str(last) or any(m.get("role") == "tool" for m in body["messages"]):
+                    message = {"role": "assistant", "content": text}
+            else:
+                message = {"role": "assistant", "content": text}
             if body.get("stream"):
                 chunks = [
                     {"id": "fixture", "object": "chat.completion.chunk", "model": "native-fixture",
                      "choices": [{"index": 0, "delta": message, "finish_reason": None}]},
                     {"id": "fixture", "object": "chat.completion.chunk", "model": "native-fixture",
-                     "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+                     "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls" if message.get("tool_calls") else "stop"}]},
                 ]
                 data = "".join("data: " + json.dumps(c) + "\n\n" for c in chunks) + "data: [DONE]\n\n"
                 return web.Response(text=data, content_type="text/event-stream")
@@ -122,11 +141,31 @@ async def main():
                                       "choices": [{"index": 0, "message": message, "finish_reason": "stop"}],
                                       "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}})
 
+        from gateway.platforms.api_server_runs import api_worker_live_count
+        gateway_loop = asyncio.get_running_loop()
+
         class ProviderHandler(BaseHTTPRequestHandler):
             def log_message(self, *_args):
                 pass
 
+            def _fixture_response(self, value):
+                body = json.dumps(value).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
             def do_GET(self):
+                if self.path == "/fixture/evidence":
+                    if self.headers.get("Authorization") != "Bearer " + os.environ["NATIVE_FIXTURE_KEY"]:
+                        self.send_error(401)
+                        return
+                    from hermes_cli.plugins import get_plugin_manager
+                    manager = get_plugin_manager()
+                    summary = [{"name": p.get("name"), "enabled": p.get("enabled"), "error": p.get("error")} for p in manager.list_plugins() if p.get("name") == "agent-chat-runtime"]
+                    self._fixture_response({"workerCount": api_worker_live_count(), "approvalTargetExists": approval_target.exists(), "plugins": summary, "handlers": len(manager.get_platform_handler_factories("api_server"))})
+                    return
                 body = json.dumps({"object": "list", "data": [{"id": "native-fixture", "context_length": 131072}]}).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -135,6 +174,24 @@ async def main():
                 self.wfile.write(body)
 
             def do_POST(self):
+                if self.path.startswith("/fixture/"):
+                    if self.headers.get("Authorization") != "Bearer " + os.environ["NATIVE_FIXTURE_KEY"]:
+                        self.send_error(401)
+                        return
+                    body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))) or b"{}")
+                    if self.path == "/fixture/release":
+                        provider_gate.set()
+                    elif self.path == "/fixture/cancel-handler":
+                        def cancel_task():
+                            task = adapter._active_run_tasks.get(body["runId"])
+                            if task is not None:
+                                task.cancel()
+                        gateway_loop.call_soon_threadsafe(cancel_task)
+                    else:
+                        self.send_error(404)
+                        return
+                    self._fixture_response({"requested": True})
+                    return
                 # The native constructor performs synchronous metadata I/O; the provider
                 # must run outside the gateway loop to avoid a fixture-induced deadlock.
                 class Request:
@@ -151,14 +208,28 @@ async def main():
         provider = ThreadingHTTPServer(("127.0.0.1", 0), ProviderHandler)
         threading.Thread(target=provider.serve_forever, daemon=True).start()
         provider_port = provider.server_port
+        plugin_source = os.environ.get("NATIVE_FIXTURE_PLUGIN")
+        if plugin_source:
+            destination = home / "plugins" / "agent-chat-runtime"
+            if not destination.exists():
+                shutil.copytree(plugin_source, destination)
         (home / "config.yaml").write_text(json.dumps({
             "model": {"default": "native-fixture", "provider": "custom",
                       "base_url": f"http://127.0.0.1:{provider_port}/v1", "api_key": "fixture-only"},
-            "platform_toolsets": {"api_server": ["file"]},
+            "platform_toolsets": {"api_server": ["file", "terminal"] if mode == "approval" else ["file"]},
+            "terminal": {"backend": "local", "cwd": str(home), "home_mode": "profile"},
+            "approvals": {"mode": "manual"},
+            "plugins": {"enabled": ["agent-chat-runtime"] if plugin_source else []},
+            "database": {"synchronous": "FULL"},
             "memory": {"memory_enabled": False, "user_profile_enabled": False},
             "agent": {"max_turns": 2},
         }))
-        (home / "SOUL.md").write_text("NATIVE_PROFILE_SENTINEL: capability fixture persona.\n")
+        (home / "SOUL.md").write_text(f"NATIVE_PROFILE_SENTINEL: {persona}.\n")
+        if mode == "approval":
+            os.environ["HERMES_EXEC_ASK"] = "1"
+        if plugin_source:
+            from hermes_cli.plugins import discover_plugins
+            discover_plugins()
         from gateway.config import PlatformConfig
         from gateway.platforms.api_server import APIServerAdapter
         adapter = APIServerAdapter(PlatformConfig(enabled=True, extra={
@@ -171,10 +242,11 @@ async def main():
         for sig in (signal.SIGINT, signal.SIGTERM):
             asyncio.get_running_loop().add_signal_handler(sig, stop.set)
         print(json.dumps({"type": "native-fixture.ready", "origin": os.environ["PORTLESS_URL"],
-                          "caFile": os.environ.get("NODE_EXTRA_CA_CERTS")}), flush=True)
+                          "caFile": os.environ.get("NODE_EXTRA_CA_CERTS"), "fixtureOrigin": f"http://127.0.0.1:{provider_port}"}), flush=True)
         try:
             await stop.wait()
         finally:
+            provider_gate.set()
             await adapter.disconnect()
             await asyncio.to_thread(provider.shutdown)
             provider.server_close()

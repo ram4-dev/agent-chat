@@ -1,0 +1,5 @@
+name: agent-chat-runtime
+version: 0.1.0
+description: Read-only Agent Chat recovery and profile verification for the pinned Hermes API server.
+author: Agent Chat
+manifest_version: 2

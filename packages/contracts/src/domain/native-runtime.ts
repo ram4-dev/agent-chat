@@ -48,6 +48,6 @@ export const nativeProofPayload = (d: NativeTerminalData): string => JSON.string
 export interface NativeTicket { eventId: string; claim: string; epoch: number; controllerId: string }
 export interface NativeDeliveryView {
   ticket: NativeTicket; bindingId: string; targetId: string; groupId: string; agentId: string;
-  state: string; started: boolean; cancelStarted: boolean; startKey: string; runRef: string | null; conversationRef: string | null;
+  conversationGeneration: number; state: string; started: boolean; cancelStarted: boolean; startKey: string; runRef: string | null; conversationRef: string | null;
   incoming: MessageView | null; result: NativeResult | null; receipt: { disposition: 'published' | 'no_reply' | 'suppressed'; messageId: string | null } | null;
 }

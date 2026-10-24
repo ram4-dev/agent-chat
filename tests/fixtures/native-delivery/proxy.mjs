@@ -13,11 +13,15 @@ const server = createServer(async (request, response) => {
     const body = Buffer.concat(chunks);
     const url = new URL(request.url, process.env.NATIVE_UPSTREAM);
     const headers = { ...request.headers, host: url.host }; delete headers.connection; delete headers['content-length'];
-    const upstream = await globalThis.fetch(url, { method: request.method, headers, signal: cancelled.signal, ...(body.length ? { body } : {}) });
-    const content = Buffer.from(await upstream.arrayBuffer());
     let tool;
     try { tool = JSON.parse(body.toString()).params?.name; } catch { /* Protocol non-tool requests. */ }
-    if (tool === 'native_finish' && !existsSync(process.env.NATIVE_LOST_RESPONSE)) {
+    if (tool === process.env.NATIVE_BLOCK_TOOL && process.env.NATIVE_BLOCK_MARKER && !existsSync(process.env.NATIVE_BLOCK_MARKER)) {
+      writeFileSync(process.env.NATIVE_BLOCK_MARKER, 'blocked');
+      await new Promise(resolve => response.once('close', resolve)); return;
+    }
+    const upstream = await globalThis.fetch(url, { method: request.method, headers, signal: cancelled.signal, ...(body.length ? { body } : {}) });
+    const content = Buffer.from(await upstream.arrayBuffer());
+    if (tool === 'native_finish' && process.env.NATIVE_LOST_RESPONSE && !existsSync(process.env.NATIVE_LOST_RESPONSE)) {
       // The upstream has committed and replied; discard only its first response.
       writeFileSync(process.env.NATIVE_LOST_RESPONSE, 'lost'); response.destroy(); return;
     }

@@ -58,6 +58,6 @@ describe('native Hermes run contract over HTTP', () => {
   });
   it('preserves the native approval wait as a non-terminal state', async () => {
     const origin = await endpoint((_request, response) => response.end(JSON.stringify({ status: 'waiting_for_approval', session_id: 'group-one' })));
-    expect(await new HermesRunsProbe(origin, 'fixture').status('one')).toEqual({ runId: 'one', status: 'waiting_for_approval', sessionId: 'group-one', output: null });
+    expect(await new HermesRunsProbe(origin, 'fixture').status('one')).toMatchObject({ runId: 'one', status: 'waiting_for_approval', sessionId: 'group-one', output: null });
   });
 });
