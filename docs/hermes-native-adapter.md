@@ -1,6 +1,6 @@
 # Hermes native profile adapter
 
-The adapter connects Agent Chat to the API server of one explicitly selected Hermes profile. It sends native runs without overriding the profile's model, instructions, toolset or approval policy. Its session key is `agent-chat:<binding>:<group>:<generation>`; participants in a group share that session while their real author IDs are preserved.
+The adapter connects Agent Chat to the API server of one explicitly selected Hermes profile. It sends native runs without overriding the profile's model, instructions, toolset or approval policy. Its session key is `agent-chat:<binding>:<group>:<generation>`; participants in a group share that session while their real author IDs are preserved through the native `author` request field.
 
 This implementation is under review. Production activation and acceptance with an owner-selected profile remain pending. The automated tests use Hermes source at `d923a5eb487a17c0a68801bba9ef0f56c81040a8`, disposable profiles and a fake inference provider. They do not establish compatibility with other Hermes releases or prove continuous availability of a personal Mac.
 
@@ -40,7 +40,7 @@ vault-env run --names AGENT_CHAT_MCP_TOKEN,AGENT_CHAT_HERMES_TOKEN,AGENT_CHAT_HE
     --state /absolute/path/private-controller-state
 ```
 
-The vault must contain those named secrets. Keep the state directory private and durable. The configuration rejects a different profile URL and non-HTTPS remote endpoints. Local `.localhost` development routes may use HTTP. The adapter checks the remote profile and recovery capabilities before dispatch. Moving an existing local journal to another target, profile, endpoint or signing identity is rejected.
+The vault must contain those named secrets. Keep the state directory private and durable. The configuration rejects a different profile URL and non-HTTPS remote endpoints. Local `.localhost` development routes may use HTTP. The local maintenance timer stops when the adapter closes. The adapter checks the remote profile and recovery capabilities before dispatch. Moving an existing local journal to another target, profile, endpoint or signing identity is rejected.
 
 A native approval remains pending in Hermes until the human approves it through an authorized native surface. This adapter never approves requests automatically. Native session history remains available through Hermes's authenticated session API; no visibility in an arbitrary open Codex session is implied.
 
@@ -48,7 +48,7 @@ A native approval remains pending in Hermes until the human approves it through 
 
 The controller consumes each start authorization durably before its single native POST. A new controller with an empty local store can find a completed run by its original request fingerprint and recover its result. A missing or incompatible native record remains blocked instead of generating again. Agent Chat commits publication and inbox acknowledgment together.
 
-The adapter stores recoverable results and signed evidence locally using SQLite FULL. Unconfirmed results remain available. After Agent Chat returns a durable receipt, result bodies and evidence expire after seven days; minimal start tombstones remain to prevent replay. Startup checks receipts for up to 100 unconfirmed local results; unavailable or revoked reads leave those results retained. Hermes's own history and idempotency retention follow its native configuration and are not purged by this plugin.
+The adapter stores recoverable results and signed evidence locally using SQLite FULL. Unconfirmed results remain available. After Agent Chat returns a durable receipt, result bodies and evidence expire after seven days on an hourly maintenance cycle, including while the controller is idle; minimal start tombstones remain to prevent replay. Startup checks receipts for up to 100 unconfirmed local results; unavailable or revoked reads leave those results retained. Hermes's own history and idempotency retention follow its native configuration and are not purged by this plugin.
 
 ## Verification
 
@@ -69,3 +69,5 @@ Hermes tests require its runtime CLI, Git, Python/uv and Portless. They archive 
 `hermes-delivery.spec.ts` exercises browser input, OAuth/pairing, the compiled supervisor and Hermes adapter, native runs, shared group history, a different group, approval and silence. It drops the controller's run-reference registration, restarts Hermes, and recovers through a second empty controller without a new completion. `hermes-gates.spec.ts` covers native approval, cancellation with an active executor and separate named profiles. `hermes-runtime.test.ts` checks signatures, exact outgoing fields, local replay prevention and receipt-dependent retention.
 
 Real-profile acceptance still requires the owner to select a profile, verify its prompt/tools and native approval surface, and approve a harmless temporary operation. Grok bot callback/network acceptance and Codex profile integration are separate slices.
+
+Journals from the unreleased S4 prototype that sent `turn_author` have a different request fingerprint. They must be reconciled explicitly; this version refuses incompatible local mappings and never resends an old creation with a corrected body.

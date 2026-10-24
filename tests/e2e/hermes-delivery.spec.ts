@@ -31,6 +31,7 @@ test('Hermes profile receives browser messages through its real supervisor, pres
     const origin = /PORTLESS_URL=(https?:\/\/\S+)/.exec(server.output())![1]!;
     await expect.poll(async () => { try { return (await page.request.get(`${origin}/liveness`)).ok(); } catch { return false; } }).toBe(true);
     await page.goto(origin); await signUp(page, 'native-supervisor@example.com', 'Native E2E');
+    const owner = (await (await page.request.get(`${origin}/api/auth/me`)).json()) as { user: { id: string } };
     const identity = await authorizeAgent(page, origin);
     await page.goto(origin); const groupId = await createGroup(page, 'Supervisor nativo'); await addAgent(page, 'Scout');
     const invite = await invitation(page);
@@ -69,6 +70,8 @@ test('Hermes profile receives browser messages through its real supervisor, pres
     await expect.poll(() => existsSync(marker)).toBe(true);
     await expect.poll(async () => (await generated()).length).toBe(1);
     await expect.poll(async () => (await hermes.evidence()).workerCount).toBe(0);
+    const firstNativeAuthor = (await generated())[0]!.fixture_native_authors[0]!;
+    expect(firstNativeAuthor.author).toMatchObject({ id: `agent-chat:human:${owner.user.id}`, is_bot: false });
     expect(rows()[0]?.run_ref).toBeNull();
     await stop(receiver.process);
     await hermes.stop(); probe = await hermes.start();
@@ -81,9 +84,15 @@ test('Hermes profile receives browser messages through its real supervisor, pres
     const guestContext = await browser.newContext();
     try {
       const guest = await guestContext.newPage(); await guest.goto(origin); await signUp(guest, 'hermes-guest@example.com', 'Otra persona'); await joinGroup(guest, invite);
+      const guestUser = (await (await guest.request.get(`${origin}/api/auth/me`)).json()) as { user: { id: string } };
       await send(guest, 'SECOND_HUMAN');
       await expect.poll(() => rows().filter(r => r.state === 'done').length).toBe(2);
-      const shared = JSON.stringify((await generated())[0]?.messages);
+      const guestRequest = (await generated())[0]!;
+      const secondNativeAuthor = guestRequest.fixture_native_authors[0]!;
+      expect(secondNativeAuthor.author).toMatchObject({ id: `agent-chat:human:${guestUser.user.id}`, is_bot: false });
+      expect(secondNativeAuthor.author!.id).not.toBe(firstNativeAuthor.author!.id);
+      expect(secondNativeAuthor.session_id).toBe(firstNativeAuthor.session_id);
+      const shared = JSON.stringify(guestRequest.messages);
       expect(shared).toContain('FIRST_HERMES_CONTEXT'); expect(shared).toContain('SECOND_HUMAN');
       const session = `agent-chat:${binding.id}:${groupId}:1`;
       expect(JSON.stringify(await probe.history(session))).toContain('SECOND_HUMAN');

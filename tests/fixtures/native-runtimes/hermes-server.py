@@ -106,6 +106,10 @@ async def main():
                 body["fixture_generation"] = generation
                 body["fixture_managed_canary_loaded"] = bool(os.environ.get("NATIVE_MANAGED_CANARY"))
                 body["fixture_kind"] = "streamed_turn" if body.get("stream") else "auxiliary"
+                # Observe original AIAgent state at the provider boundary. No method
+                # replacement: this is the author that reached its native turn loop.
+                body["fixture_native_authors"] = [{"session_id": agent.session_id, "author": agent._turn_author}
+                    for agent in list(adapter._active_run_agents.values())]
                 body["fixture_sequence"] = len(requests) + 1
                 requests.append(body)
                 snapshot()

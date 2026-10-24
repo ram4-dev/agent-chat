@@ -103,6 +103,7 @@ export async function nativeHermes(source: string, temporaryParent = tmpdir(), o
     return new HermesRunsProbe(origin, token);
   }
   async function observations(): Promise<{ generation: string; requests: {
+    fixture_native_authors: { session_id: string; author: { id: string; name: string; is_bot: boolean } | null }[];
     fixture_generation: string; fixture_sequence: number; fixture_kind: string; fixture_managed_canary_loaded: boolean;
     messages: { role: string; content: unknown }[];
     tools?: { function?: { name?: string } }[];

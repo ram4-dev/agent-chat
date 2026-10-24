@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createDatabase } from '../../apps/server/src/persistence/client';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { nativeProofPayload, type NativeDeliveryView } from '@agent-chat/contracts';
 import { createHermesRuntime } from '../../apps/bridge/src/native/hermes';
 
@@ -26,15 +26,16 @@ it('Hermes adapter preserves native configuration, recovers with an empty journa
   const delivery: NativeDeliveryView = { ticket: { eventId: 'event', controllerId: 'controller', claim: 'claim', epoch: 1 }, targetId: 'target', bindingId: 'binding', agentId: 'agent', groupId: 'group', conversationGeneration: 2, conversationRef: null, state: 'start_uncertain', started: true, cancelStarted: false, startKey: 'start-one', runRef: null, result: null, receipt: null, incoming: { id: 'message', groupId: 'group', text: 'hello', createdAt: '', author: { kind: 'human', id: 'human', displayName: 'Person' } } };
   const query = { ...delivery, eventId: 'event' };
   const signal = new AbortController().signal;
+  vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
   let runtime = await createHermesRuntime(config, root);
   try {
     expect((await runtime.describe()).cancel).toBe(false);
     await runtime.start({ delivery, history: [], trustedInbound: false }, signal);
     const sent = requests.find(r => r.method === 'POST')!;
     expect(sent.path).toBe('/p/alpha/v1/runs');
-    expect(Object.keys(sent.body).sort()).toEqual(['input', 'session_id', 'turn_author']);
+    expect(Object.keys(sent.body).sort()).toEqual(['author', 'input', 'session_id']);
     expect(sent.body.session_id).toBe('agent-chat:binding:group:2');
-    expect(sent.body.turn_author).toMatchObject({ id: 'agent-chat:human:human', is_bot: false });
+    expect(sent.body.author).toMatchObject({ id: 'agent-chat:human:human', is_bot: false });
     await expect(runtime.start({ delivery, history: [], trustedInbound: false }, signal)).rejects.toThrow();
     expect(await runtime.observe(query, signal)).toEqual({ state: 'unknown' });
     state = 'completed';
@@ -49,12 +50,17 @@ it('Hermes adapter preserves native configuration, recovers with an empty journa
     expect(await runtime.recoverResult(query, signal)).toMatchObject({ text: 'Native answer' });
     expect(requests.filter(r => r.method === 'POST')).toHaveLength(1);
     expect(await runtime.unconfirmedResults!()).toEqual([{ eventId: 'event', startKey: 'start-one' }]);
-    await runtime.close();
+    await runtime.confirmedReceipt!('event', 'start-one');
     const db = createDatabase({ path: join(root, 'hermes-runtime.db'), busyTimeoutMs: 1000 });
-    db.sqlite.prepare('UPDATE runs SET confirmed_at=?').run(Date.now() - 8 * 86400000); db.close();
-    runtime = await createHermesRuntime(config, root);
+    db.sqlite.exec("INSERT INTO runs(start_key,event_id,session_id,fingerprint,result_json,proof_json) SELECT 'pending-key','pending-event',session_id,fingerprint,result_json,proof_json FROM runs WHERE start_key='start-one'");
+    // Keep this runtime alive and idle: expiry must not require restart/receipt activity.
+    await vi.advanceTimersByTimeAsync(8 * 86400000);
+    expect(db.sqlite.prepare('SELECT result_json,proof_json FROM runs WHERE start_key=?').get('start-one')).toEqual({ result_json: null, proof_json: null });
+    expect((db.sqlite.prepare('SELECT result_json FROM runs WHERE start_key=?').get('pending-key') as { result_json: string }).result_json).toBeTruthy();
+    expect(db.sqlite.prepare('SELECT COUNT(*) AS count FROM runs').get()).toEqual({ count: 2 });
+    db.close();
     await expect(runtime.recoverResult(query, signal)).rejects.toThrow('unavailable');
     await expect(runtime.start({ delivery, history: [], trustedInbound: false }, signal)).rejects.toThrow();
     profileRef = 'wrong-profile'; await expect(runtime.describe()).rejects.toThrow('not verified');
-  } finally { await runtime.close(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(root, { recursive: true, force: true }); }
+  } finally { await runtime.close(); expect(vi.getTimerCount()).toBe(0); vi.useRealTimers(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(root, { recursive: true, force: true }); }
 });

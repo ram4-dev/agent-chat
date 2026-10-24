@@ -50,6 +50,10 @@ export async function createHermesRuntime(config: Configuration, directory: stri
     function validate(q: NativeRunQuery, s: ReturnType<typeof source>, row?: Saved) {
       if (q.targetId !== config.targetId || (row && (row.event_id !== q.eventId || row.fingerprint !== s.fingerprint || row.session_id !== s.session || (row.run_ref && q.runRef && row.run_ref !== q.runRef)))) throw new Error('Hermes delivery mapping mismatch');
     }
+    const maintenance = setInterval(() => {
+      try { purge(); } catch { console.error('Hermes result retention maintenance failed'); }
+    }, 3600000);
+    maintenance.unref();
     return {
       async describe() { await verifyPeer(); return { targetId: config.targetId, durableResults: true, observeByStartKey: true, approvals: true, cancel: false }; },
       async start({ delivery, trustedInbound }, signal) {
@@ -97,7 +101,7 @@ export async function createHermesRuntime(config: Configuration, directory: stri
         db.prepare('UPDATE runs SET confirmed_at=COALESCE(confirmed_at,?) WHERE event_id=? AND start_key=?').run(Date.now(), eventId, startKey);
         purge();
       },
-      async close() { db.close(); },
+      async close() { clearInterval(maintenance); db.close(); },
     };
   } catch (error) { db.close(); throw error; }
 }

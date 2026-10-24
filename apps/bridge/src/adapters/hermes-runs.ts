@@ -21,7 +21,7 @@ function sorted(value: unknown): unknown {
   return value;
 }
 export function hermesRunFingerprint(sessionId: string, input: string, author?: { id: string; name: string; is_bot: boolean }): string {
-  return createHash('sha256').update(JSON.stringify(sorted({ body: { session_id: sessionId, input, ...(author ? { turn_author: author } : {}) }, gateway_session_key: '' }))).digest('hex');
+  return createHash('sha256').update(JSON.stringify(sorted({ body: { session_id: sessionId, input, ...(author ? { author } : {}) }, gateway_session_key: '' }))).digest('hex');
 }
 
 export class HermesRunsProbe {
@@ -51,7 +51,7 @@ export class HermesRunsProbe {
   }
   async start(sessionId: string, input: string, idempotencyKey: string, author?: { id: string; name: string; is_bot: boolean }, signal?: AbortSignal): Promise<string> {
     if (!sessionId || !idempotencyKey || !input) throw new Error('Explicit session, input and start key required');
-    const result = await this.request('/v1/runs', 'POST', { session_id: sessionId, input, ...(author ? { turn_author: author } : {}) }, idempotencyKey, signal);
+    const result = await this.request('/v1/runs', 'POST', { session_id: sessionId, input, ...(author ? { author } : {}) }, idempotencyKey, signal);
     if (typeof result['run_id'] !== 'string' || !result['run_id']) throw new Error('Native start unconfirmed');
     return result['run_id'];
   }
