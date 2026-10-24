@@ -4,6 +4,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 export class ManagedDatabase {
   private readonly pool: Pool;
   private readonly transactionContext = new AsyncLocalStorage<PoolClient>();
+  private readonly connectionFailures = new WeakMap<PoolClient, Error>();
 
   constructor(url: string, ca?: string) {
     const parsed = new URL(url);
@@ -17,6 +18,13 @@ export class ManagedDatabase {
       idleTimeoutMillis: 20_000,
       allowExitOnIdle: true,
       ssl: local ? false : { rejectUnauthorized: true, ...(ca ? { ca } : {}) },
+    });
+    // A checked-out client has no pool error listener while application code
+    // runs between queries. Keep one for the lifetime of every connection.
+    this.pool.on('connect', (client) => {
+      client.on('error', (error: Error) => {
+        if (!this.connectionFailures.has(client)) this.connectionFailures.set(client, error);
+      });
     });
     // Connection loss must not expose the connection string through a logged Error.
     this.pool.on('error', () => console.error('Postgres idle connection lost'));
@@ -36,17 +44,24 @@ export class ManagedDatabase {
   async transaction<T>(operation: () => Promise<T>): Promise<T> {
     if (this.transactionContext.getStore()) return operation();
     const client = await this.pool.connect();
+    let discard = false;
     try {
       await client.query('BEGIN');
       await client.query('SET LOCAL search_path TO agent_chat,public; SET LOCAL statement_timeout=10000');
       const result = await this.transactionContext.run(client, operation);
+      const connectionFailure = this.connectionFailures.get(client);
+      if (connectionFailure) throw connectionFailure;
       await client.query('COMMIT');
       return result;
     } catch (error) {
-      await client.query('ROLLBACK');
+      if (this.connectionFailures.has(client)) discard = true;
+      else {
+        try { await client.query('ROLLBACK'); }
+        catch { discard = true; }
+      }
       throw error;
     } finally {
-      client.release();
+      client.release(discard || this.connectionFailures.has(client));
     }
   }
 
