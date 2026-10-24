@@ -319,3 +319,11 @@ services and survives receiver restarts.
 The actual receiver additionally performs the mandatory zero-tools preflight.
 Current implementation evidence is in
 `.agent-workflow/tasks/mcp-inbound-notifications/91-live-e2e-verification.md`.
+
+### Native runtime capability probes
+
+`pnpm bridge:capabilities` checks a disposable Codex profile against a local fake
+provider, preserving its configured persona, workspace rules and advertised tools.
+It does not enable automatic native replies or change the existing receiver.
+The installed-Hermes capability E2E and its requirements are documented in
+[Native runtime capabilities](docs/native-runtime-capabilities.md).

@@ -18,4 +18,4 @@
 - Decisión solicitada: implementar en worktree aislado y ejecutar las pruebas deterministas y de capacidades previstas, comenzando por S0.
 - Exclusiones: activación/migración de servicios reales, publicación de red y acciones nativas reales no autorizadas. Preparar primero el resultado revisable y solicitar solo los datos o decisiones concretas que falten.
 - Aprobado por Ramiro en este hilo mediante «si», el 2026-10-23, para implementar en aislamiento conforme a este alcance.
-- Estado: aprobado. Worktree de implementación pendiente de registrar.
+- Estado: aprobado. Worktree creado con Worktrunk y registrado en `08-implementation-receipt.md`; rama `feat/native-agent-bindings`.
