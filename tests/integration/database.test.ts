@@ -41,12 +41,24 @@ afterEach(() => {
 });
 
 describe('createDatabase', () => {
-  it('enables WAL, foreign keys, and the configured busy timeout', () => {
+  it('enables WAL, FULL synchronization, foreign keys, and the configured busy timeout', () => {
     const database = openDatabase(1234);
 
     expect(database.sqlite.pragma('journal_mode', { simple: true })).toBe('wal');
+    expect(database.sqlite.pragma('synchronous', { simple: true })).toBe(2);
     expect(database.sqlite.pragma('foreign_keys', { simple: true })).toBe(1);
     expect(database.sqlite.pragma('busy_timeout', { simple: true })).toBe(1234);
+  });
+
+  it('sets and checks FULL independently on each writer and on reopening', () => {
+    const path = temporaryDatabasePath();
+    const first = openDatabaseAt(path);
+    first.sqlite.pragma('synchronous = NORMAL'); // Negative control: this setting is per connection.
+    const second = openDatabaseAt(path);
+    expect(first.sqlite.pragma('synchronous', { simple: true })).toBe(1);
+    expect(second.sqlite.pragma('synchronous', { simple: true })).toBe(2);
+    const reopened = openDatabaseAt(path);
+    expect(reopened.sqlite.pragma('synchronous', { simple: true })).toBe(2);
   });
 
   it('enforces foreign keys for rows written through the connection', () => {

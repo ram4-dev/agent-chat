@@ -125,6 +125,17 @@ Individual checks are also available:
 | `pnpm test:integration` | SQLite and transport integration tests |
 | `pnpm test:e2e` | Browser flows against the production build |
 
+The POSIX durability integration test requires a C compiler (`cc`, provided by
+Xcode Command Line Tools on macOS or a C toolchain on Linux). It compiles a small
+SQLite VFS from repository source using the bundled SQLite headers and runs it
+only in disposable subprocesses. The test models loss of writes not covered by
+`xSync`; it does not power off the host. Build first when running it alone:
+
+```sh
+pnpm build
+pnpm exec vitest run --project integration tests/integration/native-durability.test.ts
+```
+
 To run only the redesigned UI checks:
 
 ```sh

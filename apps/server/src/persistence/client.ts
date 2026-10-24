@@ -21,14 +21,24 @@ export interface CreateDatabaseOptions {
 /**
  * Opens the SQLite database with the durability and safety settings the whole
  * application depends on: WAL for concurrent readers, enforced foreign keys,
- * and a bounded busy timeout so a locked database fails closed instead of
- * hanging.
+ * FULL synchronization for acknowledged commits, and a bounded busy timeout
+ * so a locked database fails closed instead of hanging.
  */
 export function createDatabase(options: CreateDatabaseOptions): DatabaseHandle {
   const sqlite = new Database(options.path);
-  sqlite.pragma('journal_mode = WAL');
-  sqlite.pragma('foreign_keys = ON');
-  sqlite.pragma(`busy_timeout = ${options.busyTimeoutMs}`);
+  try {
+    // This is connection-local: every writer must set it before any application work.
+    sqlite.pragma('synchronous = FULL');
+    sqlite.pragma('journal_mode = WAL');
+    sqlite.pragma('foreign_keys = ON');
+    sqlite.pragma(`busy_timeout = ${options.busyTimeoutMs}`);
+    if (sqlite.pragma('synchronous', { simple: true }) !== 2) {
+      throw new Error('SQLite FULL synchronization is required');
+    }
+  } catch (error) {
+    sqlite.close();
+    throw error;
+  }
 
   return {
     sqlite,
