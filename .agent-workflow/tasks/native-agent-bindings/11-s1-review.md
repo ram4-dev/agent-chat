@@ -17,3 +17,7 @@ Cuatro regresiones: quitar/reincorporar grupo, cambiar de target y volver, histo
 Verificación del autor tras corregir: lint, typecheck y build PASS; 148 unit, 15 contratos, 160 integración y 24 E2E PASS (347), un skip legacy con modelo real por opt-in. E2E completo en 31.9s, servidor Portless agent-chat-native-bindings-s1-fix y DB nueva .local-state/native-bindings-s1-fix-fresh.db. No se modificó producción ni se usó inferencia real.
 
 Próxima acción: cierre independiente del arreglo y continuación de S2 bajo la aprobación vigente; no se solicita otra aprobación de implementación.
+
+## Revisión de cierre r2
+
+Snapshot 64b30a4. Tarea Codex gpt-6.1-sol, reasoning high, service tier default, en curso: node:delegated-task:command%3Amcp%3A1bd8506e-58f0-4b1b-8ef4-39ee3ce5c936%3Adelegate-task%3Anative-bindings-s1-continuity-review-r2-20261023. Recepción de proveedor/modelo/opciones confirmada por T3. Revisión acotada de S1-F1, sin habilitación nativa ni nueva aprobación humana. Al recibir el cierre, continuar S2; resolver primero cualquier defecto concreto del arreglo.
