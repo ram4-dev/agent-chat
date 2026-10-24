@@ -1,0 +1,126 @@
+import { spawn, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdtemp, readFile, rm, mkdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { randomBytes, randomUUID } from 'node:crypto';
+import * as tls from 'node:tls';
+import { HermesRunsProbe } from '../../apps/bridge/src/adapters/hermes-runs';
+
+/** Opt-in capability fixture: installed Hermes, isolated home, no real provider. */
+export async function nativeHermes(source: string, temporaryParent = tmpdir(), options: { mode?: 'approval'; persona?: string; profileName?: string; plugin?: boolean } = {}) {
+  const root = await mkdtemp(join(temporaryParent, 'agent-chat-native-hermes-'));
+  if (options.profileName && !/^[a-z][a-z0-9_-]{0,63}$/.test(options.profileName)) { await rm(root, { recursive: true, force: true }); throw new Error('Invalid fixture profile'); }
+  const nativeHome = options.profileName ? join(root, 'hermes-root', 'profiles', options.profileName) : join(root, 'profile');
+  const report = join(root, 'requests.json');
+  const token = randomBytes(32).toString('hex');
+  const originalCAs = typeof tls.getCACertificates === 'function' ? tls.getCACertificates('default') : [];
+  let python: string;
+  let revision: string;
+  try {
+    const managed = join(root, 'synthetic-host-managed');
+    await mkdir(managed);
+    await writeFile(join(managed, '.env'), 'NATIVE_MANAGED_CANARY=synthetic-managed-value\n');
+    await writeFile(join(managed, 'config.yaml'), 'model:\n  provider: synthetic-managed-invalid-provider\n');
+    const env = { PATH: process.env['PATH'], HOME: root, HERMES_HOME: join(root, 'profile'),
+      HERMES_MANAGED_DIR: join(root, 'managed-empty'), GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' };
+    await mkdir(env.HERMES_MANAGED_DIR);
+    const command = promisify(execFile)('hermes', ['--print-runtime-command'], {
+      env, cwd: root, timeout: 15_000, killSignal: 'SIGKILL', maxBuffer: 64 * 1024,
+    });
+    command.child.stdin?.end();
+    const runtime: unknown = JSON.parse((await command).stdout);
+    if (!Array.isArray(runtime) || typeof runtime[0] !== 'string') throw new Error('Hermes Python unavailable');
+    python = runtime[0];
+    const resolved = await promisify(execFile)('git', ['--no-replace-objects', '-C', resolve(source), 'rev-parse', 'HEAD'], {
+      env, cwd: root, timeout: 15_000, killSignal: 'SIGKILL', maxBuffer: 64 * 1024,
+    });
+    revision = resolved.stdout.trim();
+    if (!/^[a-f0-9]{40,64}$/.test(revision)) throw new Error('Hermes source revision unavailable');
+  } catch (cause) {
+    await rm(root, { recursive: true, force: true });
+    throw new Error('Isolated Hermes discovery failed', { cause });
+  }
+  let origin: string | undefined;
+  let fixtureOrigin: string | undefined;
+  let child: ReturnType<typeof spawn> | undefined;
+  let closed = true;
+  async function stop() {
+    if (!child?.pid) return;
+    const id = child.pid;
+    const done = new Promise<void>(resolve => { if (closed) resolve(); else child!.once('close', () => resolve()); });
+    try { process.kill(-id, 'SIGTERM'); } catch { /* Already closed. */ }
+    const timer = setTimeout(() => { try { process.kill(-id, 'SIGKILL'); } catch { /* Already closed. */ } }, 3000);
+    await done; clearTimeout(timer);
+    child = undefined;
+  }
+  const processName = `agent-chat-hermes-${randomUUID().slice(0, 8)}`;
+  async function start() {
+    child = spawn('portless', [processName, python, resolve('tests/fixtures/native-runtimes/hermes-server.py'), resolve(source)], {
+      detached: true, stdio: ['ignore', 'pipe', 'pipe'],
+      // Portless needs its existing proxy state. The Python fixture replaces HOME
+      // with the disposable profile before importing any Hermes modules.
+      env: { PATH: process.env['PATH'], HOME: process.env['HOME'], HERMES_HOME: nativeHome,
+        HERMES_MANAGED_DIR: join(root, 'synthetic-host-managed'),
+        NATIVE_FIXTURE_HOME: nativeHome, NATIVE_FIXTURE_REPORT: report, NATIVE_FIXTURE_KEY: token,
+        NATIVE_FIXTURE_SOURCE_REVISION: revision, ...(options.plugin ? { NATIVE_FIXTURE_PLUGIN: resolve('integrations/hermes/agent-chat-runtime') } : {}), ...(options.mode ? { NATIVE_FIXTURE_MODE: options.mode } : {}), ...(options.persona ? { NATIVE_FIXTURE_PERSONA: options.persona } : {}) },
+    });
+    closed = false;
+    child.once('close', () => { closed = true; });
+    const stdout = child.stdout!;
+    const ready = await new Promise<{ origin: string; caFile?: string; fixtureOrigin?: string }>((resolveReady, reject) => {
+      let text = '';
+      const timer = setTimeout(() => reject(new Error('Isolated Hermes startup timed out')), 120_000);
+      const observe = (chunk: Buffer) => {
+        text = (text + chunk.toString()).slice(-64 * 1024);
+        const receipt = text.match(/\{"type": "native-fixture.ready"[^\r\n]*\}/)?.[0];
+        if (!receipt) return;
+        let value: { origin?: unknown; caFile?: unknown; fixtureOrigin?: unknown };
+        try { value = JSON.parse(receipt) as typeof value; } catch { return; }
+        if (typeof value.origin !== 'string' || !new URL(value.origin).hostname.endsWith('.localhost')) return;
+        clearTimeout(timer);
+        resolveReady({ origin: value.origin, ...(typeof value.fixtureOrigin === 'string' && new URL(value.fixtureOrigin).hostname === '127.0.0.1' ? { fixtureOrigin: value.fixtureOrigin } : {}), ...(typeof value.caFile === 'string' ? { caFile: value.caFile } : {}) });
+      };
+      stdout.on('data', observe);
+      child!.stderr?.on('data', observe);
+      child!.once('exit', () => {
+        clearTimeout(timer);
+        reject(new Error(`Isolated Hermes exited before readiness: ${text.slice(-2500).replaceAll(token, '[fixture-key]')}`));
+      });
+      child!.once('error', () => { clearTimeout(timer); reject(new Error('Portless or Hermes unavailable')); });
+    });
+    if (ready.origin.startsWith('https:')) {
+      if (typeof tls.getCACertificates !== 'function' || typeof tls.setDefaultCACertificates !== 'function') {
+        throw new Error('Native TLS fixture requires Node TLS getCACertificates/setDefaultCACertificates');
+      }
+      if (!ready.caFile) throw new Error('Portless certificate was not advertised');
+      // Trust only the public CA advertised by this owned test process. Validation
+      // remains enabled; no OS trust-store or user configuration is changed.
+      const certificate = await readFile(ready.caFile, 'utf8');
+      tls.setDefaultCACertificates([...originalCAs, certificate]);
+    }
+    origin = `${ready.origin}/p/${options.profileName ?? 'default'}`; fixtureOrigin = ready.fixtureOrigin;
+    return new HermesRunsProbe(origin, token);
+  }
+  async function observations(): Promise<{ generation: string; requests: {
+    fixture_native_authors: { session_id: string; author: { id: string; name: string; is_bot: boolean } | null }[];
+    fixture_generation: string; fixture_sequence: number; fixture_kind: string; fixture_managed_canary_loaded: boolean;
+    messages: { role: string; content: unknown }[];
+    tools?: { function?: { name?: string } }[];
+  }[] }> {
+    return JSON.parse(await readFile(report, 'utf8')) as Awaited<ReturnType<typeof observations>>;
+  }
+  async function fixtureRequest(path: string, method = 'GET', body?: object): Promise<Record<string, unknown>> {
+    if (!fixtureOrigin) throw new Error('Hermes fixture is not ready');
+    const response = await fetch(`${fixtureOrigin}${path}`, { method, headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    if (!response.ok) throw new Error('Fixture operation failed');
+    return await response.json() as Record<string, unknown>;
+  }
+  return { start, stop, observations, configuration: () => { if (!origin) throw new Error('Fixture not ready'); return { origin, token, profileRef: options.profileName ?? 'default' }; },
+    evidence: () => fixtureRequest('/fixture/evidence'), release: () => fixtureRequest('/fixture/release', 'POST'), cancelHandler: (runId: string) => fixtureRequest('/fixture/cancel-handler', 'POST', { runId }), close: async () => {
+    try { await stop(); } finally {
+      if (typeof tls.setDefaultCACertificates === 'function') tls.setDefaultCACertificates(originalCAs);
+      await rm(root, { recursive: true, force: true });
+    }
+  } };
+}

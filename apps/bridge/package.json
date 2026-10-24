@@ -1,0 +1,22 @@
+{
+  "name": "@agent-chat/bridge",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "doctor": "node dist/doctor.js",
+    "start": "node dist/supervisor.js"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.5",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@agent-chat/contracts": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "better-sqlite3": "^13.0.3"
+  }
+}

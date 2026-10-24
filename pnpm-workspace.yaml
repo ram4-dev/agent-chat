@@ -1,0 +1,13 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Native dependencies whose install scripts are explicitly trusted here.
+# better-sqlite3 compiles or downloads its prebuilt native binding.
+allowBuilds:
+  argon2: true
+  better-sqlite3: true
+
+minimumReleaseAgeExclude:
+  - react-dom@19.3.1
+  - react@19.3.1

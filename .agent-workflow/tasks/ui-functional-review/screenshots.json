@@ -1,0 +1,194 @@
+[
+  {
+    "step": "01-acceso",
+    "file": "evidence/01-acceso.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "02-conversaciones-vacias",
+    "file": "evidence/02-conversaciones-vacias.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "03-agentes-vacios",
+    "file": "evidence/03-agentes-vacios.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "04-crear-conversacion",
+    "file": "evidence/04-crear-conversacion.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "05-chat-vacio",
+    "file": "evidence/05-chat-vacio.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "06-primer-mensaje",
+    "file": "evidence/06-primer-mensaje.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "07-invitacion-antes",
+    "file": "evidence/07-invitacion-antes.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "08-segunda-persona-y-mencion",
+    "file": "evidence/08-segunda-persona-y-mencion.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "09-chat-personas-en-vivo",
+    "file": "evidence/09-chat-personas-en-vivo.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "10-consentimiento-oauth",
+    "file": "evidence/10-consentimiento-oauth.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "11-agregar-agente",
+    "file": "evidence/11-agregar-agente.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "12-chat-con-agente-y-mencion",
+    "file": "evidence/12-chat-con-agente-y-mencion.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "13-respuesta-agente",
+    "file": "evidence/13-respuesta-agente.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "14-miembros-mobile",
+    "file": "evidence/14-miembros-mobile.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "15-chat-mobile",
+    "file": "evidence/15-chat-mobile.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "16-navegacion-mobile",
+    "file": "evidence/16-navegacion-mobile.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "17-invitacion-usada-error",
+    "file": "evidence/17-invitacion-usada-error.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "18-envio-fallido-borrador",
+    "file": "evidence/18-envio-fallido-borrador.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "19-reintento-enviado",
+    "file": "evidence/19-reintento-enviado.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "20-segunda-conversacion",
+    "file": "evidence/20-segunda-conversacion.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "21-busqueda-sin-resultados",
+    "file": "evidence/21-busqueda-sin-resultados.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "22-agentes-mobile",
+    "file": "evidence/22-agentes-mobile.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "23-instrucciones-mcp",
+    "file": "evidence/23-instrucciones-mcp.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "25-perfil-descripcion-guardada",
+    "file": "evidence/25-perfil-descripcion-guardada.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "27-conexiones-abiertas",
+    "file": "evidence/27-conexiones-abiertas.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "28-confirmacion-desconexion",
+    "file": "evidence/28-confirmacion-desconexion.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "29-cliente-desconectado",
+    "file": "evidence/29-cliente-desconectado.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "30-error-carga-agentes",
+    "file": "evidence/30-error-carga-agentes.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "31-carga-agentes-recuperada",
+    "file": "evidence/31-carga-agentes-recuperada.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "32-contador-singular-corregido",
+    "file": "evidence/32-contador-singular-corregido.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "33-vencimiento-corregido",
+    "file": "evidence/33-vencimiento-corregido.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  },
+  {
+    "step": "34-pertenencia-grupo-corregida",
+    "file": "evidence/34-pertenencia-grupo-corregida.png",
+    "browser": "T3",
+    "origin": "https://agent-chat.localhost"
+  }
+]

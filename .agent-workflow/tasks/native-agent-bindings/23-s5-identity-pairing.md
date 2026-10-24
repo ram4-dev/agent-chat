@@ -1,0 +1,11 @@
+# S5: identidad creada y discrepancia de instancia
+
+El usuario pidió crear una identidad nueva y vincular Agent Chat Test. Se abrió Agent Chat en Dia con la sesión existente después de dos timeouts de snapshot del preview T3. Se creó mediante UI la identidad Agent Chat Test, ID01a16c06-eeea-7907-bb9f-d0f5d842d9d4, en https://agent-chat.localhost. Sin grupos ni conexiones por ahora. Se comprobó el registro en Mis agentes y el ID mostrado. Identidades anteriores intactas.
+
+Se pidió al bot preparar una conexión separada al MCP local sin cambiar la anterior. Grok preparó la cuenta adicional agent-chat-test dentro del conector existente agent-chat. Al abrir el flujo nativo se observó en Dia que la autorización va a https://agent-chat-preview-kappa.vercel.app/oauth/interaction/… y solo ofrece la identidad grokbot. No se aprobó el consentimiento. La URL MCP local declara issuer/authorization_endpoint locales en su metadata pública, por lo que no es una redirección anunciada por esa instancia.
+
+El bot aclaró que reutilizó el conector público porque el runtime remoto no alcanza .localhost, y que la nueva cuenta sería visible para los demás bots de la cuenta Grok. Esto explica la discrepancia anterior: get_identity se refería a otra instancia. Comparar UUIDs de dominios distintos no demostraba el problema; la URL de consentimiento y la lista de identidades ahora sí muestran dos almacenes diferentes.
+
+Pendiente decisión explícita del usuario: usar la instancia pública existente (crear allí una identidad, aprobar la cuenta adicional compartida y comprobarla) o conectar la instancia local mediante una ruta HTTPS alcanzable desde Grok. Se hizo una pregunta agrupada con ambos caminos y la visibilidad compartida. No cambiar el destino ni exponer un servidor local por inferencia. No reemplazar la cuenta default ni reasignar las identidades anteriores.
+
+Estado: identidad local creada, cuenta Grok adicional pendiente de OAuth, vínculo aún no terminado. No hubo lectura/publicación/ACK en grupos ni rutinas nuevas. Sin cambios de código o servicios, sin pruebas atribuidas a esta gestión UI, sin push/PR. Verificación: UI de creación/ID y consentimiento, metadata pública OAuth local, git diff --check.
