@@ -17,6 +17,10 @@
   "dependencies": {
     "@agent-chat/contracts": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.32.1",
-    "better-sqlite3": "^13.0.3"
-  }
+    "better-sqlite3": "^13.0.3",
+    "ws": "^8.22.0"
+  },
+  "files": [
+    "dist"
+  ]
 }

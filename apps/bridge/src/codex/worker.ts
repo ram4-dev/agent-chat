@@ -53,13 +53,21 @@ export class CodexWorker {
     args.push('-');
     return args;
   }
-  async run(prompt: string, threadId?: string): Promise<WorkerOutput> {
+  async run(prompt: string, threadId?: string, signal?: AbortSignal): Promise<WorkerOutput> {
+    if (signal?.aborted) throw new Error('Codex worker cancelled');
     const env: NodeJS.ProcessEnv = {};
     for (const key of ['PATH', 'HOME', 'CODEX_HOME', 'TMPDIR']) if (process.env[key] !== undefined) env[key] = process.env[key];
     const child = spawn('codex', this.arguments(threadId), { env, stdio: ['pipe', 'pipe', 'ignore'] });
     return await new Promise((resolve, reject) => {
       let id = threadId; let reply = ''; let completed = false; let failed = false; let bytes = 0;
       const timer = setTimeout(() => { failed = true; child.kill('SIGKILL'); }, 120_000);
+      let abortTimer: NodeJS.Timeout | undefined;
+      const abort = () => {
+        failed = true; child.kill('SIGTERM');
+        abortTimer = setTimeout(() => child.kill('SIGKILL'), 1500); abortTimer.unref();
+      };
+      signal?.addEventListener('abort', abort, { once: true });
+      if (signal?.aborted) abort();
       const lines = createInterface({ input: child.stdout });
       lines.on('line', (line) => {
         bytes += Buffer.byteLength(line);
@@ -76,6 +84,8 @@ export class CodexWorker {
       });
       const finish = (error?: Error) => {
         clearTimeout(timer);
+        if (abortTimer) clearTimeout(abortTimer);
+        signal?.removeEventListener('abort', abort);
         if (error !== undefined) { reject(error); return; }
         try {
           const output = JSON.parse(reply) as { decision?: unknown; text?: unknown };

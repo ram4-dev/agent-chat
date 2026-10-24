@@ -25,7 +25,7 @@ Native execution and legacy automatic-reply controllers currently require the
 local durable backend. The agent API reports the available capabilities, the UI
 shows their controls only when enabled, and managed MCP does not advertise local
 runtime tools. External OAuth agents can still receive and reply through the
-documented receiver protocol. Cloud SMTP and the sender domain remain pending.
+documented receiver protocol. The macOS managed receiver below uses that protocol against Vercel. Cloud SMTP and the sender domain remain pending.
 See [managed services](docs/managed-services.md) for configuration and evidence.
 
 The MCP initialization response includes participation instructions. Agents can
@@ -264,6 +264,43 @@ This MVP runs on one backend process and SQLite database. Cross-browser,
 full accessibility audits, load, multi-node and production deployment validation
 are outside the completed local checks. Hosted runtimes, file sharing, conversation subthreads, calls and advanced search
 are outside this MVP. The local Codex receiver below provides automatic replies.
+
+## Mac receiver connected to Vercel
+
+The managed receiver runs Codex on this Mac and connects to the deployed MCP server. It authorizes its own agent connection, keeps an authenticated WebSocket open, recovers pending messages, publishes replies with stable idempotency keys, and acknowledges events after processing. Other agents' messages do not trigger replies.
+
+Install it after `pnpm install` and `pnpm build`:
+
+```sh
+python3 scripts/install-managed-receiver.py
+```
+
+The installer opens Agent Chat in your browser. Sign in and authorize a dedicated agent for this Mac, then add that agent to the groups where it should reply. OAuth credentials stay in a private directory; no keys need to be pasted into the terminal. The loopback OAuth callback uses `127.0.0.1:8767` while authorizing.
+
+The launch service is `local.agent-chat.managed-receiver`. It starts with your macOS session and restarts after a disconnect or process failure. Sleep or shutdown suspends processing; the receiver recovers pending work when the Mac is available again. The existing local server services are preserved.
+
+State and logs live in `~/Library/Application Support/Agent Chat Managed`. `receiver.ready` in `logs/receiver.out.log` confirms a live receiver; OAuth consent alone does not. The worker uses the existing restricted `gpt-6.1-sol` configuration with no shell, file, browser or MCP tools.
+
+To stop or restart the installed service:
+
+```sh
+launchctl bootout gui/$(id -u)/local.agent-chat.managed-receiver
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.agent-chat.managed-receiver.plist
+```
+
+A turn interrupted during generation stays pending and emits `receiver.needs_review`. It is never generated again automatically. Inspect pending local work with:
+
+```sh
+pnpm bridge:managed --status --state "$HOME/Library/Application Support/Agent Chat Managed/state"
+```
+
+After stopping the service and reviewing an uncertain turn, supply an explicit reply; the next start publishes it and acknowledges the event:
+
+```sh
+pnpm bridge:managed --state "$HOME/Library/Application Support/Agent Chat Managed/state" --resolve-event EVENT_ID --text "Respuesta revisada"
+```
+
+For a foreground run without installing a service, use `pnpm bridge:managed:login` followed by `pnpm bridge:managed`. The browser E2E covers authorization, private credential persistence, live readiness, reply/ACK and restart recovery in both storage modes. Set `AGENT_CHAT_REAL_MANAGED_RECEIVER=1` to include the real Codex worker; this requires a logged-in Codex CLI account.
 
 ## Automatic replies with local Codex
 
