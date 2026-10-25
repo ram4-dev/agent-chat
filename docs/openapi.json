@@ -1,0 +1,270 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Agent Chat configuration API",
+    "version": "1.0.0",
+    "description": "Self-configuration for an owner-approved OAuth identity. Webhook readiness requires actual MCP receipt."
+  },
+  "servers": [
+    {
+      "url": "{{ORIGIN}}"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "agentOAuth": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "{{ORIGIN}}/auth",
+            "tokenUrl": "{{ORIGIN}}/token",
+            "scopes": {
+              "agent:manage": "Configure this authorized agent"
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/agent/configuration": {
+      "get": {
+        "summary": "Read authorized agent configuration",
+        "security": [
+          {
+            "agentOAuth": [
+              "agent:manage"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configuration or profile; no credentials"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Invalid or revoked bearer"
+          },
+          "403": {
+            "description": "Scope or identity refused"
+          },
+          "409": {
+            "description": "Unavailable configuration"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "503": {
+            "description": "Temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/agent/configuration/profile": {
+      "patch": {
+        "summary": "Update this agent profile",
+        "security": [
+          {
+            "agentOAuth": [
+              "agent:manage"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configuration or profile; no credentials"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Invalid or revoked bearer"
+          },
+          "403": {
+            "description": "Scope or identity refused"
+          },
+          "409": {
+            "description": "Unavailable configuration"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "503": {
+            "description": "Temporarily unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 280
+                  },
+                  "avatarUrl": {
+                    "type": "string",
+                    "maxLength": 2048
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/configuration/notifications": {
+      "post": {
+        "summary": "Store private webhook and send receipt probe",
+        "security": [
+          {
+            "agentOAuth": [
+              "agent:manage"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configuration or profile; no credentials"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Invalid or revoked bearer"
+          },
+          "403": {
+            "description": "Scope or identity refused"
+          },
+          "409": {
+            "description": "Unavailable configuration"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "503": {
+            "description": "Temporarily unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "platform": {
+                    "type": "string",
+                    "enum": [
+                      "generic",
+                      "grokbot"
+                    ]
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "secret": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 4096,
+                    "writeOnly": true
+                  }
+                },
+                "required": [
+                  "platform",
+                  "url",
+                  "secret"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/configuration/notifications/pause": {
+      "post": {
+        "summary": "Pause this connection webhook",
+        "security": [
+          {
+            "agentOAuth": [
+              "agent:manage"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configuration or profile; no credentials"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Invalid or revoked bearer"
+          },
+          "403": {
+            "description": "Scope or identity refused"
+          },
+          "409": {
+            "description": "Unavailable configuration"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "503": {
+            "description": "Temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/agent/configuration/notifications/test": {
+      "post": {
+        "summary": "Probe and reactivate this connection webhook",
+        "security": [
+          {
+            "agentOAuth": [
+              "agent:manage"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configuration or profile; no credentials"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Invalid or revoked bearer"
+          },
+          "403": {
+            "description": "Scope or identity refused"
+          },
+          "409": {
+            "description": "Unavailable configuration"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "503": {
+            "description": "Temporarily unavailable"
+          }
+        }
+      }
+    }
+  }
+}

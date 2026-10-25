@@ -103,13 +103,14 @@ export function createMcpServer({ agents, groups, inbox, messaging, identity, hu
     }, async ({ platform,can_keep_authenticated_receiver,can_create_webhook_routine }) => guard(async () => {
       const principal=context('agent:receive');
       return ok({ agent_id:principal.agentId,connection_id:principal.connectionId,
+        docs_url:`${issuer}/docs/agent-api.md`,configuration_api:{status:`${issuer}/agent/configuration`,profile:`${issuer}/agent/configuration/profile`,pause:`${issuer}/agent/configuration/notifications/pause`,test:`${issuer}/agent/configuration/notifications/test`},
         recommended:can_keep_authenticated_receiver?'websocket':notifications&&(platform==='grokbot'||can_create_webhook_routine)?'webhook':'polling',
         host_capabilities:{authenticated_receiver:!!can_keep_authenticated_receiver,webhook_routine:platform==='grokbot'||!!can_create_webhook_routine},
         capabilities:{ websocket:true,webhook:!!notifications,mcp_push_wake:false },
         setup_url:`${issuer}/?notification_agent=${encodeURIComponent(principal.agentId)}&notification_connection=${encodeURIComponent(principal.connectionId)}&notification_platform=${platform??'generic'}`,
         private_configuration:{url:`${issuer}/agent/configuration/notifications`,method:'POST',authentication:'existing OAuth bearer in a private host transport; never export a connector token',required_scope:'agent:manage',fields:['platform','url','secret'],available:!!notifications&&principal.scopes.includes('agent:manage')},
         state:notifications?await notifications.status(principal):{configured:false,active:false},
-        instructions:platform==='grokbot'&&notifications?'Create a webhook-triggered routine on this Bot using only this selected MCP account. On every wake verify get_identity, compare agent_id and connection_id from the wake, call confirm_notification_delivery with delivery_id and challenge, if kind is probe stop after confirmation; if kind is wake process get_inbox, check get_notification_reply_receipt before generation, send replies with stable event idempotency keys, and ACK only after processing. Never disclose webhook credentials in chat. The owner registers the routine URL and key on setup_url and clicks Probar y activar. HTTP 200 alone is not verification.':'Keep one authenticated receiver, or register a host wake webhook privately. Confirm actual receipt before claiming notifications are active.' });
+        instructions:platform==='grokbot'&&notifications?'Create a webhook-triggered routine on this Bot using only this selected MCP account. On every wake verify get_identity, compare agent_id and connection_id from the wake, call confirm_notification_delivery with delivery_id and challenge, if kind is probe stop after confirmation; if kind is wake process get_inbox, check get_notification_reply_receipt before generation, send replies with stable event idempotency keys, and ACK only after processing. Never disclose webhook credentials in chat. If the host supports private OAuth transport, register the routine through private_configuration and verify actual receipt. Otherwise the owner registers its URL and key on setup_url and clicks Probar y activar. HTTP 200 alone is not verification.':'Keep one authenticated receiver, or register a host wake webhook privately. Confirm actual receipt before claiming notifications are active.' });
     }));
     server.registerTool('get_notification_status', {description:'Check webhook configuration and actual receipt confirmation for this OAuth connection. Does not return private credentials.',inputSchema:{},annotations:{readOnlyHint:true}},
       async()=>guard(async()=>{const principal=context('agent:receive');return ok(notifications?await notifications.status(principal):{configured:false,active:false,webhook_available:false});}));
@@ -131,6 +132,8 @@ export function createMcpServer({ agents, groups, inbox, messaging, identity, hu
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     }, async () => ok({
         guide_uri: AGENT_GUIDE_URI,
+        api_docs_url: `${issuer}/docs/agent-api.md`,
+        openapi_url: `${issuer}/docs/openapi.json`,
         instructions: AGENT_GUIDE,
         mcp_url: `${issuer}/mcp`,
         receiver: {

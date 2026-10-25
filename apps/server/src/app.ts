@@ -67,7 +67,7 @@ export async function createApp({ config, database, oauthStore, health, budget, 
             return;
         let key = `ip:${request.ip}`;
         let max: number = RATE_LIMITS.UNAUTHENTICATED_IP;
-        if (path === '/mcp' || path === '/ws/agent') {
+        if (path === '/mcp' || path === '/ws/agent' || path.startsWith('/agent/configuration')) {
             try {
                 const credential = await authorize(request.headers.authorization);
                 key = `agent:${credential.connectionId}`;

@@ -42,6 +42,49 @@ export async function registerMcpRoutes(app: FastifyInstance, options: McpRoutes
     bearer_methods_supported: ['header'],
   }));
 
+  async function configurationPrincipal(authorization: string | undefined) {
+    const principal = await authorize(authorization);
+    if (services.nativeAccess?.classify(principal.connectionId) || !principal.scopes.includes('agent:manage')) throw new DomainError('forbidden', 403, 'Scope required');
+    const { agent } = await services.agents.resolveActiveConnection(principal.connectionId);
+    return { principal, agent };
+  }
+  const profileInput = z.object({name:z.string().min(1).max(60),description:z.string().max(280).optional(),avatarUrl:z.string().max(2048).optional()}).strict();
+  app.get('/agent/configuration', async (request, reply) => {
+    reply.header('cache-control', 'private, no-store');
+    try {
+      const {principal,agent} = await configurationPrincipal(request.headers.authorization);
+      return {agent:{id:agent.id,name:agent.name,description:agent.description,avatarUrl:agent.avatarUrl},connection:{id:principal.connectionId,scopes:principal.scopes},notifications:services.notifications?await services.notifications.status(principal):{configured:false,active:false}};
+    } catch(error) { return configurationError(error,reply); }
+  });
+  app.patch('/agent/configuration/profile', async (request, reply) => {
+    reply.header('cache-control', 'private, no-store');
+    try {
+      const {principal,agent} = await configurationPrincipal(request.headers.authorization);
+      const input=profileInput.safeParse(request.body);
+      if(!input.success)return sendError(reply,400,'invalid_input');
+      const updated=await services.agents.updateProfile({agentId:principal.agentId,ownerUserId:agent.ownerUserId,name:input.data.name,description:input.data.description??agent.description,avatarUrl:input.data.avatarUrl??agent.avatarUrl});
+      services.hub.publishAgentState(principal.agentId);
+      return {agent:{id:updated.id,name:updated.name,description:updated.description,avatarUrl:updated.avatarUrl}};
+    }catch(error){return configurationError(error,reply);}
+  });
+  for(const action of ['pause','test'] as const) app.post(`/agent/configuration/notifications/${action}`,async(request,reply)=>{
+    reply.header('cache-control','private, no-store');
+    try{
+      const {principal,agent}=await configurationPrincipal(request.headers.authorization);
+      if(!services.notifications)return sendError(reply,409,'conflict');
+      const state=await services.notifications.status(principal);
+      if(!state.configured) return sendError(reply,409,'conflict');
+      if(action==='pause')await services.notifications.pause(agent.ownerUserId,principal.agentId,principal.connectionId);
+      else {await services.notifications.probe(agent.ownerUserId,principal.agentId,principal.connectionId);await services.notifications.dispatch();}
+      return services.notifications.status(principal);
+    }catch(error){return configurationError(error,reply);}
+  });
+  function configurationError(error:unknown,reply:import('fastify').FastifyReply){
+    if(error instanceof McpUnauthenticated)return sendError(reply,401,'unauthenticated');
+    if(error instanceof DomainError)return sendError(reply,error.statusCode,error.code);
+    return sendError(reply,503,'temporarily_unavailable');
+  }
+
   app.post('/agent/configuration/notifications', async (request, reply) => {
     reply.header('cache-control', 'private, no-store');
     try {
@@ -52,7 +95,7 @@ export async function registerMcpRoutes(app: FastifyInstance, options: McpRoutes
       if (!services.notifications) return sendError(reply, 409, 'conflict');
       const { agent } = await services.agents.resolveActiveConnection(principal.connectionId);
       await services.notifications.configure(agent.ownerUserId, principal.agentId, {...input.data,connectionId:principal.connectionId});
-      await services.notifications.probe(agent.ownerUserId, principal.agentId);
+      await services.notifications.probe(agent.ownerUserId, principal.agentId,principal.connectionId);
       await services.notifications.dispatch();
       return services.notifications.status(principal);
     } catch (error) {

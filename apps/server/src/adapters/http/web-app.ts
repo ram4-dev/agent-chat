@@ -14,6 +14,7 @@ export interface WebAppOptions {
  * instead of leaking filesystem state.
  */
 export function registerWebApp(app: FastifyInstance, options: WebAppOptions): void {
+  app.get('/auth/confirm', (_request,reply)=>{reply.header('cache-control','private, no-store').header('referrer-policy','no-referrer');return sendBuiltFile(reply,options.webDistDir,'/');});
   app.get('/', (_request, reply) => sendBuiltFile(reply, options.webDistDir, '/'));
   app.get('/*', (request, reply) =>
     sendBuiltFile(reply, options.webDistDir, request.url),

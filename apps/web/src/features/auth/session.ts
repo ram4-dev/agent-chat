@@ -114,6 +114,8 @@ function failureFrom(response: JsonFetchResponse, body: unknown): SessionState {
 /** Short, human-readable explanation of a rejected attempt. */
 export function describeRejection(code: string): string {
   switch (code) {
+    case "confirmation_invalid":
+      return "El enlace de confirmación venció o ya fue usado. Si confirmaste tu correo, podés ingresar con tu contraseña.";
     case "conflict":
       return "Ese correo ya tiene una cuenta. Elegí Ingresar.";
     case "unauthenticated":
@@ -127,4 +129,14 @@ export function describeRejection(code: string): string {
     default:
       return "No pudimos completar la solicitud. Intentá de nuevo.";
   }
+}
+
+/** Exchanges the verified email credential for our HttpOnly application session. */
+export async function confirmEmail(accessToken:string,fetchImpl:JsonFetch=fetch):Promise<SessionState>{
+  try{
+    const response=await fetchImpl('/api/auth/confirm',{method:'POST',headers:JSON_HEADERS,body:JSON.stringify({accessToken})});
+    if(!response.ok)return {status:'rejected',code:'confirmation_invalid'};
+    const parsed=parseAuthResponse(await response.json());
+    return parsed.ok?{status:'authenticated',user:parsed.value.user}:{status:'rejected',code:'confirmation_invalid'};
+  }catch{return {status:'error',httpStatus:0};}
 }

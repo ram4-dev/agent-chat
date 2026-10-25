@@ -19,11 +19,15 @@ test('deployed skill, OAuth identities, HTTPS webhook, mention-only wake, reply 
   console.log('cloud-e2e: QA receiver and temporary tunnel connected');
   const discovery=await page.request.get('/.well-known/agent-chat.json');expect(discovery.status()).toBe(200);
   const skill=await page.request.get('/skills/agent-chat/SKILL.md');expect(skill.status()).toBe(200);expect(await skill.text()).toContain(origin+'/mcp');
-  // SMTP delivery is a separate prerequisite: create only an isolated confirmed QA identity.
+  // Admin issues a real signup confirmation link; SMTP transport remains a separate prerequisite.
   const email=`vercel-e2e-${randomUUID()}@example.com`,password=randomBytes(24).toString('base64url');
-  const created=await fetch(`${process.env['SUPABASE_URL']}/auth/v1/admin/users`,{method:'POST',headers:{apikey:process.env['SUPABASE_SERVICE_ROLE_KEY'],authorization:`Bearer ${process.env['SUPABASE_SERVICE_ROLE_KEY']}`,'content-type':'application/json'},body:JSON.stringify({email,password,email_confirm:true,user_metadata:{display_name:'Vercel QA'}})});
+  const created=await fetch(`${process.env['SUPABASE_URL']}/auth/v1/admin/generate_link`,{method:'POST',headers:{apikey:process.env['SUPABASE_SERVICE_ROLE_KEY'],authorization:`Bearer ${process.env['SUPABASE_SERVICE_ROLE_KEY']}`,'content-type':'application/json'},body:JSON.stringify({type:'signup',email,password,data:{display_name:'Vercel QA'},redirect_to:origin+'/auth/confirm'})});
   expect(created.ok).toBe(true);
-  const login=await page.request.post('/api/auth/login',{headers:{origin},data:{email,password}});expect(login.status()).toBe(200);
+  const {action_link:confirmationLink}=await created.json() as {action_link:string};
+  await page.goto('/');await page.evaluate(link=>location.assign(link),confirmationLink);
+  await expect(page.getByRole('main')).toHaveClass(/workspace/);expect(new URL(page.url()).hash).toBe('');
+  const me=await page.request.get('/api/auth/me');expect(me.status()).toBe(200);expect((await me.json()).user.email).toBe(email);
+  console.log('cloud-e2e: real confirmation link creates application session directly');
   cookie=(await page.context().cookies(origin)).map(value=>`${value.name}=${value.value}`).join('; ');
   await page.goto('/');await expect(page.getByRole('main')).toHaveClass(/workspace/);
   console.log('cloud-e2e: confirmed QA login and public skill verified');
@@ -32,7 +36,8 @@ test('deployed skill, OAuth identities, HTTPS webhook, mention-only wake, reply 
   for(const name of ['QA Alpha','QA Beta']){
    const identity=await authorizeAgent(page,origin,undefined,undefined,scopes);identities.push(identity);
    const client=await mcpClient(origin,identity.token);clients.push(client);
-   payload(await client.callTool({name:'configure_agent_profile',arguments:{name,description:'Isolated live Vercel E2E fixture'}}));
+   const profile=await fetch(origin+'/agent/configuration/profile',{method:'PATCH',headers:{authorization:`Bearer ${identity.token}`,'content-type':'application/json'},body:JSON.stringify({name,description:'Isolated live Vercel E2E fixture'})});expect(profile.status).toBe(200);
+   const apiState=await fetch(origin+'/agent/configuration',{headers:{authorization:`Bearer ${identity.token}`}});expect(apiState.status).toBe(200);expect((await apiState.json()).agent.id).toBe(identity.agentId);
    const confirmed=payload<{agent:{id:string;name:string};connection:{id:string}}>(await client.callTool({name:'get_identity',arguments:{}}));expect(confirmed.agent).toMatchObject({id:identity.agentId,name});expect(confirmed.connection.id).toBe(identity.connectionId);
    const setup=payload<{setup_url:string;private_configuration:{url:string;available:boolean}}>(await client.callTool({name:'setup_notifications',arguments:{platform:'generic',can_create_webhook_routine:true}}));expect(setup.private_configuration.available).toBe(true);
    const hook=receiver.register(identity.agentId,identity.connectionId,client);
@@ -76,7 +81,7 @@ test('deployed skill, OAuth identities, HTTPS webhook, mention-only wake, reply 
   // Disconnect the QA host and reconnect the same authorized identity.
   await clients[1]!.close();clients[1]=await mcpClient(origin,identities[1]!.token);receiver.replaceClient(identities[1]!.agentId,clients[1]!);
   expect(payload<{connection:{id:string}}>(await clients[1]!.callTool({name:'get_identity',arguments:{}})).connection.id).toBe(identities[1]!.connectionId);
-  const pause=await page.request.post(`/api/agents/${identities[1]!.agentId}/notifications/pause`,{headers:{origin},data:{}});expect(pause.status()).toBe(200);
+  const pause=await page.request.post('/agent/configuration/notifications/pause',{headers:{authorization:`Bearer ${identities[1]!.token}`},data:{}});expect(pause.status()).toBe(200);
   expect(payload<{active:boolean}>(await clients[1]!.callTool({name:'get_notification_status',arguments:{}})).active).toBe(false);
   const wakesBefore=receiver.deliveries.filter(item=>item.kind==='wake'&&item.agentId===identities[1]!.agentId).length;
   const pausedText=`Paused QA recovery ${randomUUID()}`,request={text:pausedText,idempotencyKey:randomUUID(),mentionedAgentIds:[identities[1]!.agentId]};
@@ -84,7 +89,7 @@ test('deployed skill, OAuth identities, HTTPS webhook, mention-only wake, reply 
   const replay=await page.request.post(`/api/groups/${group}/messages`,{headers:{origin},data:request});expect(replay.status()).toBe(200);expect((await replay.json()).message.id).toBe((await first.json()).message.id);
   expect(payload<{events:unknown[]}>(await clients[1]!.callTool({name:'get_inbox',arguments:{}})).events).toHaveLength(1);
   expect(receiver.deliveries.filter(item=>item.kind==='wake'&&item.agentId===identities[1]!.agentId)).toHaveLength(wakesBefore);
-  const resume=await page.request.post(`/api/agents/${identities[1]!.agentId}/notifications/test`,{headers:{origin},data:{}});expect(resume.status()).toBe(200);
+  const resume=await page.request.post('/agent/configuration/notifications/test',{headers:{authorization:`Bearer ${identities[1]!.token}`},data:{}});expect(resume.status()).toBe(200);
   await expect.poll(()=>({handled:receiver.handled.filter(item=>item.agentId===identities[1]!.agentId).length,errors:receiver.failures.length}),{timeout:90000,intervals:[500,1000,2000]}).toEqual({handled:2,errors:0});
   const recovered=payload<{messages:Array<{text:string}>}>(await clients[1]!.callTool({name:'read_messages',arguments:{group_id:group}}));expect(recovered.messages.filter(message=>message.text===`QA recibió: ${pausedText}`)).toHaveLength(1);
   expect(payload<{events:unknown[]}>(await clients[1]!.callTool({name:'get_inbox',arguments:{}})).events).toHaveLength(0);

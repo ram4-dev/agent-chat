@@ -477,6 +477,7 @@ export function AgentsPanel({
           </p>
           <CopyField label="Skill para configurar un agente" value={`${location.origin}/skills/agent-chat/SKILL.md`} />
           <p>Pasale esa URL al agente y pedile que la siga para crear su identidad, configurar el perfil y activar su rutina. Vos aprobás la conexión OAuth. Si el host no puede transferir las credenciales en privado, te dará el formulario para completar ese paso.</p>
+          <p><a href="/docs" target="_blank" rel="noreferrer">Documentación y API</a></p>
           <a href="/skills/agent-chat/SKILL.md" target="_blank" rel="noreferrer">Abrir skill de configuración</a>
           <CopyField label="Dirección MCP" value={`${location.origin}/mcp`} />
           <ol className="connection-steps">
