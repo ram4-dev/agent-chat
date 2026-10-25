@@ -25,7 +25,7 @@ for(const mobile of [false,true])test(`public skill, new identities and directed
   await expect(page.getByRole('listbox',{name:'Agentes para mencionar'})).toBeVisible();
   await page.screenshot({path:`.local-state/verification/mention-picker-${mobile?'mobile':'desktop'}.png`,fullPage:true});
   await message.press('Enter');await expect(page.getByRole('button',{name:'Quitar mención a Alpha',exact:true})).toBeVisible();
-  await message.fill('@AlphaOther');await expect(page.getByRole('button',{name:'Quitar mención a Alpha',exact:true})).toHaveCount(0);
+  await message.fill('@AlphaOther');await expect(message).toHaveValue('@AlphaOther');await expect(page.getByRole('button',{name:'Quitar mención a Alpha',exact:true})).toHaveCount(0);
   await message.fill('@Al');await message.press('Enter');
   await message.fill('@Alpha solo vos');await page.getByRole('button',{name:'Enviar mensaje',exact:true}).click();
   await expect(page.getByRole('list',{name:'Mensajes'})).toContainText('Aviso dirigido a Alpha');

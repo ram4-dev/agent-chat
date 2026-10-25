@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import {
   BROWSER_SOCKET_PATH,
   type MessageView,
@@ -49,21 +49,27 @@ export function ChatPanel({
   const [query, setQuery] = useState<{start:number;end:number;text:string}>();
   const [choice, setChoice] = useState(0);
   const input = useRef<HTMLTextAreaElement>(null);
+  const caret = useRef<{text:string;position:number}|undefined>(undefined);
+  useLayoutEffect(()=>{
+    const next=caret.current;caret.current=undefined;
+    if(next&&input.current?.value===next.text){input.current.focus();input.current.setSelectionRange(next.position,next.position);}
+  },[draft]);
   const choices = query ? agents.filter(agent => !mentions.some(item=>item.id===agent.id) && agent.displayName.toLocaleLowerCase().includes(query.text.toLocaleLowerCase())).slice(0,20) : [];
-  function changeDraft(text:string, caret:number) {
+  function changeDraft(text:string, position:number) {
+    caret.current=undefined;
     setDraft(text);
     setMentions(current=>current.filter(item=>hasMention(text,item.name)));
-    const match = /(?:^|\s)@([^@\n]{0,60})$/.exec(text.slice(0,caret));
+    const match = /(?:^|\s)@([^@\n]{0,60})$/.exec(text.slice(0,position));
     const tail = match?.[1];
-    setQuery(tail !== undefined && !mentions.some(item=>tail.startsWith(item.name+' ')) ? {start:caret-tail.length-1,end:caret,text:tail} : undefined);
+    setQuery(tail !== undefined && !mentions.some(item=>tail.startsWith(item.name+' ')) ? {start:position-tail.length-1,end:position,text:tail} : undefined);
     setChoice(0);
   }
   function choose(agent:AgentMember) {
     if(!query || mentions.length>=20)return;
     const label=`@${agent.displayName} `;
     const text=draft.slice(0,query.start)+label+draft.slice(query.end);
+    caret.current={text,position:query.start+label.length};
     setDraft(text);setMentions(current=>[...current.filter(item=>item.id!==agent.id),{id:agent.id,name:agent.displayName}]);setQuery(undefined);
-    requestAnimationFrame(()=>{input.current?.focus();input.current?.setSelectionRange(query.start+label.length,query.start+label.length);});
   }
   const [sending, setSending] = useState(false);
   const [older, setOlder] = useState(false);
