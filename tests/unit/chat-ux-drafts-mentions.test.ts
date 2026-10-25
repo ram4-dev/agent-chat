@@ -76,7 +76,7 @@ describe('mention intent and identity after edits', () => {
     const second = { ...mention, id: 'second-id', start: 10, end: 19 };
     const before = '@Analista @Analista';
     expect(reconcileMentions(before, before + ' hola', [mention, second]).map(item => item.id)).toEqual([mention.id, second.id]);
-    expect(reconcileMentions(before, 'Analista @Analista', [second])).toEqual([{ ...second, start: 9, end: 18 }]);
+    expect(reconcileMentions(before, 'Analista @Analista', [second], { start: 0, end: 1 })).toEqual([{ ...second, start: 9, end: 18 }]);
     expect(reconcileMentions('Analista @Analista ', '@Analista solo el segundo', [{ ...second, start: 9, end: 18 }])).toEqual([{ ...second, start: 0, end: 9 }]);
     expect(reconcileMentions('@Analista', '@AnalistaOther', [mention])).toEqual([]);
     expect(reconcileMentions('@Analista', '@Otro', [mention])).toEqual([]);

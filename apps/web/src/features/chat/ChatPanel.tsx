@@ -15,7 +15,7 @@ import {
 import { Avatar, Icon } from "../../shared/ui";
 
 import { useChatDraft, updateDraft, submitDraft, discardDraft } from "./drafts";
-import { mentionQuery, mentionStarts, reconcileMentions, unresolvedMentions } from "./mentions";
+import { mentionQuery, mentionStarts, reconcileMentions, unresolvedMentions, type MentionEdit } from "./mentions";
 import { useDisplayedMessages } from "./useDisplayedMessages";
 import { MessageMarkdown } from "./MessageMarkdown";
 import "./chat.css";
@@ -51,6 +51,21 @@ export function ChatPanel({
   const [choice, setChoice] = useState(0);
   const input = useRef<HTMLTextAreaElement>(null);
   const composing = useRef(false);
+  const edit = useRef<(MentionEdit & { before: string }) | undefined>(undefined);
+  useEffect(() => {
+    const textarea = input.current;
+    if (!textarea) return;
+    const capture = (event: InputEvent) => {
+      let start = textarea.selectionStart, end = textarea.selectionEnd;
+      if (start === end && event.inputType === 'deleteContentBackward') start = Math.max(0, start - 1);
+      else if (start === end && event.inputType === 'deleteContentForward') end = Math.min(textarea.value.length, end + 1);
+      // Word/line deletion and composition ranges vary by browser; conservative reconciliation is safer.
+      const known = ['insertText', 'insertFromPaste', 'insertReplacementText', 'insertLineBreak', 'insertParagraph', 'deleteContentBackward', 'deleteContentForward', 'deleteByCut'].includes(event.inputType);
+      edit.current = known ? { before: textarea.value, start, end } : undefined;
+    };
+    textarea.addEventListener('beforeinput', capture);
+    return () => textarea.removeEventListener('beforeinput', capture);
+  }, []);
   const caret = useRef<{text:string;position:number}|undefined>(undefined);
   useLayoutEffect(()=>{
     const next=caret.current;caret.current=undefined;
@@ -62,7 +77,9 @@ export function ChatPanel({
   const choices = query ? agents.filter(agent => !mentions.some(item=>item.id===agent.id) && agent.displayName.toLocaleLowerCase().includes(query.text.toLocaleLowerCase())).slice(0,20) : [];
   function changeDraft(text:string, position:number) {
     caret.current=undefined;
-    const next = reconcileMentions(draft, text, mentions);
+    const range = edit.current;
+    edit.current = undefined;
+    const next = reconcileMentions(draft, text, mentions, range?.before === draft ? range : undefined);
     updateDraft(user.id, groupId, text, next);
     setQuery(mentionQuery(text, position, next));
     setError("");
@@ -71,9 +88,10 @@ export function ChatPanel({
   function choose(agent:AgentMember) {
     if(!query || mentions.length>=20)return;
     const label=`@${agent.displayName}`;
-    const text=draft.slice(0,query.start)+label+' '+draft.slice(query.end);
-    caret.current={text,position:query.start+label.length+1};
-    const next = reconcileMentions(draft, text, mentions);
+    const trailing = /^[*_~\]]/u.test(draft.slice(query.end)) ? '' : ' ';
+    const text=draft.slice(0,query.start)+label+trailing+draft.slice(query.end);
+    caret.current={text,position:query.start+label.length+trailing.length};
+    const next = reconcileMentions(draft, text, mentions, { start: query.start, end: query.end });
     updateDraft(user.id, groupId, text, [...next, {id:agent.id,name:agent.displayName,start:query.start,end:query.start+label.length}]);
     setQuery(undefined);setError("");
   }
@@ -81,7 +99,7 @@ export function ChatPanel({
     const mention = mentions.find(item => item.id === id);
     if (!mention) return;
     const text = draft.slice(0, mention.start) + draft.slice(mention.start + 1);
-    updateDraft(user.id, groupId, text, reconcileMentions(draft, text, mentions.filter(item => item.id !== id)));
+    updateDraft(user.id, groupId, text, reconcileMentions(draft, text, mentions.filter(item => item.id !== id), { start: mention.start, end: mention.start + 1 }));
     setQuery(undefined);
   }
   const [older, setOlder] = useState(false);
@@ -99,7 +117,7 @@ export function ChatPanel({
       setError("Elegí un bot para cada @ pendiente o quitá la @ antes de enviar.");
       input.current?.focus();
       const start = unresolved[0]!;
-      const end = start + 1 + (/^[^\s@]*/u.exec(draft.slice(start + 1))?.[0].length ?? 0);
+      const end = start + 1 + (/^[^\s@*_~\]<>]*/u.exec(draft.slice(start + 1))?.[0].length ?? 0);
       input.current?.setSelectionRange(end, end);
       setQuery(mentionQuery(draft, end, selected));
       setChoice(0);
