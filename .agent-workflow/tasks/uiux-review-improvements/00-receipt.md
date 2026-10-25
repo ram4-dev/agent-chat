@@ -45,3 +45,12 @@
 - Actual-display callback is now typed directly in App; added focus restoration re-emission to the observer to match the read queue's document.hasFocus guard.
 - Added the human read table to the fixed schema inventory, without removing assertions.
 - Independent review 1 found modal dismissal under pending requests (P2) and persistent receiver guide confusion (P3). Original agent worker is fixing both under task node:delegated-task:command%3Amcp%3Ac948eb01-ecbd-40ec-a8f4-9aa26b239f55%3Athread-send%3Auiux-agents-fix-review-r1. No scope-wide approval claimed.
+
+## Review findings and fixes
+
+- Agents follow-up e965db59 integrated as 0a6ba28: pending requests are dismissible with client abort, credential cleanup and stale-session guards; connected persistent receivers no longer funnel into mandatory webhook setup.
+- Independent chat/group review f034f8f found formatted-mention and duplicate-name identity reconciliation issues. Original chat worker is fixing them under task node:delegated-task:command%3Amcp%3Ac948eb01-ecbd-40ec-a8f4-9aa26b239f55%3Athread-send%3Auiux-chat-fix-review-r2.
+- Parent fixed occluded reads: narrow-layout navigation/details and App dialogs disable the read queue; generic native-dialog/inert mutations suspend pending batches and visible-ID reporting, then resume on uncover. New unit checks passed (13 focused tests); full group browser suite 8/8 passed, including navigation, details and dialog covers with client-clock batching checks.
+- Full combined initial baseline: 208 unit, 16 contract, 237 SQLite integration and 20 managed tests passed. Monolithic SQLite E2E had 52 pass/8 fail; failures are authenticated test-account creation/OAuth receiving actual HTTP429 from the unchanged anonymous-IP budget, not assertion or timeout failures hidden as success.
+- Full browser commands now use four standard sequential Playwright shards, each with a fresh configured server/database lifecycle and retained per-shard artifacts. No limiter mocks, production budget changes, automatic retries or timeout increases. Explicit selectors or external origins retain native CLI behavior.
+- Supabase local migration 20261025000300 applied by the parent during local reset, and managed unit/integration tests passed. No new cloud schema mutation yet.

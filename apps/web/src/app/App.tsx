@@ -73,6 +73,13 @@ export function App() {
   const [view, setView] = useState<"chat" | "agents">(()=>new URLSearchParams(location.search).has('notification_agent')?'agents':'chat');
   const [agentRevision, setAgentRevision] = useState(0);
   const [navOpen, setNavOpen] = useState(false);
+  const [narrowLayout, setNarrowLayout] = useState(() => window.matchMedia("(max-width: 760px)").matches);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 760px)");
+    const update = () => setNarrowLayout(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [modal, setModal] = useState<"create" | "join" | "invite">();
   const [invitation, setInvitation] = useState<InvitationState>({
@@ -186,7 +193,7 @@ export function App() {
     }, 600);
   }, [refreshGroups]);
   const { onMessagesDisplayed, readError, retryRead } = useGroupRead(
-    selectedId, !!authenticatedUserId && view === "chat", scheduleGroupsRefresh,
+    selectedId, !!authenticatedUserId && view === "chat" && !modal && !(narrowLayout && (navOpen || detailsOpen)), scheduleGroupsRefresh,
   );
 
   useEffect(() => {

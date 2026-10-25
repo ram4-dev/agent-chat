@@ -30,6 +30,7 @@ beforeEach(() => {
   vi.stubGlobal('window', window); vi.stubGlobal('document', window.document);
   vi.stubGlobal('innerWidth', 800); vi.stubGlobal('innerHeight', 600);
   vi.stubGlobal('IntersectionObserver', TestObserver);
+  vi.stubGlobal('MutationObserver', window.MutationObserver);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.set(++nextFrame, callback); return nextFrame; });
   vi.stubGlobal('cancelAnimationFrame', (id: number) => { frames.delete(id); });
@@ -70,6 +71,15 @@ describe('visible conversation history reporting', () => {
     vi.spyOn(document.querySelector('[data-visible-message-id="new"]')!, 'getBoundingClientRect').mockReturnValue(new window.DOMRect(0, 450, 200, 50));
     observer.emit(['old', 'new']); await flush();
     expect(report).toHaveBeenCalledExactlyOnceWith(['old']);
+  });
+  it('does not report articles covered by inert navigation or a native modal', async () => {
+    const report = vi.fn(); const observer = await mount(['old'], report);
+    const scroll = document.getElementById('scroll')!; scroll.setAttribute('inert', '');
+    observer.emit(['old']); await flush(); expect(report).not.toHaveBeenCalled();
+    scroll.removeAttribute('inert'); const dialog = document.createElement('dialog'); dialog.setAttribute('open', ''); document.body.append(dialog);
+    observer.emit(['old']); await flush(); expect(report).not.toHaveBeenCalled();
+    dialog.remove(); document.dispatchEvent(new window.Event('visibilitychange')); await flush();
+    expect(report).toHaveBeenCalledWith(['old']);
   });
   it('waits for a visible document and disconnects pending callbacks on unmount', async () => {
     const report = vi.fn(); const observer = await mount(['old'], report);

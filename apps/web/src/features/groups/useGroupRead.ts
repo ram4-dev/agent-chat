@@ -12,7 +12,7 @@ export function useGroupRead(groupId: string | undefined, enabled: boolean, onCh
   const changed = useRef(onChanged);
   changed.current = onChanged;
   const queue = useMemo(() => createReadQueue({
-    canRead: () => !!groupId && enabled && document.visibilityState === 'visible' && document.hasFocus(),
+    canRead: () => !!groupId && enabled && document.visibilityState === 'visible' && document.hasFocus() && !document.querySelector('.workspace[inert],dialog[open]'),
     send: ids => markDisplayedMessagesRead(groupId!, ids),
     onChanged: () => changed.current(),
     onError: (failed, status) => {
@@ -24,12 +24,15 @@ export function useGroupRead(groupId: string | undefined, enabled: boolean, onCh
     queue.activate();
     setReadError(false);
     const pause = () => {
-      if (document.visibilityState !== 'visible' || !document.hasFocus()) queue.pause();
+      if (document.visibilityState !== 'visible' || !document.hasFocus() || document.querySelector('.workspace[inert],dialog[open]')) queue.pause();
     };
+    const occlusion = new MutationObserver(pause);
+    occlusion.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['inert', 'open'], childList: true });
     document.addEventListener('visibilitychange', pause);
     window.addEventListener('blur', pause);
     return () => {
       queue.dispose();
+      occlusion.disconnect();
       document.removeEventListener('visibilitychange', pause);
       window.removeEventListener('blur', pause);
     };

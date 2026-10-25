@@ -15,7 +15,7 @@ export function useDisplayedMessages(
     let frame = 0;
     const report = () => {
       frame = 0;
-      if (document.visibilityState !== 'visible') return;
+      if (document.visibilityState !== 'visible' || root.closest('[inert]') || document.querySelector('dialog[open]')) return;
       const bounds = root.getBoundingClientRect();
       const visible = historyIds.filter(id => {
         if (!candidates.has(id)) return false;
@@ -37,11 +37,13 @@ export function useDisplayedMessages(
       schedule();
     }, { root, threshold: 0 });
     root.querySelectorAll('[data-visible-message-id]').forEach(node => observer.observe(node));
+    const occlusion = new MutationObserver(schedule);
+    occlusion.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['inert', 'open'], childList: true });
     document.addEventListener('visibilitychange', schedule);
     window.addEventListener('focus', schedule);
     root.addEventListener('scroll', schedule, { passive: true });
     return () => {
-      observer.disconnect(); cancelAnimationFrame(frame);
+      observer.disconnect(); occlusion.disconnect(); cancelAnimationFrame(frame);
       document.removeEventListener('visibilitychange', schedule);
       window.removeEventListener('focus', schedule);
       root.removeEventListener('scroll', schedule);
