@@ -11,6 +11,7 @@ import { registerErrorHandler, registerNotFoundHandler } from './error-envelope.
 import { registerLivenessRoute } from './liveness.js';
 import { registerOriginGuard } from './origin-guard.js';
 import { registerWebApp } from './web-app.js';
+import { registerAgentSkills } from './agent-skills.js';
 import { registerNotificationRoutes } from '../../notifications/routes.js';
 
 export interface HttpAdapterDependencies {
@@ -32,6 +33,7 @@ export function registerHttpAdapter(
   { config, database, health, services = createServices(database!) }: HttpAdapterDependencies,
 ): void {
   registerOriginGuard(app);
+  registerAgentSkills(app, config.publicOrigin);
   registerAuthRoutes(app, {
     auth: services.auth,
     secureCookies: config.nodeEnv === 'production',

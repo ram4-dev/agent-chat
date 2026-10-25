@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { GroupRole, MessageView } from '@agent-chat/contracts';
+import { parseMentionedAgentIds, type GroupRole, type MessageView } from '@agent-chat/contracts';
 import type { Clock } from '../identity/index.js';
 import { DomainError } from '../errors.js';
 import { GroupNotFoundError } from '../groups/index.js';
@@ -25,6 +25,7 @@ export interface InsertMessageInput {
    * events it creates for agents either both exist or neither does.
    */
   eligibleAgentIds: string[];
+  mentionedAgentIds?: string[];
 }
 
 export type InsertMessageOutcome =
@@ -65,6 +66,7 @@ export interface MessagingModule {
     author: MessageAuthorRef;
     groupId: string;
     text: string;
+    mentionedAgentIds?: string[];
     idempotencyKey: string;
   }): { message: MessageView; replayed: boolean };
   list(input: { author: MessageAuthorRef; groupId: string; limit: number; before?: string }): MessagePage;
@@ -103,9 +105,13 @@ export function createMessagingModule({
   }
 
   return {
-    send({ author, groupId, text, idempotencyKey }) {
+    send({ author, groupId, text, idempotencyKey, mentionedAgentIds }) {
       requireMembership(author, groupId);
 
+      const parsed = parseMentionedAgentIds(mentionedAgentIds);
+      if (!parsed.ok) throw new DomainError('invalid_input', 400, 'Invalid mentions');
+      const recipients = membership.agentRecipientsOf(groupId);
+      if (parsed.value.some(id => !recipients.includes(id))) throw new DomainError('invalid_input', 400, 'Mentioned agent is not an active group member');
       const result = messages.insertWithIdempotency({
         id: generateId(),
         groupId,
@@ -113,8 +119,9 @@ export function createMessagingModule({
         text,
         createdAt: clock.now().toISOString(),
         idempotencyKey,
-        requestDigest: digestOf(groupId, text),
-        eligibleAgentIds: membership.agentRecipientsOf(groupId),
+        requestDigest: digestOf(groupId, text, parsed.value),
+        mentionedAgentIds: parsed.value,
+        eligibleAgentIds: parsed.value.length ? parsed.value : recipients,
       });
 
       if (result.outcome === 'conflict') {
@@ -153,6 +160,7 @@ export function createMessagingModule({
  * retried request is recognized as the same request and a reused key with new
  * content is refused.
  */
-export function digestOf(groupId: string, text: string): string {
-  return createHash('sha256').update(`${groupId}\u0000${text}`, 'utf8').digest('hex');
+export function digestOf(groupId: string, text: string, mentionedAgentIds: string[] = []): string {
+  const suffix = mentionedAgentIds.length ? `\u0000${JSON.stringify([...new Set(mentionedAgentIds)].sort())}` : '';
+  return createHash('sha256').update(`${groupId}\u0000${text}${suffix}`, 'utf8').digest('hex');
 }

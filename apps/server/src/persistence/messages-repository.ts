@@ -11,6 +11,7 @@ interface MessageRow {
   human_author_id: string | null;
   agent_author_id: string | null;
   text: string;
+  mentioned_agent_ids: string;
   created_at: string;
   human_display_name: string | null;
   agent_display_name: string | null;
@@ -39,9 +40,9 @@ export function createSqliteMessageRepository(
   );
   const insertMessage = sqlite.prepare(
     `INSERT INTO messages
-       (id, group_id, author_kind, human_author_id, agent_author_id, text, created_at, sequence)
+       (id, group_id, author_kind, human_author_id, agent_author_id, text, created_at, sequence, mentioned_agent_ids)
      VALUES
-       (@id, @groupId, @authorKind, @humanAuthorId, @agentAuthorId, @text, @createdAt, @sequence)`,
+       (@id, @groupId, @authorKind, @humanAuthorId, @agentAuthorId, @text, @createdAt, @sequence, @mentionedAgentIds)`,
   );
   const insertIdempotency = sqlite.prepare(
     `INSERT INTO message_idempotency
@@ -119,6 +120,7 @@ export function createSqliteMessageRepository(
           humanAuthorId: authorKey === 'human' ? authorId : null,
           agentAuthorId: authorKey === 'agent' ? authorId : null,
           text: input.text,
+          mentionedAgentIds: JSON.stringify(input.mentionedAgentIds ?? []),
           createdAt: input.createdAt,
         });
 
@@ -188,6 +190,7 @@ function toView(row: MessageRow): MessageView {
     groupId: row.group_id,
     author,
     text: row.text,
+    ...(row.mentioned_agent_ids && row.mentioned_agent_ids !== '[]' ? { mentionedAgentIds: JSON.parse(row.mentioned_agent_ids) as string[] } : {}),
     createdAt: row.created_at,
   };
 }

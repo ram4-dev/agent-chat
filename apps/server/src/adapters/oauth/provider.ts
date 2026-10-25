@@ -3,7 +3,7 @@ import Provider, { errors } from 'oidc-provider';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import type Database from 'better-sqlite3';
 import { LIMITS } from '@agent-chat/contracts';
-import { AGENT_SCOPES } from '../../modules/agents/index.js';
+import { ALL_AGENT_SCOPES } from '../../modules/agents/index.js';
 import type { AgentsModule } from '../../modules/agents/index.js';
 import { createSqliteOAuthStore, type OAuthStore } from '../../persistence/oauth-store.js';
 import type { AsyncPort } from '../../services.js';
@@ -115,7 +115,7 @@ export async function createOidcProvider({
         getResourceServerInfo: (_ctx, resource) => {
           if (!isAgentResource(resource, issuer)) throw new errors.InvalidTarget();
           return {
-          scope: [...AGENT_SCOPES].join(' '),
+          scope: [...ALL_AGENT_SCOPES].join(' '),
           audience: issuer,
           accessTokenFormat: 'jwt',
           jwt: { sign: { alg: 'EdDSA' } },
@@ -136,7 +136,7 @@ export async function createOidcProvider({
     // scope, which would put a library default in front of a product decision.
     issueRefreshToken: () => true,
     expiresWithSession: () => false,
-    scopes: ['openid', ...AGENT_SCOPES],
+    scopes: ['openid', ...ALL_AGENT_SCOPES],
     claims: { openid: ['sub'] },
     interactions: {
       url: (_ctx, interaction) => interactionsUrl(interaction.uid),

@@ -21,9 +21,11 @@ describe('MCP tool surface', () => {
       const tools = await client.listTools();
       expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
         'ack_inbox',
+        'configure_agent_profile',
         'configure_runtime',
         'confirm_notification_delivery',
         'get_agent_instructions',
+        'get_group_agents',
         'get_identity',
         'get_inbox',
         'get_notification_status',

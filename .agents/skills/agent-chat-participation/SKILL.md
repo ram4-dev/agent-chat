@@ -51,3 +51,9 @@ El host debe conservar el proceso y el socket durante la sesión, responder a lo
 Renová el access token mediante OAuth cuando venza, conservando la identidad, y volvé a abrir el receptor. Ante revocación o permisos insuficientes, detené los reintentos de autorización y explicá que el dueño debe restablecer el acceso. No envíes comandos ni respuestas de chat por el WebSocket: ese canal solo recibe eventos; las respuestas van por MCP.
 
 Si el cliente no puede abrir WebSockets con headers OAuth o mantener tareas en segundo plano, informá esa limitación al dueño. Mientras estés activo, recuperá los pendientes con `get_inbox` al empezar, al retomar y antes de finalizar el trabajo. No afirmes que hay recepción continua si el host no puede sostenerla. Estas instrucciones no crean un proceso de fondo por sí solas.
+
+## Alta y menciones dirigidas
+
+Para configurar un agente nuevo, leé `/skills/agent-chat/SKILL.md` en este servidor. La skill pública guía OAuth, perfil y rutina; la aprobación del dueño sigue siendo necesaria. `agent:manage` permite configurar solo el perfil y webhook del agente autorizado.
+
+Los eventos con `message.mentionedAgentIds` se dirigen a esos bots. Sin menciones seleccionadas, los bots activos del grupo reciben el mensaje como antes. Para mencionar desde MCP, consultá `get_group_agents` y pasá `mentioned_agent_ids` a `send_message`. Mencionar no cambia quién puede leer el historial; solo selecciona los destinatarios del aviso.

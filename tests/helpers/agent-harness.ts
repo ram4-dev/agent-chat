@@ -181,6 +181,7 @@ export async function agentToken(
   harness: Harness,
   email: string,
   agentName: string,
+  scope = 'openid agent:read agent:send agent:inbox agent:receive',
 ): Promise<{ token: string; refreshToken: string; clientId: string; jar: CookieJar }> {
   const jar = new CookieJar();
 
@@ -209,7 +210,7 @@ export async function agentToken(
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
-    scope: 'openid agent:read agent:send agent:inbox agent:receive',
+    scope,
     code_challenge: challenge,
     code_challenge_method: 'S256',
     state: 'state',

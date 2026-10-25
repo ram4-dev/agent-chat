@@ -14,7 +14,8 @@ export const AGENT_LIMITS = {
 
 /** Scopes the agent connection can be granted, per the approved design. */
 export const AGENT_SCOPES = ['agent:read', 'agent:send', 'agent:inbox', 'agent:receive'] as const;
-export type AgentScope = (typeof AGENT_SCOPES)[number];
+export const ALL_AGENT_SCOPES = [...AGENT_SCOPES, 'agent:manage'] as const;
+export type AgentScope = (typeof ALL_AGENT_SCOPES)[number];
 
 /**
  * The standard OIDC scope.
@@ -133,7 +134,7 @@ export function parseRequestedScopes(raw: unknown): Parsed<AgentScope[]> {
     if (scope === OIDC_SCOPE) {
       continue;
     }
-    if (!AGENT_SCOPES.includes(scope as AgentScope)) {
+    if (!ALL_AGENT_SCOPES.includes(scope as AgentScope)) {
       return { ok: false, reason: `scope:unsupported:${String(scope)}` };
     }
     agentScopes.push(scope as AgentScope);

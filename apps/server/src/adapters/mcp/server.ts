@@ -36,11 +36,13 @@ export interface McpCredentialContext {
 /** The tool names this surface exposes, kept in one place for the contract test. */
 export const MCP_TOOL_NAMES = [
     'get_agent_instructions',
+    'configure_agent_profile',
     'setup_notifications', 'get_notification_status', 'confirm_notification_delivery',
     'get_notification_reply_receipt',
     'pair_native', 'configure_runtime', 'runtime_begin', 'runtime_next', 'runtime_open', 'runtime_save', 'runtime_finish', 'runtime_fail',
     'get_identity',
     'list_groups',
+    'get_group_agents',
     'read_messages',
     'send_message',
     'get_inbox',
@@ -82,6 +84,18 @@ export function createMcpServer({ agents, groups, inbox, messaging, identity, hu
         if (!current.scopes.includes(scope)) throw new DomainError('forbidden', 403, 'Scope required');
         return current;
     };
+    server.registerTool('configure_agent_profile', {
+      description: 'Set the name, description and avatar of this exact authorized agent. Requires the optional owner-approved agent:manage scope. Cannot create, select or modify another identity.',
+      inputSchema: { name: z.string().min(1).max(60), description: z.string().max(280).optional(), avatar_url: z.string().max(2048).optional() },
+      annotations: { destructiveHint: false, idempotentHint: true },
+    }, async ({ name, description, avatar_url }) => guard(async () => {
+      const principal = context('agent:manage');
+      const { agent } = await agents.resolveActiveConnection(principal.connectionId);
+      const updated = await agents.updateProfile({agentId:principal.agentId,ownerUserId:agent.ownerUserId,name,
+        description:description ?? agent.description,avatarUrl:avatar_url ?? agent.avatarUrl});
+      hub.publishAgentState(principal.agentId);
+      return ok({agent:{id:updated.id,name:updated.name,description:updated.description,avatarUrl:updated.avatarUrl}});
+    }));
     server.registerTool('setup_notifications', {
       description: 'Configure participation notifications. Detect available delivery methods, preserve this OAuth account, and return an owner-only private setup link. Never ask for OAuth tokens or webhook keys in chat.',
       inputSchema: { platform: z.enum(['grokbot','generic']).optional(), can_keep_authenticated_receiver: z.boolean().optional(), can_create_webhook_routine: z.boolean().optional() },
@@ -93,6 +107,7 @@ export function createMcpServer({ agents, groups, inbox, messaging, identity, hu
         host_capabilities:{authenticated_receiver:!!can_keep_authenticated_receiver,webhook_routine:platform==='grokbot'||!!can_create_webhook_routine},
         capabilities:{ websocket:true,webhook:!!notifications,mcp_push_wake:false },
         setup_url:`${issuer}/?notification_agent=${encodeURIComponent(principal.agentId)}&notification_connection=${encodeURIComponent(principal.connectionId)}&notification_platform=${platform??'generic'}`,
+        private_configuration:{url:`${issuer}/agent/configuration/notifications`,method:'POST',authentication:'existing OAuth bearer in a private host transport; never export a connector token',required_scope:'agent:manage',fields:['platform','url','secret'],available:!!notifications&&principal.scopes.includes('agent:manage')},
         state:notifications?await notifications.status(principal):{configured:false,active:false},
         instructions:platform==='grokbot'&&notifications?'Create a webhook-triggered routine on this Bot using only this selected MCP account. On every wake verify get_identity, compare agent_id and connection_id from the wake, call confirm_notification_delivery with delivery_id and challenge, if kind is probe stop after confirmation; if kind is wake process get_inbox, check get_notification_reply_receipt before generation, send replies with stable event idempotency keys, and ACK only after processing. Never disclose webhook credentials in chat. The owner registers the routine URL and key on setup_url and clicks Probar y activar. HTTP 200 alone is not verification.':'Keep one authenticated receiver, or register a host wake webhook privately. Confirm actual receipt before claiming notifications are active.' });
     }));
@@ -163,6 +178,10 @@ export function createMcpServer({ agents, groups, inbox, messaging, identity, hu
             })),
         });
     }));
+    server.registerTool('get_group_agents', {
+      description:'List the active agent IDs and names in a group this agent belongs to, for directed mentions. Does not expose human member details.',
+      inputSchema:{group_id:z.string().min(1)},annotations:{readOnlyHint:true},
+    },async({group_id})=>guard(async()=>ok({agents:await groups.listAgentPeers({agentId:context('agent:read').agentId,groupId:group_id})})));
     server.registerTool('read_messages', {
         description: 'Read messages from a group this agent belongs to, newest first.',
         inputSchema: {
@@ -177,13 +196,14 @@ export function createMcpServer({ agents, groups, inbox, messaging, identity, hu
         ...(before === undefined ? {} : { before }),
     }))));
     server.registerTool('send_message', {
-        description: 'Publish a message as this agent in a group it belongs to, without needing a mention or a prior message.',
+        description: 'Publish as this agent in its group. Optional mentioned_agent_ids directs inbox and webhook notifications only to those active members; without mentions all other bots are notified.',
         inputSchema: {
             group_id: z.string().min(1),
             text: z.string().min(1),
             idempotency_key: z.string().min(1),
+            mentioned_agent_ids: z.array(z.string().min(1).max(128)).max(20).optional(),
         },
-    }, async ({ group_id, text, idempotency_key }) => guard(async () => {
+    }, async ({ group_id, text, idempotency_key, mentioned_agent_ids }) => guard(async () => {
         const principal = context('agent:send');
         if (automation?.isRuntimeConnection(principal.connectionId)) return refused('conflict');
         assertPublicAgentIdempotencyKey(idempotency_key);
@@ -193,6 +213,7 @@ export function createMcpServer({ agents, groups, inbox, messaging, identity, hu
             groupId: group_id,
             text,
             idempotencyKey: idempotency_key,
+            ...(mentioned_agent_ids ? { mentionedAgentIds: mentioned_agent_ids } : {}),
         });
         // The same rule as the HTTP path: a replay already fanned out once, so
         // publishing it again would show the same message twice in the browser.

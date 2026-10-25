@@ -22,8 +22,9 @@ for (const name of readdirSync(output, { recursive: true })) {
     throw new Error(`Environment file present in deployment artifact: ${relative(output, resolve(output, name))}`);
   }
 }
-const guidePath = '.agents/skills/agent-chat-participation/SKILL.md';
+for (const guidePath of ['.agents/skills/agent-chat-participation/SKILL.md', '.agents/skills/agent-chat-setup/SKILL.md']) {
 if (!existsSync(resolve(output, guidePath)) || !readFileSync(resolve(root, guidePath)).equals(readFileSync(resolve(output, guidePath)))) {
   throw new Error('Agent participation skill missing or stale in deployment artifact');
+}
 }
 log(`Deployment artifact verified: Node 22, handler, participation skill and ${checked} matching web assets; no environment files.`);

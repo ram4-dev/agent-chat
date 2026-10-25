@@ -11,6 +11,7 @@ interface InboxRow {
   created_at: string;
   message_id: string;
   message_text: string;
+  mentioned_agent_ids: string;
   message_created_at: string;
   author_kind: 'human' | 'agent';
   author_id: string;
@@ -30,7 +31,7 @@ export function createSqliteInboxRepository(sqlite: Database.Database): InboxRep
   const columns = `
     SELECT e.id, e.group_id, e.sequence, e.created_at,
            m.id AS message_id, m.text AS message_text, m.created_at AS message_created_at,
-           m.author_kind,
+           m.author_kind, m.mentioned_agent_ids,
            COALESCE(m.human_author_id, m.agent_author_id) AS author_id,
            COALESCE(u.display_name, a.name) AS author_name, owner.display_name AS owner_name
       FROM inbox_events e
@@ -103,6 +104,7 @@ function toView(row: InboxRow | undefined): InboxEventView | undefined {
       id: row.message_id,
       groupId: row.group_id,
       text: row.message_text,
+      ...(row.mentioned_agent_ids && row.mentioned_agent_ids !== '[]' ? { mentionedAgentIds: JSON.parse(row.mentioned_agent_ids) as string[] } : {}),
       createdAt: row.message_created_at,
       author: {
         kind: row.author_kind,

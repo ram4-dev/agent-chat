@@ -24,7 +24,7 @@ const asConnection = (row: StoredConnection): ConnectionRecord => ({ ...row, sco
 const fail = (code: DomainErrorCode, status = 404): never => { throw new DomainError(code, status, 'Operation refused'); };
 const now = () => new Date().toISOString();
 
-const MESSAGE_VIEW = `SELECT m.id,m.group_id AS "groupId",m.text,m.created_at AS "createdAt",
+const MESSAGE_VIEW = `SELECT m.id,m.group_id AS "groupId",m.text,m.mentioned_agent_ids AS "mentionedAgentIds",m.created_at AS "createdAt",
   CASE WHEN m.author_kind='human' THEN jsonb_build_object('kind','human','id',u.id,'displayName',u.display_name)
   ELSE jsonb_build_object('kind','agent','id',a.id,'displayName',a.name,'ownerDisplayName',o.display_name) END AS author
   FROM messages m LEFT JOIN users u ON u.id=m.human_author_id
@@ -174,6 +174,10 @@ export function createManagedServices(db: ManagedDatabase, authConfig: SupabaseA
     return row.role;
   }
   const groups: ApplicationServices['groups'] = {
+    async listAgentPeers({agentId,groupId}) {
+      await requireMessageAccess({kind:'agent',id:agentId},groupId);
+      return db.rows<{id:string;name:string}>(`SELECT a.id,a.name FROM group_agent_memberships m JOIN agents a ON a.id=m.agent_id AND a.status='active' WHERE m.group_id=$1 ORDER BY a.name,a.id`,[groupId]);
+    },
     createGroup: async ({ userId, name }) => db.transaction(async () => {
       const parsed = parseCreateGroupRequest({ name });
       if (!parsed.ok) return fail('invalid_input', 400);
@@ -251,19 +255,22 @@ export function createManagedServices(db: ManagedDatabase, authConfig: SupabaseA
       await db.lock(`send:${input.author.kind}:${input.author.id}:${input.idempotencyKey}`);
       await db.rows('SELECT id FROM groups WHERE id=$1 FOR UPDATE', [input.groupId]);
       await requireMessageAccess(input.author, input.groupId);
-      const digest = digestOf(input.groupId, input.text);
+      const digest = digestOf(input.groupId, input.text, parsed.value.mentionedAgentIds);
       const prior = await db.one<{ request_digest: string; message_id: string }>(`SELECT request_digest,message_id FROM message_idempotency WHERE author_kind=$1 AND COALESCE(human_author_id,agent_author_id)=$2 AND idempotency_key=$3`, [input.author.kind, input.author.id, input.idempotencyKey]);
       if (prior) {
         if (prior.request_digest !== digest) return fail('conflict', 409);
         return { message: (await db.one<MessageView>(`${MESSAGE_VIEW} WHERE m.id=$1`, [prior.message_id]))!, replayed: true };
       }
+      const members = await db.rows<{ agent_id: string }>(`SELECT m.agent_id FROM group_agent_memberships m JOIN agents a ON a.id=m.agent_id AND a.status='active' WHERE m.group_id=$1 ORDER BY m.agent_id`, [input.groupId]);
+      const mentionedAgentIds = parsed.value.mentionedAgentIds ?? [];
+      if (mentionedAgentIds.some(id => !members.some(member => member.agent_id === id))) return fail('invalid_input', 400);
       const id = randomUUID();
       const human = input.author.kind === 'human' ? input.author.id : null;
       const agent = input.author.kind === 'agent' ? input.author.id : null;
-      await db.rows(`INSERT INTO messages(id,group_id,author_kind,human_author_id,agent_author_id,text,sequence)
-        SELECT $1,$2,$3,$4,$5,$6,COALESCE(MAX(sequence),0)+1 FROM messages WHERE group_id=$2`, [id, input.groupId, input.author.kind, human, agent, input.text]);
+      await db.rows(`INSERT INTO messages(id,group_id,author_kind,human_author_id,agent_author_id,text,sequence,mentioned_agent_ids)
+        SELECT $1,$2,$3,$4,$5,$6,COALESCE(MAX(sequence),0)+1,$7::jsonb FROM messages WHERE group_id=$2`, [id, input.groupId, input.author.kind, human, agent, input.text, JSON.stringify(mentionedAgentIds)]);
       await db.rows(`INSERT INTO message_idempotency(author_kind,human_author_id,agent_author_id,idempotency_key,request_digest,message_id) VALUES($1,$2,$3,$4,$5,$6)`, [input.author.kind, human, agent, input.idempotencyKey, digest, id]);
-      const recipients = await db.rows<{ agent_id: string }>(`SELECT m.agent_id FROM group_agent_memberships m JOIN agents a ON a.id=m.agent_id AND a.status='active' WHERE m.group_id=$1 AND m.agent_id IS DISTINCT FROM $2 ORDER BY m.agent_id`, [input.groupId, agent]);
+      const recipients = members.filter(member => member.agent_id !== agent && (!mentionedAgentIds.length || mentionedAgentIds.includes(member.agent_id)));
       for (const recipient of recipients) {
         await db.lock(`inbox:${recipient.agent_id}`);
         await db.rows(`INSERT INTO inbox_events(id,agent_id,sequence,group_id,message_id)

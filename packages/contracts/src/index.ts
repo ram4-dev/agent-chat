@@ -46,6 +46,7 @@ export {
 export {
   IDEMPOTENCY_KEY_MAX_LENGTH,
   MESSAGE_PATHS,
+  parseMentionedAgentIds,
   parseMessagePage,
   parseMessageView,
   parsePageSize,
