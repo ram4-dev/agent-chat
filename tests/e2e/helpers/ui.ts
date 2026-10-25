@@ -5,7 +5,14 @@ export async function signUp(page: Page, email: string, name: string) {
   await page
     .getByLabel("Contraseña", { exact: true })
     .fill("a-sufficiently-long-password");
-  await page.getByRole("button", { name: "Crear cuenta", exact: true }).click();
+  const [registration] = await Promise.all([
+    page.waitForResponse((response) =>
+      new URL(response.url()).pathname === "/api/auth/register" &&
+      response.request().method() === "POST",
+    ),
+    page.getByRole("button", { name: "Crear cuenta", exact: true }).click(),
+  ]);
+  expect(registration.status(), "QA registration must succeed before checking the workspace").toBe(201);
   await expect(page.getByRole("main")).toHaveClass(/workspace/);
 }
 export async function navigation(page: Page) {

@@ -189,7 +189,7 @@ export function AuthPanel({
             </label>
             {session.status === "confirmation_required" && (
               <p className="info-note" role="status">
-                Revisá tu correo para confirmar la cuenta. Después podés ingresar.
+                Revisá tu correo. Al confirmar la cuenta vas a ingresar automáticamente.
               </p>
             )}
             {session.status === "rejected" && (

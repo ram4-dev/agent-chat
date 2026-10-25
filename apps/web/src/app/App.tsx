@@ -14,6 +14,7 @@ import { AuthPanel } from "../features/auth/AuthPanel";
 import { RecoveryPanel } from '../features/auth/RecoveryPanel';
 import {
   loadSession,
+  confirmEmail,
   loginAccount,
   registerAccount,
   type SessionState,
@@ -44,6 +45,12 @@ export function App() {
     const params = new URLSearchParams(location.hash.slice(1));
     return params.get('type') === 'recovery' ? params.get('access_token') : null;
   });
+  const [confirmation] = useState(() => {
+    const params=new URLSearchParams(location.hash.slice(1));
+    const relevant=location.pathname==='/auth/confirm'||params.get('type')==='signup';
+    return relevant?{token:params.get('type')==='signup'?params.get('access_token'):null}:null;
+  });
+  const confirmationRequest=useRef<Promise<SessionState> | null>(null);
   const [session, setSession] = useState<SessionState>({ status: "loading" });
   const [groups, setGroups] = useState<GroupsState>({ status: "loading" });
   const [detail, setDetail] = useState<GroupDetailState>({ status: "loading" });
@@ -96,11 +103,15 @@ export function App() {
   );
 
   useEffect(() => {
-    if (new URLSearchParams(location.hash.slice(1)).get('type') === 'recovery') {
+    if (confirmation || new URLSearchParams(location.hash.slice(1)).get('type') === 'recovery') {
       const url = new URL(location.href); url.hash = ''; url.searchParams.delete('recovery');
+      if(confirmation)url.pathname='/';
       history.replaceState(null, '', url);
     }
-    void loadSession().then(setSession);
+    if(confirmation){
+      if(!confirmationRequest.current)confirmationRequest.current=confirmation.token?confirmEmail(confirmation.token):Promise.resolve({status:'rejected',code:'confirmation_invalid'});
+      void confirmationRequest.current.then(setSession);
+    }else void loadSession().then(setSession);
     void loadLiveness().then((result) => setOffline(result.status !== "ok"));
   }, []);
   useEffect(() => {

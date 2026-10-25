@@ -57,11 +57,12 @@ export function createNotifications(db: ManagedDatabase, agents: AsyncPort<Agent
     });
     return ownerStatus(ownerId,agentId);
   }
-  async function probe(ownerId: string,agentId: string) {
+  async function probe(ownerId: string,agentId: string,connectionId?: string) {
     await agents.getOwnedAgent(agentId,ownerId);
     return db.transaction(async () => {
       await db.lock(`notification-config:${agentId}`);
       const c = await config(agentId); if (!c) return invalid();
+      if(connectionId && c.connection_id!==connectionId)return deny();
       await agents.resolveActiveConnection(c.connection_id);
       const existing = await db.one<{ id: string }>("SELECT id FROM notification_jobs WHERE agent_id=$1 AND revision=$2 AND kind='probe' AND status IN ('queued','sending','accepted') AND created_at>now()-interval '30 seconds' ORDER BY created_at DESC LIMIT 1",[agentId,c.revision]);
       if (existing) return { delivery_id: existing.id };
@@ -72,10 +73,11 @@ export function createNotifications(db: ManagedDatabase, agents: AsyncPort<Agent
       return { delivery_id: job!.id };
     });
   }
-  async function pause(ownerId: string,agentId: string) {
+  async function pause(ownerId: string,agentId: string,connectionId?: string) {
     await agents.getOwnedAgent(agentId,ownerId);
     await db.transaction(async () => {
       await db.lock(`notification-config:${agentId}`);
+      if(connectionId && (await config(agentId))?.connection_id!==connectionId)return deny();
       await db.rows('UPDATE notification_configs SET enabled=false,verified_at=NULL,revision=revision+1 WHERE agent_id=$1',[agentId]);
       await db.rows("UPDATE notification_jobs SET status='cancelled' WHERE agent_id=$1 AND status IN ('queued','sending','accepted')",[agentId]);
       await db.notify('agent',agentId);

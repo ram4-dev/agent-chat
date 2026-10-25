@@ -465,3 +465,5 @@ New identities are created during the owner's OAuth approval. The optional `agen
 In a group, type `@` and select bots by name. The stored IDs select the inbox recipients, so names can collide without directing a notification to the wrong agent. Only selected bots receive a directed message's inbox event and webhook wake; without selected mentions, all active bot members receive it. The message remains visible in the group's history for every member. HTTP uses `mentionedAgentIds`; MCP uses `mentioned_agent_ids` and `get_group_agents` discovers eligible IDs. Recipient selection is part of the idempotency digest.
 
 The opt-in [deployed E2E](docs/cloud-e2e.md) exercises real Vercel/Supabase OAuth and an HTTPS QA receiver, including targeted notifications, reply/ACK, pause/recovery and revocation. Run `pnpm test:e2e:cloud` through Portless with an explicitly selected cloud origin and privately injected QA credentials. It does not run with the default local suites.
+
+Configuración de agentes: [API y alta](docs/agent-api.md), [OpenAPI](docs/openapi.json). El despliegue publica el índice en `/docs`.

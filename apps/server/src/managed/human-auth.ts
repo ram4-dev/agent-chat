@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { PublicUser } from '@agent-chat/contracts';
 import { DomainError } from '../modules/errors.js';
 import { ConfirmationRequiredError, type AuthModule, type AuthenticatedUser } from '../modules/auth/index.js';
@@ -6,10 +7,10 @@ import type { AsyncPort } from '../services.js';
 import type { ManagedDatabase } from './database.js';
 
 export interface SupabaseAuthConfig { url: string; anonKey: string; publicOrigin: string }
-interface SupabaseUser { id: string; email?: string; user_metadata?: { display_name?: string }; created_at: string }
+interface SupabaseUser { id: string; email?: string; user_metadata?: { display_name?: string }; created_at: string; email_confirmed_at?: string }
 interface SupabaseAuthResponse { user?: SupabaseUser; access_token?: string }
 
-export function createManagedHumanAuth(db: ManagedDatabase, config: SupabaseAuthConfig): AsyncPort<AuthModule> {
+export function createManagedHumanAuth(db: ManagedDatabase, config: SupabaseAuthConfig): AsyncPort<AuthModule> & { confirmEmail(accessToken: string): Promise<AuthenticatedUser> } {
   async function request(path: string, body: object): Promise<SupabaseAuthResponse> {
     let response: Response;
     try {
@@ -51,7 +52,21 @@ export function createManagedHumanAuth(db: ManagedDatabase, config: SupabaseAuth
     return user;
   }
   return {
-    register: async (input) => issue(await request(`signup?redirect_to=${encodeURIComponent(config.publicOrigin)}`, {
+    async confirmEmail(accessToken) {
+      let verified: Response;
+      try { verified=await fetch(`${config.url}/auth/v1/user`, {headers:{apikey:config.anonKey,authorization:`Bearer ${accessToken}`},signal:AbortSignal.timeout(10_000)}); }
+      catch {throw new DomainError('temporarily_unavailable',503,'Identity service unavailable');}
+      if(verified.status===429)throw new DomainError('rate_limited',429,'Identity rate limit');
+      if(!verified.ok)throw new DomainError(verified.status>=500? 'temporarily_unavailable':'unauthenticated',verified.status>=500?503:401,'Confirmation rejected');
+      const user=await verified.json() as SupabaseUser;
+      if(!user.email_confirmed_at || typeof user.id!=='string' || !user.email)throw new DomainError('unauthenticated',401,'Confirmation rejected');
+      return db.transaction(async()=>{
+        const used=await db.one('INSERT INTO email_confirmation_uses(token_hash,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING token_hash',[createHash('sha256').update(accessToken).digest('hex'),user.id]);
+        if(!used)throw new DomainError('unauthenticated',401,'Confirmation already used');
+        return issue({user,access_token:accessToken});
+      });
+    },
+    register: async (input) => issue(await request(`signup?redirect_to=${encodeURIComponent(`${config.publicOrigin}/auth/confirm`)}`, {
       email: input.email, password: input.password, data: { display_name: input.displayName },
     }), input.displayName),
     login: async (input) => issue(await request('token?grant_type=password', input)),

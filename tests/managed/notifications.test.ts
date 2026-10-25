@@ -82,3 +82,15 @@ it('cancels queued delivery after revocation and denies direct database roles ac
     await db.rows(`SET LOCAL ROLE ${role}`);await db.rows('SELECT * FROM agent_chat.notification_configs');
   })).rejects.toMatchObject({code:'42501'});
 });
+
+it('checks the configured connection under the lock before agent pause or probe',async()=>{
+ const f=await fixture(async()=>200);
+ await f.configure();
+ await expect(f.notifications.pause(f.user.id,f.agent.id,randomUUID())).rejects.toMatchObject({code:'forbidden'});
+ await expect(f.notifications.probe(f.user.id,f.agent.id,randomUUID())).rejects.toMatchObject({code:'forbidden'});
+ expect(await f.notifications.status(f.principal)).toMatchObject({enabled:true});
+ await f.notifications.pause(f.user.id,f.agent.id,f.connection.id);
+ expect(await f.notifications.status(f.principal)).toMatchObject({enabled:false});
+ await f.notifications.probe(f.user.id,f.agent.id,f.connection.id);
+ expect(await f.notifications.status(f.principal)).toMatchObject({enabled:true,receipt_confirmed:false});
+});

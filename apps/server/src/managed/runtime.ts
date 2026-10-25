@@ -5,6 +5,7 @@ import { createManagedOAuthStore } from './oauth-store.js';
 import { createApp } from '../app.js';
 import type { RuntimeConfig } from '../config/env.js';
 import type { MessageView } from '@agent-chat/contracts';
+import { registerManagedConfirmation } from './confirmation.js';
 import { registerManagedRecovery } from './recovery.js';
 
 /** Compose without writing local files or requiring process-local authoritative state. */
@@ -57,6 +58,7 @@ export async function createManagedApp(config: RuntimeConfig) {
         return row!.count <= max;
       },
     });
+    registerManagedConfirmation(app, db, { url: managed.supabaseUrl, anonKey: managed.supabaseAnonKey, publicOrigin: config.publicOrigin }, config.nodeEnv === 'production');
     registerManagedRecovery(app, db, { url: managed.supabaseUrl, anonKey: managed.supabaseAnonKey, publicOrigin: config.publicOrigin });
     app.addHook('onClose', async () => { await dispose(); });
     return app;
