@@ -18,6 +18,8 @@ export interface OwnedAgentView {
   connections: {
     id: string;
     oauthClientId: string;
+    /** Registered OAuth application name; absent for legacy clients. */
+    clientName?: string | null;
     scopes: string[];
     revokedAt: string | null;
     createdAt: string;

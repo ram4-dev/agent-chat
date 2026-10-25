@@ -136,7 +136,10 @@ export function createManagedServices(db: ManagedDatabase, authConfig: SupabaseA
     },
     async listConnections(id, ownerId) {
       await owned(id, ownerId);
-      return (await db.rows<StoredConnection>(`SELECT ${CONNECTION} FROM agent_connections WHERE agent_id=$1 ORDER BY created_at,id`, [id])).map(asConnection);
+      return (await db.rows<StoredConnection>(`SELECT c.id,c.agent_id AS "agentId",c.oauth_client_id AS "oauthClientId",c.scopes,
+        c.revoked_at AS "revokedAt",c.created_at AS "createdAt",o.client_name AS "clientName"
+        FROM agent_connections c LEFT JOIN oauth_clients o ON o.client_id=c.oauth_client_id
+        WHERE c.agent_id=$1 ORDER BY c.created_at,c.id`, [id])).map(asConnection);
     },
     async revokeConnection(id, ownerId) {
       const result = await db.transaction(async () => {

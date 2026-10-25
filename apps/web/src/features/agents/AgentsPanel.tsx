@@ -11,9 +11,12 @@ import { Avatar, CopyField, Icon, Modal, errorMessage } from "../../shared/ui";
 import { NativeConsentPanel } from "./NativeConsentPanel";
 import { NativeAutomationPanel } from "./NativeAutomationPanel";
 import { AutomationPanel } from "./AutomationPanel";
+import { AgentConnectionGuide } from "./AgentConnectionGuide";
+import { connectionName } from "./setup-state";
+import "./agent-setup.css";
 import { NotificationSettings } from './NotificationSettings';
 
-type Confirmation = { path: string; label: string; wholeAgent: boolean };
+type Confirmation = { path: string; label: string; wholeAgent: boolean; createdAt?: string; state?: string };
 export function AgentsPanel({
   groupId,
   groupName,
@@ -35,12 +38,14 @@ export function AgentsPanel({
   const [error, setError] = useState("");
   const [feedback, setFeedback] = useState("");
   const [editing, setEditing] = useState<OwnedAgentView | "new">();
-  const [connecting, setConnecting] = useState(false);
+  const [connecting, setConnecting] = useState(() => new URLSearchParams(location.search).get('agent_setup') === '1');
+  const [guideAgent, setGuideAgent] = useState(() => new URLSearchParams(location.search).get('notification_agent') ?? '');
+  const [resumeGuide, setResumeGuide] = useState(false);
   const [confirmation, setConfirmation] = useState<Confirmation>();
   const [capabilities, setCapabilities] = useState({ nativeAutomation: false, legacyAutomation: false });
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
-  const [notificationAgent,setNotificationAgent]=useState(()=>new URLSearchParams(location.search).get('notification_agent')??'');
+  const [notificationAgent,setNotificationAgent]=useState(()=>new URLSearchParams(location.search).has('agent_setup') ? '' : new URLSearchParams(location.search).get('notification_agent')??'');
   const refresh = useCallback(async () => {
     try {
       const response = await fetch(AGENT_PATHS.collection);
@@ -56,6 +61,12 @@ export function AgentsPanel({
   useEffect(() => {
     void refresh();
   }, [refresh, revision]);
+
+  useEffect(() => {
+    if (!connecting) return;
+    const timer = setInterval(() => { void refresh(); }, 2000);
+    return () => clearInterval(timer);
+  }, [connecting, refresh]);
 
   async function mutate(
     path: string,
@@ -81,6 +92,10 @@ export function AgentsPanel({
         setFormError(errorMessage(result.error?.code));
         return false;
       }
+      if (path === AGENT_PATHS.collection && method === "POST") {
+        const result = await response.json() as { agent: { id: string } };
+        setGuideAgent(result.agent.id);
+      }
       await refresh();
       onChanged();
       return true;
@@ -90,6 +105,11 @@ export function AgentsPanel({
     } finally {
       setBusy(false);
     }
+  }
+  function closeEditor() {
+    if (busy) return;
+    setEditing(undefined);
+    if (resumeGuide) { setResumeGuide(false); setConnecting(true); }
   }
   function edit(agent: OwnedAgentView | "new") {
     setFormError("");
@@ -120,14 +140,14 @@ export function AgentsPanel({
           <div className="page-actions">
             <button className="button secondary" onClick={() => edit("new")}>
               <Icon name="plus" />
-              Nuevo agente
+              Crear identidad
             </button>
             <button
               className="button primary"
               onClick={() => setConnecting(true)}
             >
               <Icon name="link" />
-              Conectar cliente
+              Conectar un agente
             </button>
           </div>
         </header>
@@ -183,13 +203,13 @@ export function AgentsPanel({
             </span>
             <h3>Tu primer agente empieza acá</h3>
             <p>
-              Creá su identidad y vinculala a un cliente MCP.
+              Conectá tu agente con su propia identidad.
               <br />
               Después elegí en qué conversaciones participa.
             </p>
-            <button className="button primary" onClick={() => edit("new")}>
-              <Icon name="plus" />
-              Crear agente
+            <button className="button primary" onClick={() => setConnecting(true)}>
+              <Icon name="link" />
+              Conectar un agente
             </button>
           </div>
         )}
@@ -224,6 +244,7 @@ export function AgentsPanel({
                   </button>
                 )}
               </div>
+                {agent.status === "active" && <button className="text-button" onClick={() => { setGuideAgent(agent.id); setConnecting(true); }}>Continuar conexión</button>}
                 {agent.status==='active'&&<button className="button secondary" aria-label={`Notificaciones de ${agent.name}`} onClick={()=>setNotificationAgent(agent.id)}>Notificaciones</button>}
               <p className="agent-description">
                 {agent.description ||
@@ -254,17 +275,17 @@ export function AgentsPanel({
                   <Icon name="chevron" />
                 </summary>
                 <ul aria-label={`Conexiones de ${agent.name}`}>
-                  {agent.connections.map((connection, index) => (
+                  {agent.connections.map((connection) => (
                     <li key={connection.id}>
                       <div>
                         <strong>
-                          Cliente {index + 1}
+                          {connectionName(connection)}
                           <span
                             className={`connection-tag ${connection.revokedAt ? "revoked" : ""}`}
                           >
                             {connection.revokedAt
                               ? "Desconectado"
-                              : "Autorizado"}
+                              : agent.status === "revoked" ? "Identidad revocada" : "Autorizado"}
                           </span>
                         </strong>
                         <span>
@@ -272,22 +293,21 @@ export function AgentsPanel({
                           {new Date(connection.createdAt).toLocaleDateString(
                             "es-AR",
                           )}{" "}
-                          ·{" "}
-                          <code title={connection.oauthClientId}>
-                            {connection.oauthClientId.slice(0, 8)}…
-                            {connection.oauthClientId.slice(-4)}
-                          </code>
+
                         </span>
+                        <details className="agent-client-details"><summary>Detalles técnicos</summary><p>ID de aplicación: <code>{connection.oauthClientId}</code></p><p>ID de conexión: <code>{connection.id}</code></p><p>Permisos: {connection.scopes.join(', ') || 'Sin permisos'}</p></details>
                       </div>
                       {!connection.revokedAt && agent.status === "active" && (
                         <button
                           className="text-button danger-text"
-                          aria-label={`Desconectar cliente ${index + 1} de ${agent.name}`}
+                          aria-label={`Desconectar ${connectionName(connection)} de ${agent.name}`}
                           onClick={() =>
                             confirm({
                               path: AGENT_PATHS.connection(connection.id),
-                              label: `el cliente ${index + 1} de ${agent.name}`,
+                              label: `${connectionName(connection)} de ${agent.name}`,
                               wholeAgent: false,
+                              createdAt: connection.createdAt,
+                              state: "Autorizado",
                             })
                           }
                         >
@@ -374,9 +394,7 @@ export function AgentsPanel({
       {editing && (
         <Modal
           title={editing === "new" ? "Crear agente" : "Editar agente"}
-          onClose={() => {
-            if (!busy) setEditing(undefined);
-          }}
+          onClose={closeEditor}
         >
           <p className="muted">
             {editing === "new"
@@ -401,6 +419,7 @@ export function AgentsPanel({
               ).then((ok) => {
                 if (ok) {
                   setEditing(undefined);
+                  if (resumeGuide) { setConnecting(true); setResumeGuide(false); }
                   setFeedback(
                     editing === "new"
                       ? "Agente creado. Ya podés vincular un cliente a su identidad."
@@ -455,7 +474,7 @@ export function AgentsPanel({
                 type="button"
                 className="button secondary"
                 disabled={busy}
-                onClick={() => setEditing(undefined)}
+                onClick={closeEditor}
               >
                 Cancelar
               </button>
@@ -470,56 +489,12 @@ export function AgentsPanel({
           </form>
         </Modal>
       )}
-      {connecting && (
-        <Modal title="Conectar un cliente" onClose={() => setConnecting(false)}>
-          <p className="muted">
-            Usá esta dirección en un cliente compatible con MCP remoto y OAuth.
-          </p>
-          <CopyField label="Skill para configurar un agente" value={`${location.origin}/skills/agent-chat/SKILL.md`} />
-          <p>Pasale esa URL al agente y pedile que la siga para crear su identidad, configurar el perfil y activar su rutina. Vos aprobás la conexión OAuth. Si el host no puede transferir las credenciales en privado, te dará el formulario para completar ese paso.</p>
-          <p><a href="/docs" target="_blank" rel="noreferrer">Documentación y API</a></p>
-          <a href="/skills/agent-chat/SKILL.md" target="_blank" rel="noreferrer">Abrir skill de configuración</a>
-          <CopyField label="Dirección MCP" value={`${location.origin}/mcp`} />
-          <ol className="connection-steps">
-            <li>
-              <span>1</span>
-              <div>
-                <strong>Agregá el servidor MCP</strong>
-                <p>Pegá la dirección en la configuración de tu cliente.</p>
-              </div>
-            </li>
-            <li>
-              <span>2</span>
-              <div>
-                <strong>Autorizá su identidad</strong>
-                <p>
-                  El cliente abre una pantalla para que crees un agente o elijas
-                  uno de los tuyos.
-                </p>
-              </div>
-            </li>
-            <li>
-              <span>3</span>
-              <div>
-                <strong>Sumalo a una conversación</strong>
-                <p>Abrí un grupo y agregá el agente desde sus miembros.</p>
-              </div>
-            </li>
-          </ol>
-          <p className="info-note">
-            Para recibir eventos en vivo, el runtime debe mantener su receptor
-            activo. Conectar MCP no enciende un agente que está apagado.
-          </p>
-          <div className="modal-actions">
-            <button
-              className="button primary"
-              onClick={() => setConnecting(false)}
-            >
-              Entendido
-            </button>
-          </div>
-        </Modal>
-      )}
+      {connecting && <AgentConnectionGuide agents={agents} selectedId={guideAgent} groupId={groupId} groupName={groupName} groupAgentIds={groupAgentIds} busy={busy} error={formError || error}
+        onSelect={setGuideAgent} onClose={() => setConnecting(false)}
+        onCreate={() => { setConnecting(false); setResumeGuide(true); edit("new"); }}
+        onRefresh={() => { void refresh(); }}
+        onNotifications={(id) => { setConnecting(false); setResumeGuide(true); setNotificationAgent(id); }}
+        onAdd={(id) => { if (groupId) void mutate(GROUP_PATHS.agentMember(groupId, id), "POST"); }} />}
       {confirmation && (
         <Modal
           title={
@@ -536,6 +511,7 @@ export function AgentsPanel({
             ¿Querés {confirmation.wholeAgent ? "revocar" : "desconectar"}{" "}
             <strong>{confirmation.label}</strong>?
           </p>
+          {confirmation.createdAt && <p>Desde {new Date(confirmation.createdAt).toLocaleDateString("es-AR")} · {confirmation.state}</p>}
           <p className="muted">
             {confirmation.wholeAgent
               ? "Todos sus clientes van a perder acceso y sus receptores se van a desconectar. Esta identidad no se puede reactivar."
@@ -583,7 +559,7 @@ export function AgentsPanel({
           </div>
         </Modal>
       )}
-      {notificationAgent&&agents?.some((item)=>item.id===notificationAgent)&&<NotificationSettings agentId={notificationAgent} name={agents.find((item)=>item.id===notificationAgent)!.name} onClose={()=>{setNotificationAgent('');const url=new URL(location.href);for(const key of ['notification_agent','notification_connection','notification_platform'])url.searchParams.delete(key);history.replaceState(null,'',url);}}/>}
+      {notificationAgent&&agents?.some((item)=>item.id===notificationAgent)&&<NotificationSettings agentId={notificationAgent} name={agents.find((item)=>item.id===notificationAgent)!.name} onConnect={() => { setGuideAgent(notificationAgent); setNotificationAgent(''); setResumeGuide(false); setConnecting(true); }} onClose={()=>{void refresh(); if (resumeGuide) { setResumeGuide(false); setConnecting(true); }setNotificationAgent('');const url=new URL(location.href);for(const key of ['notification_agent','notification_connection','notification_platform'])url.searchParams.delete(key);history.replaceState(null,'',url);}}/>}
     </section>
   );
 }

@@ -21,6 +21,7 @@ interface ConnectionRow {
   id: string;
   agent_id: string;
   oauth_client_id: string;
+  client_name?: string | null;
   scopes: string;
   revoked_at: string | null;
   created_at: string;
@@ -87,7 +88,9 @@ export function createSqliteConnectionRepository(
   );
   const byId = sqlite.prepare('SELECT * FROM agent_connections WHERE id = ?');
   const byAgent = sqlite.prepare(
-    'SELECT * FROM agent_connections WHERE agent_id = ? ORDER BY created_at, id',
+    `SELECT c.*, o.client_name FROM agent_connections c
+     LEFT JOIN oauth_clients o ON o.client_id = c.oauth_client_id
+     WHERE c.agent_id = ? ORDER BY c.created_at, c.id`,
   );
   const activeByClient = sqlite.prepare(
     `SELECT * FROM agent_connections
@@ -150,6 +153,7 @@ function toConnection(row: ConnectionRow | undefined): ConnectionRecord | undefi
     id: row.id,
     agentId: row.agent_id,
     oauthClientId: row.oauth_client_id,
+    ...(row.client_name !== undefined ? { clientName: row.client_name } : {}),
     scopes: row.scopes === '' ? [] : row.scopes.split(' '),
     revokedAt: row.revoked_at,
     createdAt: row.created_at,
