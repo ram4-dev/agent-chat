@@ -66,7 +66,12 @@ test('private host setup binds its own identity and only the mentioned bot gets 
    expect(payload<{active:boolean}>(await client.callTool({name:'confirm_notification_delivery',arguments:{delivery_id:probe.delivery_id,challenge:probe.challenge}})).active).toBe(true);
   }
   await page.goto(h.origin);await expect(page.getByRole('main')).toHaveClass(/workspace/);const group=await createGroup(page,'Webhook mentions');await addAgent(page,'One');await addAgent(page,'Two');
-  await page.getByLabel('Mensaje',{exact:true}).fill('@On');await page.getByLabel('Mensaje',{exact:true}).press('Enter');await page.getByLabel('Mensaje',{exact:true}).fill('@One tu turno');await page.getByRole('button',{name:'Enviar mensaje',exact:true}).click();
+  const message=page.getByLabel('Mensaje',{exact:true});
+  await message.fill('@On');await expect(message).toBeFocused();await message.press('Enter');
+  await expect(page.getByRole('button',{name:'Quitar mención a One',exact:true})).toBeVisible();
+  await message.fill('@One tu turno');await expect(message).toHaveValue('@One tu turno');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button',{name:'Enviar mensaje',exact:true}).click();
   await expect(page.getByRole('list',{name:'Mensajes'})).toContainText('@One tu turno');
   expect((await h.dispatch()).status).toBe(200);
   const wakes=h.delivered.filter(item=>item.kind==='wake');expect(wakes).toHaveLength(1);expect(wakes[0]!.agent_id).toBe(identities[0]!.agentId);
