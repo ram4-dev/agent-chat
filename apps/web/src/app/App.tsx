@@ -20,7 +20,7 @@ import {
   type SessionState,
 } from "../features/auth/session";
 import { GroupPanel, GroupDetails } from "../features/groups/GroupPanel";
-import { ChatContainer } from "../features/chat/ChatPanel";
+import { ChatContainer, clearUserDrafts } from "../features/chat/ChatPanel";
 import { AgentsPanel } from "../features/agents/AgentsPanel";
 import {
   createInvitation,
@@ -55,6 +55,12 @@ export function App() {
   });
   const confirmationRequest=useRef<Promise<SessionState> | null>(null);
   const [session, setSession] = useState<SessionState>({ status: "loading" });
+  const previousDraftUser = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const userId = session.status === "authenticated" ? session.user.id : undefined;
+    if (previousDraftUser.current && previousDraftUser.current !== userId) clearUserDrafts(previousDraftUser.current);
+    previousDraftUser.current = userId;
+  }, [session]);
   const [groups, setGroups] = useState<GroupsState>({ status: "loading" });
   const [detail, setDetail] = useState<GroupDetailState>({ status: "loading" });
   const [selectedId, setSelectedId] = useState<string>();
@@ -139,6 +145,10 @@ export function App() {
     if (request !== groupRequest.current) return;
     groupsInFlight.current = false;
     setGroups(previous => reconcileGroups(previous, next));
+    if (next.status === "error" && next.httpStatus === 401) {
+      if (authenticatedUserId) clearUserDrafts(authenticatedUserId);
+      setSession({ status: "anonymous" });
+    }
     if (next.status === "error" && (next.httpStatus === 401 || next.httpStatus === 403)) {
       selectedRef.current = undefined;
       setSelectedId(undefined);
@@ -313,6 +323,7 @@ export function App() {
     try {
       const result = await fetch(AUTH_PATHS.logout, { method: "POST" });
       if (!result.ok) throw new Error();
+      if (session.status === "authenticated") clearUserDrafts(session.user.id);
       setSession({ status: "anonymous" });
       setModal(undefined);
       setView("chat");
@@ -465,7 +476,7 @@ export function App() {
             </div>}
             {current ? (
               <ChatContainer
-                {...{ onMessagesDisplayed }}
+                onMessagesDisplayed={onMessagesDisplayed}
                 agents={current.members.filter((member): member is import("@agent-chat/contracts").AgentMember => member.kind === "agent")}
                 key={current.group.id}
                 groupId={current.group.id}

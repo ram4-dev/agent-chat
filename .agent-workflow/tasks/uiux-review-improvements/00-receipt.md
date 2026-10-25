@@ -37,3 +37,11 @@
 - Combined browser run (mobile-docs, agent-guided-setup, accessibility, keyboard-regressions, focus-handoff and ui-redesign): 24 passed, 24.2s, canonical SQLite under shared port lock.
 - Independent read-only review task recorded in review-round-1.json targets exact snapshot b71f0b6. Findings pending; no whole-change approval claimed.
 - Chat and group/unread implementation workers remain active. No PR or production deployment yet.
+
+## All implementation slices integrated
+
+- Chat d40d870 -> c437f0b; groups b8bcef6 -> 6983375. Managed services metadata and group modifications merged without conflict.
+- Parent wired clearUserDrafts on confirmed logout and prior-account/session invalidation; group 401 ends the local session. Failed logout keeps drafts.
+- Actual-display callback is now typed directly in App; added focus restoration re-emission to the observer to match the read queue's document.hasFocus guard.
+- Added the human read table to the fixed schema inventory, without removing assertions.
+- Independent review 1 found modal dismissal under pending requests (P2) and persistent receiver guide confusion (P3). Original agent worker is fixing both under task node:delegated-task:command%3Amcp%3Ac948eb01-ecbd-40ec-a8f4-9aa26b239f55%3Athread-send%3Auiux-agents-fix-review-r1. No scope-wide approval claimed.

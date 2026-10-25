@@ -38,10 +38,12 @@ export function useDisplayedMessages(
     }, { root, threshold: 0 });
     root.querySelectorAll('[data-visible-message-id]').forEach(node => observer.observe(node));
     document.addEventListener('visibilitychange', schedule);
+    window.addEventListener('focus', schedule);
     root.addEventListener('scroll', schedule, { passive: true });
     return () => {
       observer.disconnect(); cancelAnimationFrame(frame);
       document.removeEventListener('visibilitychange', schedule);
+      window.removeEventListener('focus', schedule);
       root.removeEventListener('scroll', schedule);
     };
   }, [scroll, historyIds, onMessagesDisplayed]);

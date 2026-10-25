@@ -59,6 +59,12 @@ describe('visible conversation history reporting', () => {
     expect(report).not.toHaveBeenCalled(); await flush();
     expect(report).toHaveBeenCalledExactlyOnceWith(['old', 'new']);
   });
+  it('re-reports actually visible messages on focus restoration without a new observer event', async () => {
+    const report = vi.fn(); const observer = await mount(['old'], report);
+    observer.emit(['old']); await flush(); report.mockClear();
+    window.dispatchEvent(new window.Event('focus')); await flush();
+    expect(report).toHaveBeenCalledExactlyOnceWith(['old']);
+  });
   it('does not mark a new offscreen message while scrolled up or a clipped article as displayed', async () => {
     const report = vi.fn(); const observer = await mount(['old', 'new'], report);
     vi.spyOn(document.querySelector('[data-visible-message-id="new"]')!, 'getBoundingClientRect').mockReturnValue(new window.DOMRect(0, 450, 200, 50));
