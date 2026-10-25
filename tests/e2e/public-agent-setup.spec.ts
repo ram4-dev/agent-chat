@@ -36,6 +36,16 @@ for(const mobile of [false,true])test(`public skill, new identities and directed
   await page.reload();await expect(page.getByRole('list',{name:'Mensajes'})).toContainText('Aviso dirigido a Alpha');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:`.local-state/verification/directed-mentions-${mobile?'mobile':'desktop'}.png`,fullPage:true});
+  // Identical names stay bound to the chosen IDs, including removing one of two chips.
+  payload(await b.callTool({name:'configure_agent_profile',arguments:{name:'Alpha'}}));await page.reload();
+  await message.fill('@');await page.locator(`#mention-${first.agentId}`).click();
+  await message.fill('@Alpha @');await page.locator(`#mention-${second.agentId}`).click();
+  const chips=page.getByRole('button',{name:'Quitar mención a Alpha',exact:true});await expect(chips).toHaveCount(2);await chips.first().click();await expect(chips).toHaveCount(1);
+  await message.fill('@Alpha solo el segundo');await page.getByRole('button',{name:'Enviar mensaje',exact:true}).click();
+  await expect(page.getByRole('list',{name:'Mensajes'})).toContainText('@Alpha solo el segundo');
+  expect(payload<{events:unknown[]}>(await a.callTool({name:'get_inbox',arguments:{}})).events).toHaveLength(2);
+  const duplicateNameInbox=payload<{events:Array<{message:{mentionedAgentIds?:string[]}}> }>(await b.callTool({name:'get_inbox',arguments:{}}));expect(duplicateNameInbox.events).toHaveLength(2);expect(duplicateNameInbox.events[1]!.message.mentionedAgentIds).toEqual([second.agentId]);
+
  }finally{await a.close();await b?.close();}
 });
 

@@ -222,7 +222,7 @@ export function ChatPanel({
           </p>
         )}
         <p id="mention-help" className="mention-help">Escribí @ y elegí un bot para dirigir el aviso. Sin menciones, se avisa a todos.</p>
-        {!!mentions.length && <div className="mention-targets" aria-label="Bots que recibirán el aviso">{mentions.map(item=><button type="button" key={item.id} aria-label={`Quitar mención a ${item.name}`} onClick={()=>{setMentions(current=>current.filter(value=>value.id!==item.id));setDraft(current=>current.replaceAll(`@${item.name}`,item.name));}}>@{item.name} <small>{item.id.slice(-6)}</small> ×</button>)}</div>}
+        {!!mentions.length && <div className="mention-targets" aria-label="Bots que recibirán el aviso">{mentions.map(item=><button type="button" key={item.id} aria-label={`Quitar mención a ${item.name}`} onClick={()=>{setMentions(current=>current.filter(value=>value.id!==item.id));if(!mentions.some(other=>other.id!==item.id&&other.name===item.name))setDraft(current=>current.replaceAll(`@${item.name}`,item.name));}}>@{item.name} <small>{item.id.slice(-6)}</small> ×</button>)}</div>}
         {query && <div className="mention-options" role="listbox" id="mention-options" aria-label="Agentes para mencionar">{choices.length ? choices.map((agent,index)=><button type="button" role="option" id={`mention-${agent.id}`} key={agent.id} aria-selected={index===choice} onMouseDown={event=>event.preventDefault()} onClick={()=>choose(agent)}><strong>@{agent.displayName}</strong><span>{agent.ownerDisplayName} · {agent.id.slice(-6)}</span></button>) : <p>No hay bots que coincidan en este grupo.</p>}</div>}
         <form
           className="composer"

@@ -19,3 +19,4 @@
 - Desktop/mobile screenshots inspected; mention picker and delivered-target labels fit the mobile viewport.
 - Two configured bots in managed E2E: a human mention produced one inbox event and one webhook only for the selected bot. Actual Grok routine creation remains host-owned; no live Grok account or credential was modified by these tests.
 - Production additive migration 20261025000100 installed; existing data preserved.
+- Final review added duplicate-name chip removal coverage in desktop/mobile E2E: selecting both IDs and removing one preserves delivery exclusively to the remaining ID. Focused SQLite run passed both variants.
