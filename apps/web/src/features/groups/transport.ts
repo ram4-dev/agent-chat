@@ -11,6 +11,9 @@ import { errorCodeOf, type JsonFetch } from '../../shared/http';
 export type GroupsState =
   | { status: 'loading' }
   | { status: 'ready'; groups: GroupSummary[] }
+  | { status: 'refreshing'; groups: GroupSummary[] }
+  | { status: 'stale'; groups: GroupSummary[]; httpStatus: number }
+  | { status: 'forbidden'; httpStatus: number }
   | { status: 'error'; httpStatus: number };
 
 export type GroupDetailState =
@@ -47,11 +50,10 @@ export async function loadGroupDetail(
 ): Promise<GroupDetailState> {
   try {
     const response = await fetchImpl(GROUP_PATHS.one(groupId));
-    const body: unknown = await response.json();
-
-    if (response.status === 401) {
+    if (!response.ok && response.status !== 403 && response.status !== 404) {
       return { status: 'error', httpStatus: response.status };
     }
+    const body: unknown = await response.json().catch(() => undefined);
     if (!response.ok) {
       const code = errorCodeOf(body);
       return code === undefined
@@ -96,5 +98,26 @@ export async function createInvitation(
     };
   } catch {
     return { status: 'error', httpStatus: 0 };
+  }
+}
+
+/** Retain the last successful navigation on transient failures, never on auth loss. */
+export function reconcileGroups(previous: GroupsState, next: GroupsState): GroupsState {
+  if (next.status !== 'error') return next;
+  if (next.httpStatus === 401 || next.httpStatus === 403) return { status: 'forbidden', httpStatus: next.httpStatus };
+  return 'groups' in previous ? { ...next, status: 'stale', groups: previous.groups } : next;
+}
+export function refreshingGroups(previous: GroupsState): GroupsState {
+  return 'groups' in previous ? { status: 'refreshing', groups: previous.groups } : { status: 'loading' };
+}
+
+export async function markDisplayedMessagesRead(groupId: string, messageIds: readonly string[], fetchImpl: JsonFetch = fetch): Promise<{ ok: boolean; httpStatus: number }> {
+  try {
+    const response = await fetchImpl(GROUP_PATHS.read(groupId), {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ messageIds }),
+    });
+    return { ok: response.ok, httpStatus: response.status };
+  } catch {
+    return { ok: false, httpStatus: 0 };
   }
 }

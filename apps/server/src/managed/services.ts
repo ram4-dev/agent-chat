@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
-  GROUPS_LIMITS, LIMITS, parseCreateGroupRequest, parseSendMessageRequest,
-  type Member, type MessageView, type DomainErrorCode,
+  GROUPS_LIMITS, LIMITS, parseCreateGroupRequest, parseSendMessageRequest, parseGroupReadRequest,
+  type Member, type MessageView, type DomainErrorCode, type GroupActivity,
 } from '@agent-chat/contracts';
 import { DomainError } from '../modules/errors.js';
 import { parseAgentProfile, parseRequestedScopes, type AgentRecord, type ConnectionRecord } from '../modules/agents/index.js';
@@ -191,9 +191,32 @@ export function createManagedServices(db: ManagedDatabase, authConfig: SupabaseA
       return { group: group!, role: 'admin' as const };
     }),
     async listGroups(userId) {
-      return db.rows<{ group: GroupRecord; role: 'admin' | 'member' }>(`SELECT jsonb_build_object('id',g.id,'name',g.name,'creatorUserId',g.creator_user_id,'createdAt',g.created_at) AS "group",m.role
-        FROM groups g JOIN group_human_memberships m ON m.group_id=g.id WHERE m.user_id=$1 ORDER BY g.created_at,g.id`, [userId]);
+      return db.rows<{ group: GroupRecord; role: 'admin' | 'member'; activity?: GroupActivity }>(`SELECT
+        jsonb_build_object('id',g.id,'name',g.name,'creatorUserId',g.creator_user_id,'createdAt',g.created_at) AS "group",m.role,
+        CASE WHEN latest.sequence IS NULL THEN NULL ELSE jsonb_build_object(
+          'latestSequence',latest.sequence,'latestMessageAt',latest.created_at,'readSequence',m.read_sequence,
+          'unreadCount',(SELECT count(*) FROM messages msg WHERE msg.group_id=g.id
+            AND NOT (msg.author_kind='human' AND msg.human_author_id=m.user_id)
+            AND NOT EXISTS (SELECT 1 FROM group_human_message_reads r
+              WHERE r.group_id=g.id AND r.user_id=m.user_id AND r.message_id=msg.id))) END AS activity
+        FROM groups g JOIN group_human_memberships m ON m.group_id=g.id
+        LEFT JOIN LATERAL (SELECT sequence,created_at FROM messages WHERE group_id=g.id ORDER BY sequence DESC LIMIT 1) latest ON true
+        WHERE m.user_id=$1 ORDER BY g.created_at,g.id`, [userId]).then(rows => rows.map(row =>
+          row.activity ? row : { group: row.group, role: row.role }));
     },
+    markMessagesRead: async ({ userId, groupId, messageIds }) => db.transaction(async () => {
+      await membership(groupId, userId, false, true);
+      const parsed = parseGroupReadRequest({ messageIds });
+      if (!parsed.ok) return fail('invalid_input', 400);
+      const rows = await db.rows<{ id: string; sequence: string }>(
+        'SELECT id,sequence FROM messages WHERE group_id=$1 AND id::text=ANY($2::text[])', [groupId, parsed.value.messageIds]);
+      if (rows.length !== parsed.value.messageIds.length) return fail('not_found');
+      await db.rows(`INSERT INTO group_human_message_reads(group_id,user_id,message_id)
+        SELECT $1,$2,id FROM messages WHERE group_id=$1 AND id::text=ANY($3::text[]) ON CONFLICT DO NOTHING`, [groupId,userId,parsed.value.messageIds]);
+      await db.rows(`UPDATE group_human_memberships SET read_sequence=GREATEST(read_sequence,
+        (SELECT max(sequence) FROM messages WHERE group_id=$1 AND id::text=ANY($3::text[])))
+        WHERE group_id=$1 AND user_id=$2`, [groupId,userId,parsed.value.messageIds]);
+    }),
     async listGroupsForAgent(agentId) {
       return db.rows<{ group: GroupRecord; role: 'member' }>(`SELECT jsonb_build_object('id',g.id,'name',g.name,'creatorUserId',g.creator_user_id,'createdAt',g.created_at) AS "group",'member' AS role
         FROM groups g JOIN group_agent_memberships m ON m.group_id=g.id JOIN agents a ON a.id=m.agent_id AND a.status='active'

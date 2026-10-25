@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import type { GroupRole } from '@agent-chat/contracts';
+import type { GroupActivity, GroupRole } from '@agent-chat/contracts';
 import type {
   AgentMemberView,
   GroupRecord,
@@ -8,6 +8,7 @@ import type {
   HumanMembershipRecord,
 } from '../modules/groups/index.js';
 import { runImmediateTransaction } from './client.js';
+import { GroupNotFoundError } from '../modules/groups/index.js';
 
 interface GroupRow {
   id: string;
@@ -57,7 +58,13 @@ export function createSqliteGroupRepository(sqlite: Database.Database): GroupRep
     'SELECT * FROM group_human_memberships WHERE group_id = ? AND user_id = ?',
   );
   const groupsForUser = sqlite.prepare(
-    `SELECT g.*, m.role AS role
+    `SELECT g.*, m.role AS role, m.read_sequence,
+            (SELECT MAX(sequence) FROM messages WHERE group_id=g.id) AS latest_sequence,
+            (SELECT created_at FROM messages WHERE group_id=g.id ORDER BY sequence DESC LIMIT 1) AS latest_message_at,
+            (SELECT COUNT(*) FROM messages msg WHERE msg.group_id=g.id
+               AND NOT (msg.author_kind='human' AND msg.human_author_id=m.user_id)
+               AND NOT EXISTS (SELECT 1 FROM group_human_message_reads r
+                 WHERE r.group_id=g.id AND r.user_id=m.user_id AND r.message_id=msg.id)) AS unread_count
        FROM group_human_memberships m
        JOIN groups g ON g.id = m.group_id
       WHERE m.user_id = ?
@@ -125,10 +132,29 @@ export function createSqliteGroupRepository(sqlite: Database.Database): GroupRep
       toMembership(membership.get(groupId, userId) as HumanMembershipRow | undefined),
 
     listGroupsForUser: (userId) =>
-      (groupsForUser.all(userId) as Array<GroupRow & { role: GroupRole }>).map((row) => ({
+      (groupsForUser.all(userId) as Array<GroupRow & { role: GroupRole; read_sequence: number; latest_sequence: number | null; latest_message_at: string | null; unread_count: number }>).map((row) => ({
         group: toGroup(row)!,
         role: row.role,
+        ...(row.latest_sequence === null ? {} : { activity: {
+          latestSequence: row.latest_sequence,
+          latestMessageAt: row.latest_message_at!,
+          unreadCount: row.unread_count,
+          readSequence: row.read_sequence,
+        } satisfies GroupActivity }),
       })),
+
+    markMessagesRead(groupId, userId, messageIds) {
+      runImmediateTransaction(sqlite, () => {
+        if (!membership.get(groupId, userId)) throw new GroupNotFoundError();
+        const rows = sqlite.prepare(`SELECT id, sequence FROM messages WHERE group_id=? AND id IN (${messageIds.map(() => '?').join(',')})`)
+          .all(groupId, ...messageIds) as Array<{ id: string; sequence: number }>;
+        if (rows.length !== messageIds.length) throw new GroupNotFoundError();
+        const insert = sqlite.prepare('INSERT OR IGNORE INTO group_human_message_reads(group_id,user_id,message_id) VALUES(?,?,?)');
+        for (const row of rows) insert.run(groupId, userId, row.id);
+        sqlite.prepare('UPDATE group_human_memberships SET read_sequence=MAX(read_sequence,?) WHERE group_id=? AND user_id=?')
+          .run(Math.max(...rows.map(row => row.sequence)), groupId, userId);
+      });
+    },
 
     listHumanMembers: (groupId) =>
       (humansOfGroup.all(groupId) as HumanMemberRow[]).map(

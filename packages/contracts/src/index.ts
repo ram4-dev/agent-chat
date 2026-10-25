@@ -77,6 +77,8 @@ export {
   parseCreateGroupRequest,
   parseGroupDetailResponse,
   parseGroupListResponse,
+  parseGroupReadRequest,
+  type GroupActivity,
   parseMemberKind,
   type AcceptedInvitationResponse,
   type AgentMember,

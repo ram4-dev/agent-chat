@@ -2,6 +2,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import {
   GROUPS_LIMITS,
   parseCreateGroupRequest,
+  parseGroupReadRequest,
+  type GroupActivity,
   type GroupRole,
   type Member,
 } from '@agent-chat/contracts';
@@ -66,7 +68,8 @@ export interface GroupRepository {
   insertHumanMembership(membership: HumanMembershipRecord): void;
   findGroupById(groupId: string): GroupRecord | undefined;
   findHumanMembership(groupId: string, userId: string): HumanMembershipRecord | undefined;
-  listGroupsForUser(userId: string): Array<{ group: GroupRecord; role: GroupRole }>;
+  listGroupsForUser(userId: string): Array<{ group: GroupRecord; role: GroupRole; activity?: GroupActivity }>;
+  markMessagesRead(groupId: string, userId: string, messageIds: string[]): void;
   listHumanMembers(groupId: string): HumanMemberView[];
   listAgentMembers(groupId: string): AgentMemberView[];
   countAdmins(groupId: string): number;
@@ -97,7 +100,8 @@ export interface GroupsModule {
     group: GroupRecord;
     role: GroupRole;
   };
-  listGroups(userId: string): Array<{ group: GroupRecord; role: GroupRole }>;
+  listGroups(userId: string): Array<{ group: GroupRecord; role: GroupRole; activity?: GroupActivity }>;
+  markMessagesRead(input: { userId: string; groupId: string; messageIds: string[] }): void;
   /** Groups the agent itself belongs to; this is what `list_groups` exposes. */
   listGroupsForAgent(agentId: string): Array<{ group: GroupRecord; role: GroupRole }>;
   listAgentPeers(input: {agentId:string;groupId:string}): Array<{id:string;name:string}>;
@@ -216,6 +220,13 @@ export function createGroupsModule({
       });
 
       return { group, role: 'admin' };
+    },
+
+    markMessagesRead({ userId, groupId, messageIds }) {
+      requireMembership(groupId, userId);
+      const parsed = parseGroupReadRequest({ messageIds });
+      if (!parsed.ok) throw new DomainError('invalid_input', 400, 'Invalid displayed messages');
+      groups.markMessagesRead(groupId, userId, parsed.value.messageIds);
     },
 
     listGroups(userId) {

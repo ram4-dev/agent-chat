@@ -3,7 +3,7 @@ import type { NativeStatusModule } from '../../modules/native-status/index.js';
 import type { NotificationsModule } from '../../notifications/module.js';
 import type { AsyncPort } from "../../services.js";
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { DOMAIN_ERROR_CODES, GROUP_PATHS, parseAcceptInvitationRequest, parseCreateGroupRequest, type AcceptedInvitationResponse, type CreateGroupResponse, type GroupDetailResponse, type GroupListResponse, type InvitationResponse, type OkResponse, } from '@agent-chat/contracts';
+import { DOMAIN_ERROR_CODES, GROUP_PATHS, parseAcceptInvitationRequest, parseCreateGroupRequest, parseGroupReadRequest, type AcceptedInvitationResponse, type CreateGroupResponse, type GroupDetailResponse, type GroupListResponse, type InvitationResponse, type OkResponse, } from '@agent-chat/contracts';
 import type { AuthModule } from '../../modules/auth/index.js';
 import type { ApplicationHub } from '../../services.js';
 import type { GroupsModule } from '../../modules/groups/index.js';
@@ -49,13 +49,21 @@ export function registerGroupRoutes(app: FastifyInstance, { auth, groups, hub, a
     app.get(GROUP_PATHS.collection, (request, reply) => run(reply, async () => {
         const userId = await session(request);
         return reply.send({
-            groups: await (await groups.listGroups(userId)).map(({ group, role }) => ({
+            groups: await (await groups.listGroups(userId)).map(({ group, role, activity }) => ({
                 id: group.id,
                 name: group.name,
                 createdAt: group.createdAt,
                 role,
+                ...(activity ? { activity } : {}),
             })),
         } satisfies GroupListResponse);
+    }));
+    app.post<{ Params: { groupId: string } }>('/api/groups/:groupId/read', (request, reply) => run(reply, async () => {
+        const userId = await session(request);
+        const parsed = parseGroupReadRequest(request.body);
+        if (!parsed.ok) return sendInvalidInput(reply);
+        await groups.markMessagesRead({ userId, groupId: request.params.groupId, messageIds: parsed.value.messageIds });
+        return reply.send({ status: 'ok' } satisfies OkResponse);
     }));
     app.get<{
         Params: {
