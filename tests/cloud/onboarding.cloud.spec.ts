@@ -1,7 +1,7 @@
 import {randomBytes,randomUUID} from 'node:crypto';
 import {expect,test} from '@playwright/test';
 import {authorizeAgent,mcpClient,payload} from '../e2e/helpers/agent';
-import {agents,createGroup,addAgent} from '../e2e/helpers/ui';
+import {agents,createGroup,addAgent,selectGroup} from '../e2e/helpers/ui';
 import {cloudReceiver} from './receiver';
 const scopes='openid agent:read agent:send agent:inbox agent:receive agent:manage';
 
@@ -18,6 +18,7 @@ test('deployed skill, OAuth identities, HTTPS webhook, mention-only wake, reply 
   await expect.poll(()=>receiver.ready(),{timeout:10000}).toBe(200);
   console.log('cloud-e2e: QA receiver and temporary tunnel connected');
   const discovery=await page.request.get('/.well-known/agent-chat.json');expect(discovery.status()).toBe(200);
+  for(const path of ['/docs','/docs/assets/agent-docs.css','/docs/assets/agent-docs.js']){const response=await page.request.get(path);expect(response.status()).toBe(200);}
   const skill=await page.request.get('/skills/agent-chat/SKILL.md');expect(skill.status()).toBe(200);expect(await skill.text()).toContain(origin+'/mcp');
   // Admin issues a real signup confirmation link; SMTP transport remains a separate prerequisite.
   const email=`vercel-e2e-${randomUUID()}@example.com`,password=randomBytes(24).toString('base64url');
@@ -31,7 +32,7 @@ test('deployed skill, OAuth identities, HTTPS webhook, mention-only wake, reply 
   cookie=(await page.context().cookies(origin)).map(value=>`${value.name}=${value.value}`).join('; ');
   await page.goto('/');await expect(page.getByRole('main')).toHaveClass(/workspace/);
   console.log('cloud-e2e: confirmed QA login and public skill verified');
-  await agents(page);await page.getByRole('button',{name:'Conectar cliente',exact:true}).click();
+  await agents(page);await page.getByRole('button',{name:'Conectar un agente',exact:true}).first().click();
   await expect(page.getByLabel('Skill para configurar un agente',{exact:true})).toHaveValue(origin+'/skills/agent-chat/SKILL.md');
   for(const name of ['QA Alpha','QA Beta']){
    const identity=await authorizeAgent(page,origin,undefined,undefined,scopes);identities.push(identity);
@@ -47,6 +48,7 @@ test('deployed skill, OAuth identities, HTTPS webhook, mention-only wake, reply 
    }else{
     await page.goto(setup.setup_url);
     const dialog=page.getByRole('dialog',{name:'Notificaciones de QA Beta',exact:true});await expect(dialog).toBeVisible();
+    await dialog.getByText('Configuración manual privada',{exact:true}).click();
     await expect(dialog.getByLabel('Cliente MCP para notificaciones')).toHaveValue(identity.connectionId);
     await dialog.getByLabel('URL del webhook',{exact:true}).fill(hook.url);await dialog.getByLabel('Clave del webhook',{exact:true}).fill(hook.secret);
     await dialog.getByRole('button',{name:'Guardar y probar',exact:true}).click();
@@ -59,6 +61,14 @@ test('deployed skill, OAuth identities, HTTPS webhook, mention-only wake, reply 
   }
   await page.goto('/');await expect(page.getByRole('main')).toHaveClass(/workspace/);
   const group=await createGroup(page,'Vercel QA directed notifications');await addAgent(page,'QA Alpha');await addAgent(page,'QA Beta');
+  await page.getByRole('button',{name:'Cerrar detalles',exact:true}).click();
+  const draft=page.getByLabel('Mensaje',{exact:true});await draft.fill('Borrador cloud que debe sobrevivir a la navegación');
+  await agents(page);await selectGroup(page,'Vercel QA directed notifications');await expect(draft).toHaveValue('Borrador cloud que debe sobrevivir a la navegación');
+  let unexpectedPosts=0;const countPosts=(request:import('@playwright/test').Request)=>{if(request.method()==='POST'&&new URL(request.url()).pathname===`/api/groups/${group}/messages`)unexpectedPosts++;};
+  page.on('request',countPosts);await draft.fill('**@QA Alpha** resolvé la mención');await page.getByRole('button',{name:'Enviar mensaje',exact:true}).click();
+  await expect(page.getByRole('alert')).toContainText('cada @ pendiente');expect(unexpectedPosts).toBe(0);page.off('request',countPosts);
+  await page.getByRole('button',{name:'Descartar borrador',exact:true}).click();await expect(draft).toHaveValue('');
+  console.log('cloud-e2e: draft navigation and formatted unresolved mention guard verified');
   for(const [index,mobile] of [false,true].entries()){
    await page.setViewportSize(mobile?{width:390,height:844}:{width:1440,height:900});
    const close=page.getByRole('button',{name:'Cerrar detalles',exact:true});if(mobile&&await close.isVisible())await close.click();
@@ -76,7 +86,8 @@ test('deployed skill, OAuth identities, HTTPS webhook, mention-only wake, reply 
    const history=payload<{messages:Array<{text:string;mentionedAgentIds?:string[]}>}>(await clients[1-index]!.callTool({name:'read_messages',arguments:{group_id:group}}));expect(history.messages.find(item=>item.text===text)?.mentionedAgentIds).toEqual([selected.agentId]);
    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
    await page.screenshot({path:`.local-state/verification/vercel-real-${mobile?'mobile':'desktop'}.png`,fullPage:true});
-   console.log(`cloud-e2e: ${mobile?'mobile':'desktop'} mention, actual push, reply and ACK verified`);
+   await expect.poll(async()=>{const response=await page.request.get('/api/groups');expect(response.status()).toBe(200);const current=(await response.json()).groups.find((item:{id:string})=>item.id===group);return current?.activity?.unreadCount;},{timeout:15000}).toBe(0);
+   console.log(`cloud-e2e: ${mobile?'mobile':'desktop'} mention, actual push, reply, ACK and durable human reads verified`);
   }
   // Disconnect the QA host and reconnect the same authorized identity.
   await clients[1]!.close();clients[1]=await mcpClient(origin,identities[1]!.token);receiver.replaceClient(identities[1]!.agentId,clients[1]!);

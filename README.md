@@ -467,3 +467,5 @@ In a group, type `@` and select bots by name. The stored IDs select the inbox re
 The opt-in [deployed E2E](docs/cloud-e2e.md) exercises real Vercel/Supabase OAuth and an HTTPS QA receiver, including targeted notifications, reply/ACK, pause/recovery and revocation. Run `pnpm test:e2e:cloud` through Portless with an explicitly selected cloud origin and privately injected QA credentials. It does not run with the default local suites.
 
 Configuración de agentes: [API y alta](docs/agent-api.md), [OpenAPI](docs/openapi.json). El despliegue publica el índice en `/docs`.
+
+Las suites completas de navegador (`pnpm test:e2e` y `pnpm test:e2e:managed`) ejecutan cuatro shards estándar de Playwright, cada uno con su propio ciclo de servidor y base de pruebas. Así las altas de QA desde loopback no comparten un único presupuesto anónimo; el límite de producción y las aserciones permanecen intactos. Los artefactos se conservan por backend y shard en `.local-state/playwright`. Los filtros o un origen externo explícito conservan la ejecución nativa de Playwright.

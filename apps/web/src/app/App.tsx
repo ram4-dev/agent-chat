@@ -20,12 +20,14 @@ import {
   type SessionState,
 } from "../features/auth/session";
 import { GroupPanel, GroupDetails } from "../features/groups/GroupPanel";
-import { ChatContainer } from "../features/chat/ChatPanel";
+import { ChatContainer, clearUserDrafts } from "../features/chat/ChatPanel";
 import { AgentsPanel } from "../features/agents/AgentsPanel";
 import {
   createInvitation,
   loadGroupDetail,
   loadGroups,
+  reconcileGroups,
+  refreshingGroups,
   type GroupDetailState,
   type GroupsState,
   type InvitationState,
@@ -38,6 +40,7 @@ import {
   Modal,
   errorMessage,
 } from "../shared/ui";
+import { useGroupRead } from "../features/groups/useGroupRead";
 import { loadLiveness } from "../shared/liveness";
 
 export function App() {
@@ -52,14 +55,43 @@ export function App() {
   });
   const confirmationRequest=useRef<Promise<SessionState> | null>(null);
   const [session, setSession] = useState<SessionState>({ status: "loading" });
+  const previousDraftUser = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const userId = session.status === "authenticated" ? session.user.id : undefined;
+    if (previousDraftUser.current && previousDraftUser.current !== userId) clearUserDrafts(previousDraftUser.current);
+    previousDraftUser.current = userId;
+  }, [session]);
+  const invalidateSession = useCallback(() => {
+    if (previousDraftUser.current) clearUserDrafts(previousDraftUser.current);
+    previousDraftUser.current = undefined;
+    setSession({ status: "anonymous" });
+  }, []);
   const [groups, setGroups] = useState<GroupsState>({ status: "loading" });
   const [detail, setDetail] = useState<GroupDetailState>({ status: "loading" });
   const [selectedId, setSelectedId] = useState<string>();
   const selectedRef = useRef<string | undefined>(undefined);
   const detailRequest = useRef(0);
+  const groupRequest = useRef(0);
+  const groupsInFlight = useRef(false);
+  const groupsDirty = useRef(false);
+  const groupsTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [view, setView] = useState<"chat" | "agents">(()=>new URLSearchParams(location.search).has('notification_agent')?'agents':'chat');
   const [agentRevision, setAgentRevision] = useState(0);
   const [navOpen, setNavOpen] = useState(false);
+  const [narrowLayout, setNarrowLayout] = useState(() => window.matchMedia("(max-width: 760px)").matches);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 760px)");
+    const update = () => setNarrowLayout(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  const [detailsOverlay, setDetailsOverlay] = useState(() => window.matchMedia("(max-width: 1100px)").matches);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 1100px)");
+    const update = () => setDetailsOverlay(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [modal, setModal] = useState<"create" | "join" | "invite">();
   const [invitation, setInvitation] = useState<InvitationState>({
@@ -76,9 +108,16 @@ export function App() {
   const refreshDetail = useCallback(async (id: string) => {
     const request = ++detailRequest.current;
     const state = await loadGroupDetail(id);
-    if (request === detailRequest.current && selectedRef.current === id)
-      setDetail(state);
-  }, []);
+    if (request !== detailRequest.current || selectedRef.current !== id) return;
+    if (state.status === "error" && state.httpStatus === 401) { invalidateSession(); return; }
+    setDetail(previous => {
+      if (state.status === "error" && ![401, 403, 404].includes(state.httpStatus) && previous.status === "ready") {
+        setNotice("No pudimos actualizar el grupo. Tu conversación sigue abierta.");
+        return previous;
+      }
+      return state;
+    });
+  }, [invalidateSession]);
   const openGroup = useCallback(
     (id: string, options?: { navigate?: boolean }) => {
       if (options?.navigate !== false) {
@@ -114,33 +153,89 @@ export function App() {
     }else void loadSession().then(setSession);
     void loadLiveness().then((result) => setOffline(result.status !== "ok"));
   }, []);
+  const authenticatedUserId = session.status === "authenticated" ? session.user.id : undefined;
+  const refreshGroups = useCallback(async function refreshList() {
+    if (!authenticatedUserId) return;
+    if (groupsInFlight.current) { groupsDirty.current = true; return; }
+    groupsInFlight.current = true;
+    const request = ++groupRequest.current;
+    const selectedWhenRequested = selectedRef.current;
+    setGroups(refreshingGroups);
+    const next = await loadGroups();
+    if (request !== groupRequest.current) return;
+    groupsInFlight.current = false;
+    setGroups(previous => reconcileGroups(previous, next));
+    if (next.status === "error" && next.httpStatus === 401) {
+      invalidateSession();
+    }
+    if (next.status === "error" && (next.httpStatus === 401 || next.httpStatus === 403)) {
+      selectedRef.current = undefined;
+      setSelectedId(undefined);
+      ++detailRequest.current;
+      setDetail({ status: "loading" });
+      setNotice("No tenés acceso a los grupos. Verificá tu sesión y volvé a intentar.");
+    } else if (next.status === "ready") {
+      const selected = selectedRef.current;
+      if (selected && selected === selectedWhenRequested && !next.groups.some(group => group.id === selected)) {
+        selectedRef.current = undefined;
+        setSelectedId(undefined);
+        ++detailRequest.current;
+        setDetail({ status: "loading" });
+        setNotice("Ya no tenés acceso al grupo seleccionado.");
+      } else if (!selected) {
+        const remembered = new URLSearchParams(location.search).get("group");
+        const first = next.groups.find(group => group.id === remembered) ?? next.groups[0];
+        if (first) openGroup(first.id, { navigate: false });
+      }
+    }
+    if (groupsDirty.current) {
+      groupsDirty.current = false;
+      if (!groupsTimer.current) groupsTimer.current = setTimeout(() => {
+        groupsTimer.current = undefined;
+        void refreshList();
+      }, 600);
+    }
+  }, [authenticatedUserId, openGroup, invalidateSession]);
+  const scheduleGroupsRefresh = useCallback(() => {
+    // A fixed coalescing window bounds fetches even during a continuous stream.
+    if (groupsTimer.current) return;
+    groupsTimer.current = setTimeout(() => {
+      groupsTimer.current = undefined;
+      void refreshGroups();
+    }, 600);
+  }, [refreshGroups]);
+  const { onMessagesDisplayed, readError, retryRead } = useGroupRead(
+    selectedId, !!authenticatedUserId && view === "chat" && !modal && !(narrowLayout && navOpen) && !(detailsOverlay && detailsOpen), scheduleGroupsRefresh, invalidateSession,
+  );
+
   useEffect(() => {
-    if (session.status !== "authenticated") {
+    ++groupRequest.current;
+    groupsInFlight.current = false;
+    groupsDirty.current = false;
+    clearTimeout(groupsTimer.current);
+    groupsTimer.current = undefined;
+    if (!authenticatedUserId) {
       setGroups({ status: "loading" });
       selectedRef.current = undefined;
       setSelectedId(undefined);
+      ++detailRequest.current;
       setDetail({ status: "loading" });
       return;
     }
-    let active = true;
-    void loadGroups().then((state) => {
-      if (!active) return;
-      setGroups(state);
-      if (state.status === "ready" && state.groups.length) {
-        const remembered = new URLSearchParams(location.search).get("group");
-        const first =
-          state.groups.find((g) => g.id === remembered) ?? state.groups[0];
-        if (first && !selectedRef.current) openGroup(first.id, { navigate: false });
-      }
-      if (new URLSearchParams(location.search).has("invite")) {
-        setActionError("");
-        setModal("join");
-      }
-    });
+    void refreshGroups();
+    if (new URLSearchParams(location.search).has("invite")) {
+      setActionError(""); setModal("join");
+    }
+    const onFocus = () => { if (document.visibilityState === "visible") scheduleGroupsRefresh(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
     return () => {
-      active = false;
+      ++groupRequest.current;
+      clearTimeout(groupsTimer.current);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
     };
-  }, [session.status, openGroup]);
+  }, [authenticatedUserId, openGroup, refreshGroups, scheduleGroupsRefresh]);
 
   useEffect(() => {
     if (session.status !== "authenticated") return;
@@ -159,6 +254,8 @@ export function App() {
         } catch {
           return;
         }
+        if (frame?.type === "message.created" || frame?.type === "group.membership.changed" || frame?.type === "ready")
+          scheduleGroupsRefresh();
         if (frame?.type === "agent.connection.changed")
           setAgentRevision((revision) => revision + 1);
         if (
@@ -169,7 +266,8 @@ export function App() {
           if (selectedRef.current) void refreshDetail(selectedRef.current);
         }
       };
-      socket.onclose = () => {
+      socket.onclose = (event) => {
+        if (!disposed && event.code === 4401) { invalidateSession(); return; }
         if (!disposed) timer = setTimeout(connect, 3000);
       };
     };
@@ -179,7 +277,7 @@ export function App() {
       clearTimeout(timer);
       socket.close();
     };
-  }, [session.status, refreshDetail]);
+  }, [session.status, refreshDetail, scheduleGroupsRefresh, invalidateSession]);
 
   function openModal(next: "create" | "join") {
     setActionError("");
@@ -227,8 +325,7 @@ export function App() {
         );
         return;
       }
-      const nextGroups = await loadGroups();
-      setGroups(nextGroups);
+      await refreshGroups();
       const url = new URL(location.href);
       url.searchParams.delete("invite");
       history.replaceState(null, "", url);
@@ -246,6 +343,7 @@ export function App() {
     try {
       const result = await fetch(AUTH_PATHS.logout, { method: "POST" });
       if (!result.ok) throw new Error();
+      if (session.status === "authenticated") clearUserDrafts(session.user.id);
       setSession({ status: "anonymous" });
       setModal(undefined);
       setView("chat");
@@ -284,6 +382,7 @@ export function App() {
     <div className="app-layout">
       <GroupPanel
         groups={groups}
+        onRetry={() => { void refreshGroups(); }}
         {...(selectedId ? { selectedId } : {})}
         view={view}
         user={user}
@@ -391,8 +490,14 @@ export function App() {
                 </div>
               )}
             </header>
+            {readError && current && <div className="connection-notice" role="alert">
+              No pudimos guardar lo que leíste. Los pendientes pueden estar desactualizados.
+              <button className="text-button" onClick={retryRead}>Volver a intentar</button>
+            </div>}
             {current ? (
               <ChatContainer
+                onMessagesDisplayed={onMessagesDisplayed}
+                onUnauthenticated={invalidateSession}
                 agents={current.members.filter((member): member is import("@agent-chat/contracts").AgentMember => member.kind === "agent")}
                 key={current.group.id}
                 groupId={current.group.id}

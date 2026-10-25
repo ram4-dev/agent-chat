@@ -1,0 +1,7 @@
+.group-list-error { padding: 12px; color: inherit; font-size: 13px; line-height: 1.5; }
+.group-list-error p { margin: 0 0 8px; }
+.group-list-error .button { min-height: 44px; white-space: normal; }
+.group-navigation-label { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.group-navigation-label > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group-activity-time { font-size: 12px; font-weight: 400; line-height: 1.4; white-space: normal; color: inherit; opacity: .8; }
+.group-unread-count { flex-shrink: 0; min-width: 24px; padding: 3px 6px; border-radius: 12px; background: #166534; color: #fff; font-size: 12px; font-weight: 700; text-align: center; }

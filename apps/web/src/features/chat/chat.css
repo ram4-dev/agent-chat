@@ -1,0 +1,36 @@
+.chat-ux .chat-recipient-summary { max-width: 820px; margin: 0 auto 6px; font-size: 13px; color: #365f42; overflow-wrap: anywhere; line-height: 1.5; }
+.chat-ux .mention-help, .chat-ux .mention-targets, .chat-ux .mention-options { max-width: 820px; margin-inline: auto; }
+.chat-ux .mention-help, .chat-ux .mention-options span, .chat-ux .mention-options p, .chat-ux .message-targets { font-size: 12px; }
+.chat-ux .mention-options button, .chat-ux .mention-targets button, .chat-ux .send-button { min-height: 44px; }
+.chat-ux .composer textarea { font-size: 16px; }
+.chat-ux .composer-tools > span, .chat-ux .composer-footer { font-size: 12px; color: #586a54; }
+.chat-ux .composer-footer { flex-wrap: wrap; gap: 8px; }
+.chat-ux .chat-discard { color: #435b43; text-decoration: underline; min-height: 44px; background: transparent; padding: 4px; }
+.chat-ux :is(button, textarea):focus-visible, .chat-markdown :is(a, button, pre):focus-visible { outline: 2px solid #365f42; outline-offset: 3px; }
+.chat-markdown { font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; min-width: 0; }
+.chat-markdown > :first-child { margin-top: 5px; }
+.chat-markdown > :last-child { margin-bottom: 0; }
+.chat-ux .chat-markdown p, .chat-markdown p { font-size: inherit; line-height: inherit; white-space: pre-wrap; margin-block: 0.5em; }
+.chat-markdown a { color: #265739; text-decoration: underline; text-underline-offset: 3px; }
+.chat-markdown :is(ul, ol) { padding-inline-start: 1.5em; margin-block: 0.5em; }
+.chat-markdown ul { list-style-type: disc; }
+.chat-markdown ol { list-style-type: decimal; }
+.chat-markdown li > p { margin-block: 0.25em; }
+.chat-markdown blockquote { border-left: 3px solid #a6bda0; padding-left: 12px; margin-inline: 0; color: #53664f; }
+.chat-markdown :is(h1, h2, h3, h4, h5, h6) { font-size: 1.1em; line-height: 1.4; margin-block: 0.8em 0.3em; }
+.chat-markdown :not(pre) > code { background: #edf2e9; padding: 1px 4px; border-radius: 4px; font-size: 0.92em; white-space: break-spaces; }
+.chat-code-block { border: 1px solid #c9d7c0; border-radius: 8px; background: #f6f8f3; margin-block: 10px; max-width: 100%; overflow: hidden; }
+.chat-code-block > button { min-height: 44px; margin: 0 8px; padding: 6px; background: transparent; color: #365f42; font-size: 12px; text-decoration: underline; }
+.chat-copy-status { font-size: 12px; color: #365f42; padding-inline: 8px; }
+.chat-code-block pre { max-width: 100%; overflow-x: auto; padding: 12px; margin: 0; border-top: 1px solid #dce5d7; white-space: pre; font-size: 13px; line-height: 1.6; }
+.chat-markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.chat-markdown :is(th, td) { border: 1px solid #c9d7c0; padding: 6px 10px; }
+@media (max-width: 600px) {
+  .chat-ux .composer-area { padding-inline: 14px; }
+  .chat-ux .composer-tools { padding: 8px 10px; gap: 8px; flex-wrap: wrap; }
+  .chat-ux .composer-tools > span { font-size: 12px; }
+  .chat-ux .send-button { font-size: 14px; padding-inline: 14px; }
+  .chat-ux .composer-footer { font-size: 12px; }
+  .chat-ux .chat-markdown { font-size: 14px; }
+  .chat-ux .mention-options { max-height: 160px; }
+}

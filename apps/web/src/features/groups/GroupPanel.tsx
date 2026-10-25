@@ -9,6 +9,7 @@ import {
   type PublicUser,
 } from "@agent-chat/contracts";
 import type { GroupsState } from "./transport";
+import "./group-navigation.css";
 import {
   Avatar,
   Brand,
@@ -30,6 +31,7 @@ export function GroupPanel({
   onCreate,
   onJoin,
   onLogout,
+  onRetry,
 }: {
   groups: GroupsState;
   selectedId?: string;
@@ -42,8 +44,10 @@ export function GroupPanel({
   onCreate(): void;
   onJoin(): void;
   onLogout(): void;
+  onRetry(): void;
 }) {
   const [search, setSearch] = useState("");
+  const listed = "groups" in groups ? groups.groups : [];
   const panel = useRef<HTMLElement>(null);
   const [mobile, setMobile] = useState(
     () => window.matchMedia("(max-width: 760px)").matches,
@@ -138,7 +142,7 @@ export function GroupPanel({
             <Icon name="chat" />
             Conversaciones
             <span className="nav-count">
-              {groups.status === "ready" ? groups.groups.length : "·"}
+              {"groups" in groups ? listed.length : "·"}
             </span>
           </button>
           <button
@@ -169,17 +173,20 @@ export function GroupPanel({
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
-        <nav className="group-list" aria-label="Grupos">
+        <nav className="group-list" aria-label="Grupos" aria-busy={groups.status === "loading" || groups.status === "refreshing"}>
           {groups.status === "loading" && (
-            <p className="sidebar-hint">Cargando tus grupos…</p>
+            <p className="sidebar-hint" role="status">Cargando tus grupos…</p>
           )}
-          {groups.status === "error" && (
-            <p className="sidebar-hint">
-              No pudimos cargar los grupos. Recargá para volver a intentar.
-            </p>
+          {groups.status === "refreshing" && <p className="sidebar-hint" role="status">Actualizando grupos…</p>}
+          {(groups.status === "error" || groups.status === "stale" || groups.status === "forbidden") && (
+            <div className="group-list-error" role="alert">
+              <p>{groups.status === "forbidden" ? "No tenés acceso a la lista de grupos. Verificá tu sesión."
+                : groups.status === "stale" ? "No pudimos actualizar los grupos. Mostramos la última lista guardada."
+                : "No pudimos cargar los grupos."}</p>
+              <button className="button secondary compact" onClick={onRetry}>Volver a intentar</button>
+            </div>
           )}
-          {groups.status === "ready" &&
-            groups.groups
+          {listed
               .filter((group) =>
                 group.name
                   .toLocaleLowerCase()
@@ -188,6 +195,11 @@ export function GroupPanel({
               .map((group) => (
                 <button
                   key={group.id}
+                  aria-label={group.name}
+                  aria-describedby={group.activity ? [
+                    `group-activity-${group.id}`,
+                    ...(group.activity.unreadCount ? [`group-unread-${group.id}`] : []),
+                  ].join(" ") : undefined}
                   aria-current={
                     selectedId === group.id && view === "chat"
                       ? "page"
@@ -199,7 +211,18 @@ export function GroupPanel({
                   <span className="group-symbol" aria-hidden="true">
                     #
                   </span>
-                  <span>{group.name}</span>
+                  <span className="group-navigation-label">
+                    <span>{group.name}</span>
+                    {group.activity && <time id={`group-activity-${group.id}`} className="group-activity-time" dateTime={group.activity.latestMessageAt}
+                      aria-label={`Última actividad: ${new Date(group.activity.latestMessageAt).toLocaleString("es-AR")}`}
+                      title={`Última actividad: ${new Date(group.activity.latestMessageAt).toLocaleString("es-AR")}`}>
+                      {new Date(group.activity.latestMessageAt).toLocaleDateString("es-AR", { day: "numeric", month: "short" })}
+                      {" · "}{new Date(group.activity.latestMessageAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}
+                    </time>}
+                  </span>
+                  {!!group.activity?.unreadCount && <span id={`group-unread-${group.id}`} className="group-unread-count" aria-label={`${group.activity.unreadCount} ${group.activity.unreadCount === 1 ? "mensaje" : "mensajes"} sin leer`}>
+                    {group.activity.unreadCount > 99 ? "99+" : group.activity.unreadCount}
+                  </span>}
                   {selectedId === group.id && view === "chat" && (
                     <span className="selected-dot" />
                   )}

@@ -1,4 +1,56 @@
-import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
+
+/** Native controls keep browser keyboard semantics; variants share the existing CSS API. */
+export function Button({
+  variant = "secondary",
+  size = "default",
+  className = "",
+  type = "button",
+  ...props
+}: ComponentProps<"button"> & {
+  variant?: "primary" | "secondary" | "ghost" | "danger";
+  size?: "default" | "compact" | "icon";
+}) {
+  return (
+    <button
+      {...props}
+      type={type}
+      data-slot="button"
+      className={`${size === "icon" ? "icon-button" : `button ${variant} ${size === "compact" ? "compact" : ""}`} ${className}`}
+    />
+  );
+}
+
+/** Field composition follows the label/control/description order used by shadcn/ui. */
+export function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children(props: { id: string; "aria-describedby"?: string }): ReactNode;
+}) {
+  const id = useId();
+  return (
+    <div className="ui-field" data-slot="field">
+      <label htmlFor={id}>{label}</label>
+      {children({ id, ...(hint ? { "aria-describedby": `${id}-hint` } : {}) })}
+      {hint && (
+        <p id={`${id}-hint`} className="field-hint">
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function restoreFocus(previous: HTMLElement | null) {
   requestAnimationFrame(() => {
@@ -13,7 +65,13 @@ export function restoreFocus(previous: HTMLElement | null) {
     // A user may already be typing in another control before this frame runs.
     // Preserve that newer focus rather than replaying the dialog's old trigger.
     const current = document.activeElement as HTMLElement | null;
-    if (current !== previous && current !== document.body && current !== document.documentElement && available(current)) return;
+    if (
+      current !== previous &&
+      current !== document.body &&
+      current !== document.documentElement &&
+      available(current)
+    )
+      return;
     if (available(previous)) {
       previous.focus();
       return;
@@ -211,14 +269,9 @@ export function Modal({
       <div className="modal-inner">
         <header className="modal-header">
           <h2 id={id}>{title}</h2>
-          <button
-            className="icon-button"
-            type="button"
-            aria-label="Cerrar ventana"
-            onClick={onClose}
-          >
+          <Button size="icon" aria-label="Cerrar ventana" onClick={onClose}>
             <Icon name="close" />
-          </button>
+          </Button>
         </header>
         {children}
       </div>
@@ -227,8 +280,13 @@ export function Modal({
 }
 export function CopyField({ value, label }: { value: string; label: string }) {
   const id = useId();
-  const [copied, setCopied] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [result, setResult] = useState<{
+    value: string;
+    status: "copied" | "failed";
+  }>();
+  const status = result?.value === value ? result.status : undefined;
+  const currentValue = useRef(value);
+  currentValue.current = value;
   return (
     <div className="copy-wrap">
       <label htmlFor={id}>{label}</label>
@@ -237,33 +295,41 @@ export function CopyField({ value, label }: { value: string; label: string }) {
           id={id}
           readOnly
           value={value}
+          aria-describedby={`${id}-status`}
           onFocus={(event) => event.target.select()}
         />
-        <button
-          className="icon-button"
-          type="button"
+        <Button
+          size="icon"
           aria-label={`Copiar ${label.toLowerCase()}`}
           onClick={() => {
             if (!navigator.clipboard) {
-              setFailed(true);
+              setResult({ value, status: "failed" });
               return;
             }
             void navigator.clipboard
               .writeText(value)
               .then(() => {
-                setCopied(true);
-                setFailed(false);
+                if (currentValue.current === value)
+                  setResult({ value, status: "copied" });
               })
-              .catch(() => setFailed(true));
+              .catch(() => {
+                if (currentValue.current === value)
+                  setResult({ value, status: "failed" });
+              });
           }}
         >
-          <Icon name={copied ? "check" : "copy"} />
-        </button>
+          <Icon name={status === "copied" ? "check" : "copy"} />
+        </Button>
       </span>
-      <span className="field-hint" role="status">
-        {copied
+      <span
+        id={`${id}-status`}
+        className="field-hint"
+        role="status"
+        aria-atomic="true"
+      >
+        {status === "copied"
           ? "Copiado."
-          : failed
+          : status === "failed"
             ? "Seleccioná y copiá el texto del campo."
             : ""}
       </span>

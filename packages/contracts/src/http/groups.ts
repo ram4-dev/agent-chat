@@ -8,6 +8,7 @@ import type { PublicUser } from './auth.js';
 /** Every private-group route the human HTTP adapter serves. */
 export const GROUP_PATHS = {
   collection: '/api/groups',
+  read: (groupId: string) => `/api/groups/${groupId}/read`,
   one: (groupId: string) => `/api/groups/${groupId}`,
   members: (groupId: string) => `/api/groups/${groupId}/members`,
   removeMember: (groupId: string, memberId: string) =>
@@ -19,12 +20,23 @@ export const GROUP_PATHS = {
   acceptInvitation: '/api/invitations/accept',
 } as const;
 
+/** Human navigation only. No message text or agent inbox state. */
+export interface GroupActivity {
+  latestSequence: number;
+  latestMessageAt: string;
+  unreadCount: number;
+  /** Maximum explicitly displayed sequence; gaps remain unread. */
+  readSequence: number;
+}
+
 export interface GroupSummary {
   id: string;
   name: string;
   createdAt: string;
   /** The caller's role, so the UI never has to guess what it may do. */
   role: GroupRole;
+  /** Absent for a group without messages. */
+  activity?: GroupActivity;
 }
 
 export interface HumanMember {
@@ -192,7 +204,20 @@ function parseGroupSummary(raw: unknown): Parsed<GroupSummary> {
     return role;
   }
 
-  return { ok: true, value: { ...group.value, role: role.value } };
+  let activity: GroupActivity | undefined;
+  if (raw['activity'] !== undefined) {
+    const candidate = raw['activity'];
+    if (!isPlainObject(candidate) ||
+        !['latestSequence', 'unreadCount', 'readSequence'].every(key =>
+          Number.isSafeInteger(candidate[key]) && (candidate[key] as number) >= 0) ||
+        typeof candidate['latestMessageAt'] !== 'string' ||
+        !Number.isFinite(Date.parse(candidate['latestMessageAt'])) ||
+        (candidate['readSequence'] as number) > (candidate['latestSequence'] as number)) {
+      return { ok: false, reason: 'group.activity:invalid' };
+    }
+    activity = candidate as unknown as GroupActivity;
+  }
+  return { ok: true, value: { ...group.value, role: role.value, ...(activity ? { activity } : {}) } };
 }
 
 function parseGroup(raw: unknown): Parsed<GroupDetail['group']> {
@@ -274,4 +299,14 @@ function parseMember(raw: unknown): Parsed<Member> {
       joinedAt: raw['joinedAt'] as string,
     },
   };
+}
+
+/** Exact displayed IDs, bounded per request. Never accepts a guessed latest cursor. */
+export function parseGroupReadRequest(body: unknown): Parsed<{ messageIds: string[] }> {
+  if (!isPlainObject(body) || !Array.isArray(body['messageIds']) ||
+      body['messageIds'].length < 1 || body['messageIds'].length > 100 ||
+      !body['messageIds'].every(id => typeof id === 'string' && id.length > 0 && id.length <= 128)) {
+    return { ok: false, reason: 'messageIds:invalid' };
+  }
+  return { ok: true, value: { messageIds: [...new Set(body['messageIds'] as string[])] } };
 }

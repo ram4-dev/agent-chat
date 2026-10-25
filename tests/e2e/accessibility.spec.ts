@@ -146,9 +146,9 @@ test("mobile agent screens and profile dialogs name their controls and show keyb
   await expectNamedControls(view);
   await expectVisibleKeyboardFocus(
     page,
-    view.getByRole("button", { name: "Nuevo agente", exact: true }),
+    view.getByRole("button", { name: "Crear identidad", exact: true }),
   );
-  await view.getByRole("button", { name: "Crear agente", exact: true }).click();
+  await view.getByRole("button", { name: "Crear identidad", exact: true }).click();
   const profile = page.getByRole("dialog", {
     name: "Crear agente",
     exact: true,
@@ -170,10 +170,10 @@ test("mobile agent screens and profile dialogs name their controls and show keyb
   ).toBeVisible();
   await expectNamedControls(view);
   await view
-    .getByRole("button", { name: "Conectar cliente", exact: true })
+    .getByRole("button", { name: "Conectar un agente", exact: true })
     .click();
   const connect = page.getByRole("dialog", {
-    name: "Conectar un cliente",
+    name: "Conectar un agente",
     exact: true,
   });
   await expectNamedControls(connect);

@@ -21,6 +21,7 @@ const MVP_TABLES = [
   'audit_events',
   'group_agent_memberships',
   'group_human_memberships',
+  'group_human_message_reads',
   'groups',
   'human_sessions',
   'inbox_events',

@@ -1,0 +1,19 @@
+{
+  "taskId": "node:delegated-task:command%3Amcp%3Ac948eb01-ecbd-40ec-a8f4-9aa26b239f55%3Adelegate-task%3Auiux-integrated-agents-mobile-review-r1",
+  "childThreadId": "thread:delegated-task:command%3Amcp%3Ac948eb01-ecbd-40ec-a8f4-9aa26b239f55%3Adelegate-task%3Auiux-integrated-agents-mobile-review-r1",
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "options": [
+    {
+      "id": "reasoningEffort",
+      "value": "high"
+    },
+    {
+      "id": "serviceTier",
+      "value": "default"
+    }
+  ],
+  "reviewedCommit": "b71f0b6",
+  "scope": "Agent onboarding/notifications/named connections plus mobile/docs; read-only; no whole-change approval"
+}
+

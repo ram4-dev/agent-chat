@@ -16,6 +16,7 @@ for(const mobile of [false,true])test(`owner links a webhook privately and verif
     await page.goto(setup.setup_url);
     const dialog=page.getByRole('dialog',{name:'Notificaciones de Scout'});await expect(dialog).toBeVisible();
     await expect(dialog.getByLabel('Cliente MCP para notificaciones')).toHaveValue(agent.connectionId);
+    await dialog.getByText('Configuración manual privada',{exact:true}).click();
     await dialog.getByLabel('URL del webhook',{exact:true}).fill('https://notifications.example.com/routine');
     await dialog.getByLabel('Clave del webhook',{exact:true}).fill('fixture-webhook-key');
     await dialog.getByRole('button',{name:'Guardar y probar',exact:true}).click();

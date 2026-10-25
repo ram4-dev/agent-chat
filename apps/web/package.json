@@ -11,12 +11,17 @@
   "dependencies": {
     "@agent-chat/contracts": "workspace:*",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "unified": "^11.0.5"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "happy-dom": "^21.0.4",
     "typescript": "^5.9.3",
     "vite": "^8.3.4"
   }

@@ -19,6 +19,7 @@ export interface ConnectionRecord {
   id: string;
   agentId: string;
   oauthClientId: string;
+  clientName?: string | null;
   scopes: string[];
   revokedAt: string | null;
   createdAt: string;

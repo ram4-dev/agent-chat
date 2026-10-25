@@ -1,0 +1,17 @@
+.agent-setup-guide, .agent-notification-settings { display: grid; gap: 16px; min-width: 0; }
+.agent-setup-guide p, .agent-notification-settings p { margin: 0; line-height: 1.5; }
+.agent-setup-progress { display: grid; gap: 20px; padding-left: 24px; margin: 0; }
+.agent-setup-progress li > * + * { margin-top: 8px; }
+.agent-setup-progress li::marker { color: var(--green, #176640); font-weight: 600; }
+.agent-setup-guide label, .agent-notification-settings label { display: grid; gap: 6px; }
+.agent-notification-settings form { display: grid; gap: 16px; margin-top: 16px; }
+.agent-setup-guide button, .agent-notification-settings button { min-height: 44px; }
+.agent-setup-guide select, .agent-notification-settings select { width: 100%; min-height: 44px; }
+.agent-setup-guide .copy-wrap { min-width: 0; }
+.agent-client-details { overflow-wrap: anywhere; }
+.agent-client-details summary { cursor: pointer; }
+.agent-client-details p { margin: 6px 0; }
+@media (max-width: 600px) {
+  .agent-setup-guide .modal-actions { flex-wrap: wrap; }
+  .agent-setup-guide .modal-actions button { flex: 1 1 160px; }
+}
