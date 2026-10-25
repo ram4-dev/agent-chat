@@ -15,6 +15,7 @@ export type ChatState =
 export interface SendOutcome {
   ok: boolean;
   code?: string;
+  httpStatus?: number;
 }
 
 export async function loadMessages(
@@ -63,7 +64,7 @@ export async function sendMessage(
     if (response.ok) {
       return { ok: true };
     }
-    return { ok: false, code: errorCodeOf(await response.json()) ?? "unknown" };
+    return { ok: false, httpStatus: response.status, code: errorCodeOf(await response.json()) ?? "unknown" };
   } catch {
     return { ok: false, code: "unreachable" };
   }

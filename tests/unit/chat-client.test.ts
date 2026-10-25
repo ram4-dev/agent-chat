@@ -97,7 +97,15 @@ describe("sendMessage", () => {
 
     await expect(sendMessage("group-1", "   ", client.fetch)).resolves.toEqual({
       ok: false,
+      httpStatus: 400,
       code: "invalid_input",
+    });
+  });
+
+  it("preserves HTTP 401 even without a domain error code", async () => {
+    const client = fakeFetch([{ status: 401, body: {} }]);
+    await expect(sendMessage("group-1", "Private draft", client.fetch)).resolves.toEqual({
+      ok: false, httpStatus: 401, code: "unknown",
     });
   });
 

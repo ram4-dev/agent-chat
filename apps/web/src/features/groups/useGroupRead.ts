@@ -7,7 +7,7 @@ import { markDisplayedMessagesRead } from './transport';
  * IDs in history order and re-emits on focus/visibility restoration. Socket
  * messages and group-list metadata must never be passed to this callback.
  */
-export function useGroupRead(groupId: string | undefined, enabled: boolean, onChanged: () => void) {
+export function useGroupRead(groupId: string | undefined, enabled: boolean, onChanged: () => void, onUnauthenticated?: () => void) {
   const [readError, setReadError] = useState(false);
   const changed = useRef(onChanged);
   changed.current = onChanged;
@@ -17,9 +17,10 @@ export function useGroupRead(groupId: string | undefined, enabled: boolean, onCh
     onChanged: () => changed.current(),
     onError: (failed, status) => {
       setReadError(failed);
+      if (status === 401) onUnauthenticated?.();
       if (status === 401 || status === 403 || status === 404) changed.current();
     },
-  }), [groupId, enabled]);
+  }), [groupId, enabled, onUnauthenticated]);
   useEffect(() => {
     queue.activate();
     setReadError(false);

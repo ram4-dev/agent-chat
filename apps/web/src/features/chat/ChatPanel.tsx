@@ -346,6 +346,7 @@ export function ChatPanel({
 }
 
 export function ChatContainer({
+  onUnauthenticated,
   onMessagesDisplayed,
   groupId,
   groupName,
@@ -353,6 +354,7 @@ export function ChatContainer({
   user,
 }: {
   onMessagesDisplayed?: (messageIds: readonly string[]) => void;
+  onUnauthenticated?: () => void;
   groupId: string;
   groupName: string;
   agents?: AgentMember[];
@@ -374,6 +376,7 @@ export function ChatContainer({
       const result = await loadMessages(groupId);
       inFlight.delete(received);
       if (cancelled) return;
+      if (result.status === "error" && result.httpStatus === 401) { onUnauthenticated?.(); return; }
       setChat((current) => {
         if (result.status !== "ready" || current.status !== "ready")
           return result;
@@ -431,7 +434,8 @@ export function ChatContainer({
             : current,
         );
       };
-      socket.onclose = () => {
+      socket.onclose = (event) => {
+        if (!cancelled && event.code === 4401) { onUnauthenticated?.(); return; }
         if (!cancelled) {
           setLive(false);
           reconnect = setTimeout(connect, 2000);
@@ -446,7 +450,7 @@ export function ChatContainer({
       clearTimeout(reconnect);
       socket.close();
     };
-  }, [groupId]);
+  }, [groupId, onUnauthenticated]);
   return (
     <ChatPanel
       {...(onMessagesDisplayed ? { onMessagesDisplayed } : {})}
@@ -460,6 +464,7 @@ export function ChatContainer({
       onOlder={async () => {
         if (chat.status !== "ready" || !chat.nextCursor) return;
         const page = await loadMessages(groupId, fetch, chat.nextCursor);
+        if (page.status === "error" && page.httpStatus === 401 && alive.current) onUnauthenticated?.();
         if (page.status === "ready" && alive.current)
           setChat((current) =>
             current.status === "ready"
@@ -486,7 +491,10 @@ export function ChatContainer({
           idempotencyKey,
           mentionedAgentIds,
         );
-        if (!outcome.ok) return false;
+        if (!outcome.ok) {
+          if (outcome.httpStatus === 401 && alive.current) onUnauthenticated?.();
+          return false;
+        }
         await refreshRef.current();
         return true;
       }}

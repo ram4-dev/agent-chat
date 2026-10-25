@@ -140,12 +140,11 @@ test('automatic display callback reads opened visible messages and leaves hidden
   } finally { await f.a.close(); await f.b.close(); }
 });
 
-for (const cover of ['navigation','details','dialog'] as const) test(`covered conversation stays unread behind ${cover} and resumes after close`,async({browser})=>{
+for (const [cover,width] of [['navigation',390],['details',390],['dialog',390],['details',1024]] as const) test(`covered conversation stays unread behind ${cover} at ${width}px and resumes after close`,async({browser})=>{
  const f=await people(browser);
  try{
-  await f.grace.setViewportSize({width:390,height:844});await f.grace.bringToFront();
-  await f.grace.getByRole('button',{name:'Abrir navegación'}).click();
-  await f.grace.getByRole('button',{name:'Primero',exact:true}).click();
+  await f.grace.setViewportSize({width,height:844});await f.grace.bringToFront();
+  await selectGroup(f.grace,'Primero');
   const region=f.grace.getByRole('region',{name:'Conversación de Primero',exact:true});await expect(region).toBeVisible();
   await f.grace.clock.install();
   if(cover==='navigation')await f.grace.getByRole('button',{name:'Abrir navegación'}).click();

@@ -61,6 +61,11 @@ export function App() {
     if (previousDraftUser.current && previousDraftUser.current !== userId) clearUserDrafts(previousDraftUser.current);
     previousDraftUser.current = userId;
   }, [session]);
+  const invalidateSession = useCallback(() => {
+    if (previousDraftUser.current) clearUserDrafts(previousDraftUser.current);
+    previousDraftUser.current = undefined;
+    setSession({ status: "anonymous" });
+  }, []);
   const [groups, setGroups] = useState<GroupsState>({ status: "loading" });
   const [detail, setDetail] = useState<GroupDetailState>({ status: "loading" });
   const [selectedId, setSelectedId] = useState<string>();
@@ -77,6 +82,13 @@ export function App() {
   useEffect(() => {
     const query = window.matchMedia("(max-width: 760px)");
     const update = () => setNarrowLayout(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  const [detailsOverlay, setDetailsOverlay] = useState(() => window.matchMedia("(max-width: 1100px)").matches);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 1100px)");
+    const update = () => setDetailsOverlay(query.matches);
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
   }, []);
@@ -97,6 +109,7 @@ export function App() {
     const request = ++detailRequest.current;
     const state = await loadGroupDetail(id);
     if (request !== detailRequest.current || selectedRef.current !== id) return;
+    if (state.status === "error" && state.httpStatus === 401) { invalidateSession(); return; }
     setDetail(previous => {
       if (state.status === "error" && ![401, 403, 404].includes(state.httpStatus) && previous.status === "ready") {
         setNotice("No pudimos actualizar el grupo. Tu conversación sigue abierta.");
@@ -104,7 +117,7 @@ export function App() {
       }
       return state;
     });
-  }, []);
+  }, [invalidateSession]);
   const openGroup = useCallback(
     (id: string, options?: { navigate?: boolean }) => {
       if (options?.navigate !== false) {
@@ -153,8 +166,7 @@ export function App() {
     groupsInFlight.current = false;
     setGroups(previous => reconcileGroups(previous, next));
     if (next.status === "error" && next.httpStatus === 401) {
-      if (authenticatedUserId) clearUserDrafts(authenticatedUserId);
-      setSession({ status: "anonymous" });
+      invalidateSession();
     }
     if (next.status === "error" && (next.httpStatus === 401 || next.httpStatus === 403)) {
       selectedRef.current = undefined;
@@ -183,7 +195,7 @@ export function App() {
         void refreshList();
       }, 600);
     }
-  }, [authenticatedUserId, openGroup]);
+  }, [authenticatedUserId, openGroup, invalidateSession]);
   const scheduleGroupsRefresh = useCallback(() => {
     // A fixed coalescing window bounds fetches even during a continuous stream.
     if (groupsTimer.current) return;
@@ -193,7 +205,7 @@ export function App() {
     }, 600);
   }, [refreshGroups]);
   const { onMessagesDisplayed, readError, retryRead } = useGroupRead(
-    selectedId, !!authenticatedUserId && view === "chat" && !modal && !(narrowLayout && (navOpen || detailsOpen)), scheduleGroupsRefresh,
+    selectedId, !!authenticatedUserId && view === "chat" && !modal && !(narrowLayout && navOpen) && !(detailsOverlay && detailsOpen), scheduleGroupsRefresh, invalidateSession,
   );
 
   useEffect(() => {
@@ -254,7 +266,8 @@ export function App() {
           if (selectedRef.current) void refreshDetail(selectedRef.current);
         }
       };
-      socket.onclose = () => {
+      socket.onclose = (event) => {
+        if (!disposed && event.code === 4401) { invalidateSession(); return; }
         if (!disposed) timer = setTimeout(connect, 3000);
       };
     };
@@ -264,7 +277,7 @@ export function App() {
       clearTimeout(timer);
       socket.close();
     };
-  }, [session.status, refreshDetail, scheduleGroupsRefresh]);
+  }, [session.status, refreshDetail, scheduleGroupsRefresh, invalidateSession]);
 
   function openModal(next: "create" | "join") {
     setActionError("");
@@ -484,6 +497,7 @@ export function App() {
             {current ? (
               <ChatContainer
                 onMessagesDisplayed={onMessagesDisplayed}
+                onUnauthenticated={invalidateSession}
                 agents={current.members.filter((member): member is import("@agent-chat/contracts").AgentMember => member.kind === "agent")}
                 key={current.group.id}
                 groupId={current.group.id}
