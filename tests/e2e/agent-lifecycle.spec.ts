@@ -50,7 +50,7 @@ test("owner revokes connection and agent while historical authorship survives", 
     await agents(page);
     await page.getByText("Conexiones de Scout", { exact: true }).click();
     await page
-      .getByRole("button", { name: "Desconectar cliente 1 de Scout" })
+      .getByRole("button", { name: "Desconectar Owner-run SDK MCP client de Scout" })
       .click();
     const dialog = page.getByRole("dialog", { name: "Desconectar cliente" });
     await expect(dialog).toContainText(

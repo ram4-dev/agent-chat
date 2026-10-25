@@ -42,7 +42,7 @@ test("a new account can create a conversation immediately and agents have a sepa
     page.getByRole("heading", { name: "Mis agentes", exact: true }),
   ).toBeVisible();
   await expect(page.getByLabel("Mensaje", { exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Crear agente", exact: true }).click();
+  await page.getByRole("button", { name: "Crear identidad", exact: true }).click();
   const agentModal = page.getByRole("dialog", { name: "Crear agente" });
   await agentModal.getByLabel("Nombre del agente").fill("Explorador");
   await agentModal
@@ -230,7 +230,7 @@ test("chat pages older history and profile editing reports saved changes", async
     "Mensaje de archivo 1",
   );
   await agents(page);
-  await page.getByRole("button", { name: "Crear agente", exact: true }).click();
+  await page.getByRole("button", { name: "Crear identidad", exact: true }).click();
   await page.getByLabel("Nombre del agente").fill("Scout");
   await page
     .getByRole("dialog")
@@ -288,9 +288,9 @@ test("agents load errors can be retried into an actionable empty list", async ({
     page.getByRole("list", { name: "Agentes propios" }).getByRole("listitem"),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Conectar cliente", exact: true }),
+    page.locator(".page-header").getByRole("button", { name: "Conectar un agente", exact: true }),
   ).toBeEnabled();
-  await page.getByRole("button", { name: "Crear agente", exact: true }).click();
+  await page.getByRole("button", { name: "Crear identidad", exact: true }).click();
   await expect(
     page.getByRole("dialog", { name: "Crear agente" }),
   ).toBeVisible();
@@ -305,7 +305,7 @@ test("agent management identifies existing group membership after adding and rel
   await signUp(page, "ui-agent-membership@example.com", "Ada");
   await createGroup(page, "Equipo");
   await agents(page);
-  await page.getByRole("button", { name: "Crear agente", exact: true }).click();
+  await page.getByRole("button", { name: "Crear identidad", exact: true }).click();
   await page.getByLabel("Nombre del agente").fill("Scout");
   await page
     .getByRole("dialog")

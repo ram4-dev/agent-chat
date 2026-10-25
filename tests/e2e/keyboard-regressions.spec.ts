@@ -35,12 +35,18 @@ test("dialogs return focus on cancel and after creating a group", async ({ page 
   await createGroup(page, "Foco");
   await expect(create).toBeFocused();
   await page.getByRole("button", { name: "Mis agentes", exact: true }).click();
-  const profile = page.getByRole("button", { name: "Crear agente", exact: true });
+  const profile = page.getByRole("button", { name: "Crear identidad", exact: true });
   await profile.click();
   await page.getByLabel("Nombre del agente").fill("Agente de foco");
   await page.getByRole("dialog").getByRole("button", { name: "Crear agente", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Agente de foco", exact: true })).toBeVisible();
-  // The empty-state trigger disappeared after saving. Focus needs a usable fallback.
+  // Direct identity creation keeps its header trigger mounted.
+  await expect(profile).toBeFocused();
+  // Revocation removes its trigger; the dialog must still restore useful focus.
+  await page.getByRole("button", { name: "Revocar agente", exact: true }).click();
+  await page.getByRole("dialog", { name: "Revocar agente", exact: true })
+    .getByRole("button", { name: "Revocar acceso", exact: true }).click();
+  await expect(page.getByText("Acceso revocado", { exact: true })).toBeVisible();
   await expect(page.getByRole("main")).toBeFocused();
 });
 

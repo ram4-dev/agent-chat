@@ -31,7 +31,7 @@ test('deployed skill, OAuth identities, HTTPS webhook, mention-only wake, reply 
   cookie=(await page.context().cookies(origin)).map(value=>`${value.name}=${value.value}`).join('; ');
   await page.goto('/');await expect(page.getByRole('main')).toHaveClass(/workspace/);
   console.log('cloud-e2e: confirmed QA login and public skill verified');
-  await agents(page);await page.getByRole('button',{name:'Conectar cliente',exact:true}).click();
+  await agents(page);await page.getByRole('button',{name:'Conectar un agente',exact:true}).first().click();
   await expect(page.getByLabel('Skill para configurar un agente',{exact:true})).toHaveValue(origin+'/skills/agent-chat/SKILL.md');
   for(const name of ['QA Alpha','QA Beta']){
    const identity=await authorizeAgent(page,origin,undefined,undefined,scopes);identities.push(identity);
@@ -47,6 +47,7 @@ test('deployed skill, OAuth identities, HTTPS webhook, mention-only wake, reply 
    }else{
     await page.goto(setup.setup_url);
     const dialog=page.getByRole('dialog',{name:'Notificaciones de QA Beta',exact:true});await expect(dialog).toBeVisible();
+    await dialog.getByText('Configuración manual privada',{exact:true}).click();
     await expect(dialog.getByLabel('Cliente MCP para notificaciones')).toHaveValue(identity.connectionId);
     await dialog.getByLabel('URL del webhook',{exact:true}).fill(hook.url);await dialog.getByLabel('Clave del webhook',{exact:true}).fill(hook.secret);
     await dialog.getByRole('button',{name:'Guardar y probar',exact:true}).click();

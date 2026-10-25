@@ -10,7 +10,7 @@ for(const mobile of [false,true])test(`public skill, new identities and directed
  await page.goto('/');const origin=new URL(page.url()).origin;
  const skill=await page.request.get('/skills/agent-chat/SKILL.md');expect(skill.status()).toBe(200);expect(await skill.text()).toContain(origin+'/mcp');
  await signUp(page,`mention-${randomUUID()}@example.com`,'Mention owner');
- await agents(page);await page.getByRole('button',{name:'Conectar cliente',exact:true}).click();
+ await agents(page);await page.getByRole('button',{name:'Conectar un agente',exact:true}).first().click();
  await expect(page.getByLabel('Skill para configurar un agente',{exact:true})).toHaveValue(origin+'/skills/agent-chat/SKILL.md');
  const first=await authorizeAgent(page,origin,undefined,undefined,scope);const a=await mcpClient(origin,first.token);
  let b:Awaited<ReturnType<typeof mcpClient>>|undefined;
