@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   BROWSER_SOCKET_PATH,
   type MessageView,
@@ -14,14 +14,12 @@ import {
 } from "./transport";
 import { Avatar, Icon } from "../../shared/ui";
 
-function hasMention(text:string,name:string):boolean {
-  const label=`@${name}`;
-  for(let at=text.indexOf(label);at!==-1;at=text.indexOf(label,at+label.length)){
-    const before=text[at-1],after=text[at+label.length];
-    if((!before||/\s/u.test(before))&&(!after||/[\s.,!?;:)\]}]/u.test(after)))return true;
-  }
-  return false;
-}
+import { useChatDraft, updateDraft, submitDraft, discardDraft } from "./drafts";
+import { mentionQuery, mentionStarts, reconcileMentions, unresolvedMentions } from "./mentions";
+import { useDisplayedMessages } from "./useDisplayedMessages";
+import { MessageMarkdown } from "./MessageMarkdown";
+import "./chat.css";
+export { clearUserDrafts } from "./drafts";
 
 export function ChatPanel({
   groupId,
@@ -33,6 +31,7 @@ export function ChatPanel({
   onSend,
   onRetry,
   onOlder,
+  onMessagesDisplayed,
 }: {
   groupId: string;
   groupName: string;
@@ -40,38 +39,51 @@ export function ChatPanel({
   user: PublicUser;
   chat: ChatState;
   live: boolean;
-  onSend(text: string, mentionedAgentIds: string[]): Promise<boolean>;
+  onSend(text: string, mentionedAgentIds: string[], idempotencyKey: string): Promise<boolean>;
   onRetry(): void;
   onOlder(): Promise<void>;
+  onMessagesDisplayed?: (messageIds: readonly string[]) => void;
 }) {
-  const [draft, setDraft] = useState("");
-  const [mentions, setMentions] = useState<Array<{id:string;name:string}>>([]);
-  const [query, setQuery] = useState<{start:number;end:number;text:string}>();
+  const stored = useChatDraft(user.id, groupId);
+  const { text: draft, mentions, sending } = stored;
+  const [storedQuery, setQuery] = useState<ReturnType<typeof mentionQuery>>();
+  const query = storedQuery && draft.slice(storedQuery.start + 1, storedQuery.end) === storedQuery.text && draft[storedQuery.start] === "@" ? storedQuery : undefined;
   const [choice, setChoice] = useState(0);
   const input = useRef<HTMLTextAreaElement>(null);
+  const composing = useRef(false);
   const caret = useRef<{text:string;position:number}|undefined>(undefined);
   useLayoutEffect(()=>{
     const next=caret.current;caret.current=undefined;
     if(next&&input.current?.value===next.text){input.current.focus();input.current.setSelectionRange(next.position,next.position);}
   },[draft]);
+  const starts = mentionStarts(draft);
+  const selected = mentions.filter(mention => starts.includes(mention.start) && agents.some(agent => agent.id === mention.id));
+  const unresolved = unresolvedMentions(draft, selected);
   const choices = query ? agents.filter(agent => !mentions.some(item=>item.id===agent.id) && agent.displayName.toLocaleLowerCase().includes(query.text.toLocaleLowerCase())).slice(0,20) : [];
   function changeDraft(text:string, position:number) {
     caret.current=undefined;
-    setDraft(text);
-    setMentions(current=>current.filter(item=>hasMention(text,item.name)));
-    const match = /(?:^|\s)@([^@\n]{0,60})$/.exec(text.slice(0,position));
-    const tail = match?.[1];
-    setQuery(tail !== undefined && !mentions.some(item=>tail.startsWith(item.name+' ')) ? {start:position-tail.length-1,end:position,text:tail} : undefined);
+    const next = reconcileMentions(draft, text, mentions);
+    updateDraft(user.id, groupId, text, next);
+    setQuery(mentionQuery(text, position, next));
+    setError("");
     setChoice(0);
   }
   function choose(agent:AgentMember) {
     if(!query || mentions.length>=20)return;
-    const label=`@${agent.displayName} `;
-    const text=draft.slice(0,query.start)+label+draft.slice(query.end);
-    caret.current={text,position:query.start+label.length};
-    setDraft(text);setMentions(current=>[...current.filter(item=>item.id!==agent.id),{id:agent.id,name:agent.displayName}]);setQuery(undefined);
+    const label=`@${agent.displayName}`;
+    const text=draft.slice(0,query.start)+label+' '+draft.slice(query.end);
+    caret.current={text,position:query.start+label.length+1};
+    const next = reconcileMentions(draft, text, mentions);
+    updateDraft(user.id, groupId, text, [...next, {id:agent.id,name:agent.displayName,start:query.start,end:query.start+label.length}]);
+    setQuery(undefined);setError("");
   }
-  const [sending, setSending] = useState(false);
+  function removeMention(id: string) {
+    const mention = mentions.find(item => item.id === id);
+    if (!mention) return;
+    const text = draft.slice(0, mention.start) + draft.slice(mention.start + 1);
+    updateDraft(user.id, groupId, text, reconcileMentions(draft, text, mentions.filter(item => item.id !== id)));
+    setQuery(undefined);
+  }
   const [older, setOlder] = useState(false);
   const [error, setError] = useState("");
   const list = useRef<HTMLDivElement>(null);
@@ -82,28 +94,28 @@ export function ChatPanel({
   }, [chat]);
   async function submit(event?: FormEvent) {
     event?.preventDefault();
-    if (!draft.trim() || sending) return;
-    setSending(true);
-    setError("");
-    const text = draft;
-    try {
-      const sent = await onSend(text, mentions.filter(item=>hasMention(text,item.name)).map(item=>item.id));
-      if (sent) {
-        setDraft("");
-        setMentions([]);setQuery(undefined);
-        stick.current = true;
-      } else
-        setError(
-          "No pudimos enviar el mensaje. Tu borrador sigue acá; volvé a intentar.",
-        );
-    } finally {
-      setSending(false);
+    if (!draft.trim() || sending || composing.current) return;
+    if (unresolved.length) {
+      setError("Elegí un bot para cada @ pendiente o quitá la @ antes de enviar.");
+      input.current?.focus();
+      const start = unresolved[0]!;
+      const end = start + 1 + (/^[^\s@]*/u.exec(draft.slice(start + 1))?.[0].length ?? 0);
+      input.current?.setSelectionRange(end, end);
+      setQuery(mentionQuery(draft, end, selected));
+      setChoice(0);
+      return;
     }
+    setError("");
+    const sent = await submitDraft(user.id, groupId, [...new Set(selected.map(item => item.id))], onSend);
+    if (sent) { setQuery(undefined); stick.current = true; }
+    else setError("No pudimos enviar el mensaje. Tu borrador sigue acá; volvé a intentar.");
   }
-  const messages = chat.status === "ready" ? [...chat.messages].reverse() : [];
+  const messages = useMemo(() => chat.status === "ready" ? [...chat.messages].reverse() : [], [chat]);
+  const historyIds = useMemo(() => messages.map(message => message.id), [messages]);
+  useDisplayedMessages(list, historyIds, onMessagesDisplayed);
   return (
     <section
-      className="chat-area"
+      className="chat-area chat-ux"
       aria-label={`Conversación de ${groupName}`}
       data-group-id={groupId}
     >
@@ -182,6 +194,7 @@ export function ChatPanel({
                 <article
                   className={`message ${message.author.kind === "agent" ? "message-agent" : ""}`}
                   aria-label={describeAuthor(message)}
+                  data-visible-message-id={message.id}
                 >
                   <Avatar
                     name={message.author.displayName}
@@ -212,7 +225,7 @@ export function ChatPanel({
                         })}
                       </time>
                     </div>
-                    <p>{message.text}</p>
+                    <MessageMarkdown text={message.text} />
                     {!!message.mentionedAgentIds?.length && <span className="message-targets">Aviso dirigido a {message.mentionedAgentIds.map(id=>agents.find(agent=>agent.id===id)?.displayName??id).join(', ')}</span>}
                   </div>
                 </article>
@@ -227,8 +240,14 @@ export function ChatPanel({
             {error}
           </p>
         )}
-        <p id="mention-help" className="mention-help">Escribí @ y elegí un bot para dirigir el aviso. Sin menciones, se avisa a todos.</p>
-        {!!mentions.length && <div className="mention-targets" aria-label="Bots que recibirán el aviso">{mentions.map(item=><button type="button" key={item.id} aria-label={`Quitar mención a ${item.name}`} onClick={()=>{setMentions(current=>current.filter(value=>value.id!==item.id));if(!mentions.some(other=>other.id!==item.id&&other.name===item.name))setDraft(current=>current.replaceAll(`@${item.name}`,item.name));}}>@{item.name} <small>{item.id.slice(-6)}</small> ×</button>)}</div>}
+        <div className="chat-recipient-summary" id="recipient-summary" role="status">
+          <strong>Avisar a:</strong>{' '}
+          {selected.length ? selected.map(item => `${item.name} (${item.id.slice(-6)})`).join(', ')
+            : agents.length ? "Todos los bots habilitados del grupo" : "Ningún bot en este grupo"}
+          {!!unresolved.length && <span> · Hay menciones pendientes; resolvelas antes de enviar.</span>}
+        </div>
+        <p id="mention-help" className="mention-help">Escribí @ y elegí un bot. Sin menciones, se avisa a todos los bots del grupo.</p>
+        {!!mentions.length && <div className="mention-targets" aria-label="Bots que recibirán el aviso">{mentions.map(item=><button type="button" key={item.id} aria-label={`Quitar mención a ${item.name}`} onClick={()=>removeMention(item.id)}>@{item.name} <small>{item.id.slice(-6)}{!agents.some(agent => agent.id === item.id) && ' · Ya no está en el grupo'}</small> ×</button>)}</div>}
         {query && <div className="mention-options" role="listbox" id="mention-options" aria-label="Agentes para mencionar">{choices.length ? choices.map((agent,index)=><button type="button" role="option" id={`mention-${agent.id}`} key={agent.id} aria-selected={index===choice} onMouseDown={event=>event.preventDefault()} onClick={()=>choose(agent)}><strong>@{agent.displayName}</strong><span>{agent.ownerDisplayName} · {agent.id.slice(-6)}</span></button>) : <p>No hay bots que coincidan en este grupo.</p>}</div>}
         <form
           className="composer"
@@ -247,14 +266,18 @@ export function ChatPanel({
             aria-controls={query?'mention-options':undefined}
             aria-activedescendant={query&&choices[choice]?`mention-${choices[choice]!.id}`:undefined}
             aria-autocomplete="list"
-            aria-describedby="mention-help"
+            aria-describedby="mention-help recipient-summary"
             name="message"
             placeholder={`Escribí en ${groupName}…`}
             rows={2}
             value={draft}
             onChange={(event) => changeDraft(event.target.value,event.target.selectionStart)}
-            disabled={chat.status !== "ready" || sending}
+            disabled={chat.status !== "ready"}
+            onCompositionStart={() => { composing.current = true; }}
+            onCompositionEnd={(event) => { composing.current = false; changeDraft(event.currentTarget.value, event.currentTarget.selectionStart); }}
+            onSelect={(event) => { if (!composing.current) { setQuery(mentionQuery(draft, event.currentTarget.selectionStart, selected)); setChoice(0); } }}
             onKeyDown={(event) => {
+              if (composing.current || event.nativeEvent.isComposing || event.keyCode === 229) return;
               if(query && !event.nativeEvent.isComposing){
                 if(event.key==='Escape'){event.preventDefault();setQuery(undefined);return;}
                 if(choices.length && ['ArrowDown','ArrowUp'].includes(event.key)){event.preventDefault();setChoice(index=>(index+(event.key==='ArrowDown'?1:choices.length-1))%choices.length);return;}
@@ -291,6 +314,7 @@ export function ChatPanel({
             <i />
             {live ? "En vivo" : "Reconectando…"}
           </span>
+          {!!draft && <button className="chat-discard" type="button" onClick={() => { discardDraft(user.id, groupId); setQuery(undefined); setError(''); }}>Descartar borrador</button>}
           <span>
             Enter para enviar{" "}
             <span className="desktop-only">
@@ -304,11 +328,13 @@ export function ChatPanel({
 }
 
 export function ChatContainer({
+  onMessagesDisplayed,
   groupId,
   groupName,
   agents = [],
   user,
 }: {
+  onMessagesDisplayed?: (messageIds: readonly string[]) => void;
   groupId: string;
   groupName: string;
   agents?: AgentMember[];
@@ -316,7 +342,6 @@ export function ChatContainer({
 }) {
   const [chat, setChat] = useState<ChatState>({ status: "loading" });
   const [live, setLive] = useState(false);
-  const pending = useRef<{ text: string; key: string; mentions: string } | undefined>(undefined);
   const alive = useRef(true);
   const refreshRef = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
@@ -406,6 +431,7 @@ export function ChatContainer({
   }, [groupId]);
   return (
     <ChatPanel
+      {...(onMessagesDisplayed ? { onMessagesDisplayed } : {})}
       groupId={groupId}
       groupName={groupName}
       agents={agents}
@@ -434,19 +460,15 @@ export function ChatContainer({
               : current,
           );
       }}
-      onSend={async (text, mentionedAgentIds) => {
-        const mentions=JSON.stringify([...mentionedAgentIds].sort());
-        if (!pending.current || pending.current.text !== text || pending.current.mentions !== mentions)
-          pending.current = { text, mentions, key: crypto.randomUUID() };
+      onSend={async (text, mentionedAgentIds, idempotencyKey) => {
         const outcome = await sendMessage(
           groupId,
           text,
           fetch,
-          pending.current.key,
+          idempotencyKey,
           mentionedAgentIds,
         );
         if (!outcome.ok) return false;
-        pending.current = undefined;
         await refreshRef.current();
         return true;
       }}
