@@ -42,6 +42,39 @@ test('formatted intent blocks broadcasts and real duplicate-token deletions pres
     await expect(page.locator('#recipient-summary')).not.toContainText('menciones pendientes');
     await submitTo(ids[1]!);
   }
+  for (const text of [
+    '| Bot |\n| --- |\n|@Analista|',
+    'Bot|Otro\n---|---\n@Analista|texto',
+    '| Bot |\n| --- |\n|**@Analista**|',
+    '![@Analista](https://example.com/@destination)',
+    '![**@Analista**](https://example.com/@destination)',
+    '![`@Analista`](https://example.com/@destination)',
+    '![@Analista][bot]\n\n[bot]: https://example.com/@destination',
+  ]) {
+    const count = posts.length;
+    await input.fill(text); await send.click();
+    await expect(page.getByRole('alert')).toContainText('cada @ pendiente');
+    expect(posts).toHaveLength(count);
+    // Resolve through an explicit picker choice, then preserve that same token inside GFM.
+    await input.fill('@Ana'); await page.locator(`#mention-${ids[1]}`).click();
+    await input.fill(text);
+    await expect(page.locator('#recipient-summary')).toContainText(ids[1]!.slice(-6));
+    await expect(page.locator('#recipient-summary')).not.toContainText('menciones pendientes');
+    await submitTo(ids[1]!);
+    const article = page.getByRole('list', { name: 'Mensajes', exact: true }).locator('article').last();
+    await expect(article.locator('.chat-markdown')).toContainText('@Analista');
+    await expect(article.locator('img')).toHaveCount(0);
+    if (text.includes('|')) await expect(article.getByRole('cell', { name: '@Analista', exact: true })).toBeVisible();
+  }
+  for (const text of ['<span>@Analista</span>', '![[ref]: @Analista](https://example.com)']) {
+    // Even a previously selected identity cannot resolve an ambiguous visible source mapping.
+    await input.fill('@Ana'); await page.locator(`#mention-${ids[1]}`).click();
+    const count = posts.length;
+    await input.fill(text); await send.click();
+    await expect(page.getByRole('alert')).toContainText('cada @ pendiente');
+    expect(posts).toHaveLength(count);
+    await input.fill('');
+  }
   // Insert formatting around an explicitly selected token, one real browser edit at a time.
   for (const [opening, closing] of [['**', '**'], ['[', '](https://example.com/@destination)']]) {
     await input.fill('@Ana'); await page.locator(`#mention-${ids[1]}`).click();

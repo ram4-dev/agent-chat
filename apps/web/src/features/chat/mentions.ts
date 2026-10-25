@@ -1,4 +1,9 @@
-import { fromMarkdown } from 'mdast-util-from-markdown';
+import { unified } from 'unified';
+import remarkParse from 'remark-parse';
+import remarkGfm from 'remark-gfm';
+
+// Keep the syntax pipeline identical to MessageMarkdown's default parser + remarkGfm.
+const parser = unified().use(remarkParse).use(remarkGfm);
 
 export interface Mention {
   id: string;
@@ -7,46 +12,113 @@ export interface Mention {
   end: number;
 }
 export interface MentionEdit { start: number; end: number }
-interface Intent { start: number; visibleText: string }
+interface Intent { start: number; visibleText: string; unmapped?: boolean }
 
 /** Walk rendered text, including formatting and link labels, without URL destinations/code. */
 function mentionIntents(text: string): Intent[] {
   let visible = '';
-  const positions: Array<{ source: number; rendered: number }> = [];
-  type MarkdownNode = { type: string; value?: string; position?: { start: { offset?: number }; end: { offset?: number } }; children?: MarkdownNode[] };
-  function walk(node: MarkdownNode) {
-    if (['code', 'inlineCode', 'html', 'image', 'imageReference'].includes(node.type)) {
+  const positions: Array<{ source: number; rendered: number; unmapped?: boolean }> = [];
+  type MarkdownNode = { type: string; value?: string; alt?: string | null; position?: { start: { offset?: number }; end: { offset?: number } }; children?: MarkdownNode[] };
+  const tree = parser.parse(text);
+  const definitions = tree.children.filter(node => node.type === 'definition')
+    .map(node => text.slice(node.position?.start.offset, node.position?.end.offset)).join('\n');
+  function append(raw: string, value: string, offset: number) {
+    let renderedAt = -1;
+    for (const match of raw.matchAll(/@|&#0*64;|&#x0*40;|&commat;/giu)) {
+      renderedAt = value.indexOf('@', renderedAt + 1);
+      if (renderedAt === -1) break;
+      let slashes = 0;
+      for (let at = match.index - 1; at >= 0 && raw[at] === '\\'; at--) slashes++;
+      if (slashes % 2 === 0) positions.push({ source: offset + match.index, rendered: visible.length + renderedAt });
+    }
+    visible += value;
+  }
+  // Image nodes flatten their label into alt. Recover the label with the same parser,
+  // preserving source offsets while excluding nested link/image destinations and titles.
+  function imageLabelEnd(source: string, start: number, end: number): number {
+    let brackets = 1;
+    for (let at = start; at < end; at++) {
+      if (source[at] === '\\') { at++; continue; }
+      if (source[at] === '`') {
+        const run = /^`+/u.exec(source.slice(at))![0];
+        const ticks = /`+/gu; ticks.lastIndex = at + run.length;
+        let closing: RegExpExecArray | null;
+        while ((closing = ticks.exec(source)) && closing[0].length !== run.length) { /* Find the matching code delimiter. */ }
+        if (closing && closing.index < end) { at = closing.index + run.length - 1; continue; }
+        at += run.length - 1; continue;
+      }
+      if (source[at] === '[') brackets++;
+      if (source[at] !== ']') continue;
+      if (--brackets === 0) return at;
+      if (source[at + 1] === '(') {
+        let parentheses = 1, quote = '', angle = false;
+        for (at += 2; at < end && parentheses; at++) {
+          const char = source[at]!;
+          if (char === '\\') { at++; continue; }
+          if (quote) { if (char === quote) quote = ''; continue; }
+          if (angle) { if (char === '>') angle = false; continue; }
+          if (char === '<') angle = true;
+          else if ((char === '"' || char === "'") && /\s/u.test(source[at - 1]!)) quote = char;
+          else if (char === '(') parentheses++;
+          else if (char === ')') parentheses--;
+        }
+        at--;
+      }
+    }
+    return end;
+  }
+  function walk(node: MarkdownNode, base = 0, alt = false) {
+    if (node.type === 'definition') return;
+    const offset = base + (node.position?.start.offset ?? 0);
+    const end = base + (node.position?.end.offset ?? 0);
+    if ((node.type === 'image' || node.type === 'imageReference') && node.position) {
+      const start = offset + 2; // ![
+      const label = text.slice(start, imageLabelEnd(text, start, end));
+      const labelTree = parser.parse(label + '\n\n' + definitions);
+      const visibleStart = visible.length, positionStart = positions.length;
+      walk(labelTree, start, true);
+      const renderedAlt = node.alt ?? '';
+      const projectedAlt = visible.slice(visibleStart);
+      if (projectedAlt !== renderedAlt) {
+        const projectedAts = [...projectedAlt.matchAll(/@/gu)].map(match => match.index);
+        const renderedAts = [...renderedAlt.matchAll(/@/gu)].map(match => match.index);
+        if (projectedAts.length === renderedAts.length) {
+          // Block-looking alt syntax may normalize whitespace. Preserve only its
+          // known source mapping; the renderer's actual alt remains authoritative.
+          for (const position of positions.slice(positionStart)) {
+            position.rendered = visibleStart + renderedAts[projectedAts.indexOf(position.rendered - visibleStart)]!;
+          }
+        } else {
+          // Ambiguous source mapping must never attach a previously selected ID.
+          positions.length = positionStart;
+          for (const at of renderedAts) positions.push({ source: offset, rendered: visibleStart + at, unmapped: true });
+        }
+        visible = visible.slice(0, visibleStart) + renderedAlt;
+      }
+      return;
+    }
+    if (['code', 'inlineCode'].includes(node.type) && !alt) {
       visible += '\ufffc';
       return;
     }
-    if (node.type === 'text' && node.position) {
-      const offset = node.position.start.offset ?? 0;
-      const raw = text.slice(offset, node.position.end.offset);
-      const value = node.value ?? raw;
-      let renderedAt = -1;
-      for (const match of raw.matchAll(/@|&#0*64;|&#x0*40;|&commat;/giu)) {
-        renderedAt = value.indexOf('@', renderedAt + 1);
-        if (renderedAt === -1) break;
-        let slashes = 0;
-        for (let at = match.index - 1; at >= 0 && raw[at] === '\\'; at--) slashes++;
-        if (slashes % 2 === 0) positions.push({ source: offset + match.index, rendered: visible.length + renderedAt });
-      }
-      visible += value;
+    if (node.position && (['text', 'html'].includes(node.type) || (alt && ['code', 'inlineCode'].includes(node.type)))) {
+      const raw = text.slice(offset, end);
+      append(raw, node.value ?? raw, offset);
       return;
     }
-    const block = ['root', 'paragraph', 'heading', 'listItem', 'blockquote'].includes(node.type);
+    const block = ['root', 'paragraph', 'heading', 'listItem', 'blockquote', 'table', 'tableRow', 'tableCell'].includes(node.type) && !alt;
     if (block) visible += '\n';
-    node.children?.forEach(walk);
+    node.children?.forEach(child => walk(child, base, alt));
     if (block) visible += '\n';
   }
-  walk(fromMarkdown(text));
+  walk(tree);
   return positions.filter(position => /(?:^|[\s([{>"'])(?:\*{1,2}|_{1,2}|~~)*$/u.test(visible.slice(0, position.rendered)))
-    .map(position => ({ start: position.source, visibleText: visible.slice(position.rendered) }));
+    .map(position => ({ start: position.source, visibleText: visible.slice(position.rendered), ...(position.unmapped ? { unmapped: true } : {}) }));
 }
 function matchesMention(text: string, intent: Intent, mention: Mention): boolean {
   const label = `@${mention.name}`;
   const after = intent.visibleText[label.length];
-  return intent.start === mention.start && mention.end === mention.start + label.length &&
+  return !intent.unmapped && intent.start === mention.start && mention.end === mention.start + label.length &&
     text.slice(mention.start, mention.end) === label && intent.visibleText.startsWith(label) &&
     (!after || /[\s.,!?;:)\]}]/u.test(after) || /^(?:\*{1,2}|_{1,2}|~~)(?:$|[\s.,!?;:)\]}])/u.test(intent.visibleText.slice(label.length)));
 }
