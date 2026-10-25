@@ -21,3 +21,4 @@
 - Production additive migration 20261025000100 installed; existing data preserved.
 - Final review added duplicate-name chip removal coverage in desktop/mobile E2E: selecting both IDs and removing one preserves delivery exclusively to the remaining ID. Focused SQLite run passed both variants.
 - CI exposed a real cursor race: a deferred animation-frame selection could run after the user's next edit. Replaced it with selection restored in the layout commit and cancellation on input; preserved the failed assertion and added an exact draft-value assertion. Five repeated desktop/mobile SQLite runs passed (10 cases).
+- Subsequent CI passed editing/mentions but timed out on the fixture's owner HTTP pause in teardown. Cleanup now disables only its own fixture IDs transactionally through its database, independent of the browser request context; all delivery/reply assertions remain. A fresh full managed browser suite passed again (36 passed, 1 opt-in skipped).

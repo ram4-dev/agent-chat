@@ -75,5 +75,13 @@ test('private host setup binds its own identity and only the mentioned bot gets 
   const wake=wakes[0]!;payload(await clients[0]!.callTool({name:'confirm_notification_delivery',arguments:{delivery_id:wake.delivery_id,challenge:wake.challenge}}));
   const inbox=payload<{events:Array<{eventId:string}>}>(await clients[0]!.callTool({name:'get_inbox',arguments:{}}));payload(await clients[0]!.callTool({name:'send_message',arguments:{group_id:group,text:'Respondió One',idempotency_key:`reply:${inbox.events[0]!.eventId}:final`}}));
   payload(await clients[0]!.callTool({name:'ack_inbox',arguments:{event_id:inbox.events[0]!.eventId}}));await expect(page.getByRole('list',{name:'Mensajes'})).toContainText('Respondió One');
- }finally{for(const identity of identities)await page.request.post(`${h.origin}/api/agents/${identity.agentId}/notifications/pause`,{headers:{origin:h.origin},data:{}});for(const client of clients)await client.close();await h.close();}
+ }finally{
+  // Fixture cleanup is independent of browser cookies and its request deadline.
+  // Pause only these fixture agents before closing their app and MCP clients.
+  const ids=identities.map(identity=>identity.agentId);
+  try{await h.db.transaction(async()=>{
+   await h.db.rows('UPDATE notification_configs SET enabled=false,revision=revision+1 WHERE agent_id=ANY($1::text[])',[ids]);
+   await h.db.rows("UPDATE notification_jobs SET status='cancelled' WHERE agent_id=ANY($1::text[]) AND status IN ('queued','sending','accepted')",[ids]);
+  });}finally{for(const client of clients)await client.close();await h.close();}
+ }
 });
