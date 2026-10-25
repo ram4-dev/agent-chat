@@ -91,7 +91,7 @@ for (const scenario of [
   } finally { release.resolve(); }
 });
 
-test('authenticated persistent receiver on SQLite can continue without a webhook or processing claim', async ({ page }) => {
+test('authenticated persistent receiver can continue without a webhook or processing claim', async ({ page }) => {
   await page.goto('/');
   const origin = new URL(page.url()).origin;
   await signUp(page, `receiver-guide-${randomUUID()}@example.com`, 'Receptor');
@@ -100,7 +100,7 @@ test('authenticated persistent receiver on SQLite can continue without a webhook
   try {
     await page.goto('/'); await createGroup(page, 'Grupo con receptor'); await agents(page);
     const response = await page.request.get(`/api/agents/${identity.agentId}/notifications`);
-    expect((await response.json()).available).toBe(false);
+    expect((await response.json()).available).toBe(process.env['MANAGED_E2E'] === '1');
     await page.getByRole('button', { name: 'Continuar conexión', exact: true }).click();
     const guide = page.getByRole('dialog', { name: 'Conectar un agente', exact: true });
     const delivery = guide.getByRole('listitem').filter({ hasText: 'Recepción y avisos' });

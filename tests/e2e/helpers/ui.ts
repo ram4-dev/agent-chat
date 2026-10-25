@@ -16,8 +16,15 @@ export async function signUp(page: Page, email: string, name: string) {
   await expect(page.getByRole("main")).toHaveClass(/workspace/);
 }
 export async function navigation(page: Page) {
-  const menu = page.getByRole("button", { name: "Abrir navegación" });
-  if (await menu.isVisible()) await menu.click();
+  // Navigation after a document/OAuth return can precede the session response.
+  // An immediate isVisible() would skip a mobile menu that is not mounted yet.
+  await expect(page.getByRole("main", { includeHidden: true })).toHaveClass(/workspace/);
+  const menu = page.getByRole("button", { name: "Abrir navegación", exact: true, includeHidden: true });
+  if (await menu.isVisible()) {
+    if (await menu.getAttribute("aria-expanded") !== "true") await menu.click();
+    await expect(menu).toHaveAttribute("aria-expanded", "true");
+  }
+  await expect(page.getByRole("complementary", { name: "Navegación principal", exact: true, includeHidden: true })).toBeInViewport();
 }
 export async function createGroup(page: Page, name: string) {
   await navigation(page);
