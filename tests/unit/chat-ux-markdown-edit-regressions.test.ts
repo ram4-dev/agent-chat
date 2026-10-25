@@ -52,6 +52,8 @@ const { createElement } = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { Window } = require('happy-dom');
 const gfmShapes = [
+  'Hola  \n@Analista revisá esto',
+  'Hola\\\n@Analista revisá esto',
   '| Bot |\n| --- |\n|@Analista|',
   'Bot|Otro\n---|---\n@Analista|texto',
   '| A | B |\n| - | - |\n|texto|@Analista|',

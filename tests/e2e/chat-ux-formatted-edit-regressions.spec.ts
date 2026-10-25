@@ -32,7 +32,7 @@ test('formatted intent blocks broadcasts and real duplicate-token deletions pres
     expect(posts.at(-1)).toEqual([id]);
     await expect(input).toHaveValue('');
   }
-  for (const text of ['**@Analista** revisá esto', '[@Analista](https://example.com)', '[**@Analista**](https://example.com/@destination)', '~~@Analista~~']) {
+  for (const text of ['**@Analista** revisá esto', '[@Analista](https://example.com)', '[**@Analista**](https://example.com/@destination)', '~~@Analista~~', 'Hola  \n@Analista revisá esto', 'Hola\\\n@Analista revisá esto']) {
     const count = posts.length;
     await input.fill(text); await send.click();
     await expect(page.getByRole('alert')).toContainText('cada @ pendiente');

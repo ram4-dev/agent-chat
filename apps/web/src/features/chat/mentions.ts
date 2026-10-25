@@ -69,6 +69,7 @@ function mentionIntents(text: string): Intent[] {
   }
   function walk(node: MarkdownNode, base = 0, alt = false) {
     if (node.type === 'definition') return;
+    if (node.type === 'break') { visible += '\n'; return; }
     const offset = base + (node.position?.start.offset ?? 0);
     const end = base + (node.position?.end.offset ?? 0);
     if ((node.type === 'image' || node.type === 'imageReference') && node.position) {
