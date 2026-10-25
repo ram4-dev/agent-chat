@@ -28,3 +28,12 @@
 - Adapted existing E2E run: 15 passed, 1 managed-only skipped, 1 focus expectation needed adjustment because the new direct identity trigger remains mounted.
 - Focus regression now checks restoration to the retained identity trigger AND fallback to main after revocation removes its trigger. Canonical keyboard suite: 4 passed, 7.9s; no increased timeout or retry.
 - Other workers still active. Full combined suites and cloud receipt checks remain pending.
+
+## Second integrated delivery
+
+- Mobile/docs source daae038e607d07b8cb5ed1c2a1b63dc3f8b1f620 cherry-picked as b71f0b6.
+- Canonical Markdown/OpenAPI/skills remain compatible; human docs now use local traced assets and escaped limited-dialect rendering. Native modal contract remains intact; Button/Field are compatible exports.
+- Combined agents + mobile/docs lint, typecheck and build passed.
+- Combined browser run (mobile-docs, agent-guided-setup, accessibility, keyboard-regressions, focus-handoff and ui-redesign): 24 passed, 24.2s, canonical SQLite under shared port lock.
+- Independent read-only review task recorded in review-round-1.json targets exact snapshot b71f0b6. Findings pending; no whole-change approval claimed.
+- Chat and group/unread implementation workers remain active. No PR or production deployment yet.
