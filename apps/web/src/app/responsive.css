@@ -2551,3 +2551,13 @@ button {
   margin: 0;
   flex: none;
 }
+
+.mention-help{font-size:12px;color:#657860;margin:0 0 8px;line-height:1.5}
+.mention-targets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.mention-targets button{border:1px solid #bccfb3;background:#edf4e7;border-radius:16px;padding:5px 9px;color:#365f42;cursor:pointer;max-width:100%;overflow-wrap:anywhere}
+.mention-targets small{opacity:.7}
+.mention-options{max-height:220px;overflow:auto;border:1px solid #c9d7c0;border-radius:10px;background:#fff;padding:4px;margin-bottom:8px}
+.mention-options button{display:flex;flex-direction:column;width:100%;text-align:left;border:0;background:none;padding:9px;border-radius:6px;cursor:pointer;overflow-wrap:anywhere}
+.mention-options button[aria-selected=true],.mention-options button:hover{background:#edf4e7}
+.mention-options span,.mention-options p,.message-targets{font-size:11px;color:#657860}
+.mention-options button:focus-visible,.mention-targets button:focus-visible{outline:2px solid #365f42;outline-offset:2px}

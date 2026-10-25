@@ -58,6 +58,7 @@ export function registerMessageRoutes(app: FastifyInstance, { auth, messaging, h
             groupId: request.params.groupId,
             text: body.value.text,
             idempotencyKey: body.value.idempotencyKey,
+            ...(body.value.mentionedAgentIds ? { mentionedAgentIds: body.value.mentionedAgentIds } : {}),
         });
         // A replayed send already fanned out once; publishing again would show
         // the same message twice in every open socket.

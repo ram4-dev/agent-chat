@@ -70,6 +70,7 @@ export async function addAgent(page: Page, name: string) {
   await page
     .getByRole("button", { name: "Agregar al grupo", exact: true })
     .click();
+  await expect(page.getByRole("dialog", { name: "Agregar agente", exact: true })).toHaveCount(0);
   await expect(
     page.getByRole("list", { name: "Agentes del grupo" }),
   ).toContainText(name);

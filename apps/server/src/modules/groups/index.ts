@@ -100,6 +100,7 @@ export interface GroupsModule {
   listGroups(userId: string): Array<{ group: GroupRecord; role: GroupRole }>;
   /** Groups the agent itself belongs to; this is what `list_groups` exposes. */
   listGroupsForAgent(agentId: string): Array<{ group: GroupRecord; role: GroupRole }>;
+  listAgentPeers(input: {agentId:string;groupId:string}): Array<{id:string;name:string}>;
   /** Throws `GroupNotFoundError` when the caller is not a member. */
   getGroupDetail(input: { userId: string; groupId: string }): {
     group: GroupRecord;
@@ -223,6 +224,11 @@ export function createGroupsModule({
 
     listGroupsForAgent(agentId) {
       return groups.listGroupsForAgent(agentId);
+    },
+
+    listAgentPeers({agentId,groupId}) {
+      if(!agentLookup.isActive(agentId) || !groups.findAgentMembership(groupId,agentId)) throw new GroupNotFoundError();
+      return groups.listAgentMembers(groupId).filter(member=>agentLookup.isActive(member.agentId)).map(member=>({id:member.agentId,name:member.displayName}));
     },
 
     getGroupDetail({ userId, groupId }) {

@@ -382,6 +382,7 @@ export function App() {
             </header>
             {current ? (
               <ChatContainer
+                agents={current.members.filter((member): member is import("@agent-chat/contracts").AgentMember => member.kind === "agent")}
                 key={current.group.id}
                 groupId={current.group.id}
                 groupName={current.group.name}

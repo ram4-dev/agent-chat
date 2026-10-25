@@ -1,9 +1,12 @@
 import type { ServerResponse } from 'node:http';
 import type { FastifyInstance } from 'fastify';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { z } from 'zod';
+import { DomainError } from '../../modules/errors.js';
+import { sendError } from '../http/error-envelope.js';
 import { DOMAIN_ERROR_CODES } from '@agent-chat/contracts';
 import type { JWK } from 'jose';
-import { AGENT_SCOPES } from '../../modules/agents/index.js';
+import { ALL_AGENT_SCOPES } from '../../modules/agents/index.js';
 import { createMcpAuthenticator, McpUnauthenticated, type AgentCredential } from './auth.js';
 import { createMcpServer, type McpServices } from './server.js';
 
@@ -35,9 +38,30 @@ export async function registerMcpRoutes(app: FastifyInstance, options: McpRoutes
   app.get('/.well-known/oauth-protected-resource', () => ({
     resource: audience,
     authorization_servers: [issuer],
-    scopes_supported: ['openid', ...AGENT_SCOPES],
+    scopes_supported: ['openid', ...ALL_AGENT_SCOPES],
     bearer_methods_supported: ['header'],
   }));
+
+  app.post('/agent/configuration/notifications', async (request, reply) => {
+    reply.header('cache-control', 'private, no-store');
+    try {
+      const principal = await authorize(request.headers.authorization);
+      if (services.nativeAccess?.classify(principal.connectionId) || !principal.scopes.includes('agent:manage')) return sendError(reply, 403, 'forbidden');
+      const input = z.object({platform:z.enum(['grokbot','generic']),url:z.string().max(2048),secret:z.string().min(8).max(4096)}).strict().safeParse(request.body);
+      if (!input.success) return sendError(reply, 400, 'invalid_input');
+      if (!services.notifications) return sendError(reply, 409, 'conflict');
+      const { agent } = await services.agents.resolveActiveConnection(principal.connectionId);
+      await services.notifications.configure(agent.ownerUserId, principal.agentId, {...input.data,connectionId:principal.connectionId});
+      await services.notifications.probe(agent.ownerUserId, principal.agentId);
+      await services.notifications.dispatch();
+      return services.notifications.status(principal);
+    } catch (error) {
+      if (error instanceof McpUnauthenticated) return sendError(reply, 401, 'unauthenticated');
+      if (error instanceof DomainError) return sendError(reply, error.statusCode, error.code);
+      request.log.error('Private agent notification configuration failed');
+      return sendError(reply, 503, 'temporarily_unavailable');
+    }
+  });
 
   await app.register(async (scope) => {
     scope.removeAllContentTypeParsers();

@@ -142,7 +142,7 @@ export function createServices(database: DatabaseHandle): LocalApplicationServic
         groupRepository.findHumanMembership(groupId, userId)?.role,
       agentRoleFor: (groupId, agentId) => groupRepository.agentRoleFor(groupId, agentId),
       agentRecipientsOf: (groupId) =>
-        groupRepository.listAgentMembers(groupId).map((member) => member.agentId),
+        groupRepository.listAgentMembers(groupId).map((member) => member.agentId).filter((id) => agents.isActiveAgent(id)),
     },
     clock: SYSTEM_CLOCK,
     generateId: () => generateUuidV7(),

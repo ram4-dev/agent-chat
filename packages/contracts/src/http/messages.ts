@@ -14,6 +14,7 @@ export interface MessageView {
   groupId: string;
   author: MessageAuthor;
   text: string;
+  mentionedAgentIds?: string[];
   createdAt: string;
 }
 
@@ -26,6 +27,7 @@ export const MESSAGE_PATHS = {
 } as const;
 
 export interface SendMessageRequest {
+  mentionedAgentIds?: string[];
   text: string;
   idempotencyKey: string;
 }
@@ -87,7 +89,19 @@ export function parseSendMessageRequest(body: unknown): Parsed<SendMessageReques
     return key;
   }
 
-  return { ok: true, value: { text: text.value, idempotencyKey: key.value } };
+  const mentions = parseMentionedAgentIds(body['mentionedAgentIds']);
+  if (!mentions.ok) return mentions;
+  return { ok: true, value: { text: text.value, idempotencyKey: key.value,
+    ...(mentions.value.length ? { mentionedAgentIds: mentions.value } : {}) } };
+}
+
+/** Explicit recipient IDs avoid ambiguous display names and incidental email addresses. */
+export function parseMentionedAgentIds(raw: unknown): Parsed<string[]> {
+  if (raw === undefined) return { ok: true, value: [] };
+  if (!Array.isArray(raw) || raw.length > 20 || raw.some(id => typeof id !== 'string' || !id.trim() || id.length > 128)) {
+    return { ok: false, reason: 'mentionedAgentIds:invalid' };
+  }
+  return { ok: true, value: [...new Set(raw as string[])].sort() };
 }
 
 /** Bounded page size: a caller cannot ask for the whole conversation. */
@@ -137,6 +151,8 @@ export function parseMessageView(raw: unknown): Parsed<MessageView> {
     }
   }
 
+  const mentions = parseMentionedAgentIds(raw['mentionedAgentIds']);
+  if (!mentions.ok) return mentions;
   const author = parseMessageAuthor(raw['author']);
   if (!author.ok) {
     return author;
@@ -149,6 +165,7 @@ export function parseMessageView(raw: unknown): Parsed<MessageView> {
       groupId: raw['groupId'] as string,
       author: author.value,
       text: raw['text'] as string,
+      ...(mentions.value.length ? { mentionedAgentIds: mentions.value } : {}),
       createdAt: raw['createdAt'] as string,
     },
   };

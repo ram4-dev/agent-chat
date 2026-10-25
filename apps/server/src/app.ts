@@ -63,7 +63,7 @@ export async function createApp({ config, database, oauthStore, health, budget, 
     const authorize = createMcpAuthenticator({ publicJwk: toPublicJwk(jwks.keys[0]), issuer: config.publicOrigin, audience: config.publicOrigin, agents: services.agents });
     app.addHook('onRequest', async (request, reply) => {
         const path = request.url.split('?')[0]!;
-        if (!(path.startsWith('/api/') || path.startsWith('/native/') || path.startsWith('/internal/') || path.startsWith('/ws/') || ['/mcp', '/auth', '/token', '/reg'].includes(path)))
+        if (!(path.startsWith('/api/') || path.startsWith('/native/') || path.startsWith('/agent/') || path.startsWith('/internal/') || path.startsWith('/ws/') || ['/mcp', '/auth', '/token', '/reg'].includes(path)))
             return;
         let key = `ip:${request.ip}`;
         let max: number = RATE_LIMITS.UNAUTHENTICATED_IP;

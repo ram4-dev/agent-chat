@@ -10,6 +10,10 @@ export function restoreFocus(previous: HTMLElement | null) {
       !element.matches(":disabled") &&
       element.getClientRects().length > 0 &&
       getComputedStyle(element).visibility !== "hidden";
+    // A user may already be typing in another control before this frame runs.
+    // Preserve that newer focus rather than replaying the dialog's old trigger.
+    const current = document.activeElement as HTMLElement | null;
+    if (current !== previous && current !== document.body && current !== document.documentElement && available(current)) return;
     if (available(previous)) {
       previous.focus();
       return;

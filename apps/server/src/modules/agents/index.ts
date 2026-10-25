@@ -294,5 +294,5 @@ export function createAgentsModule({
   };
 }
 
-export { parseRequestedScopes, parseAgentProfile, AGENT_SCOPES, type AgentScope } from './contracts.js';
+export { parseRequestedScopes, parseAgentProfile, AGENT_SCOPES, ALL_AGENT_SCOPES, type AgentScope } from './contracts.js';
 export { AgentNotFoundError, AgentRevokedError, InvalidAgentInputError } from './errors.js';

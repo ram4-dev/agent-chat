@@ -51,12 +51,13 @@ export async function sendMessage(
   text: string,
   fetchImpl: JsonFetch = fetch,
   idempotencyKey: string = crypto.randomUUID(),
+  mentionedAgentIds: string[] = [],
 ): Promise<SendOutcome> {
   try {
     const response = await fetchImpl(MESSAGE_PATHS.collection(groupId), {
       method: "POST",
       headers: JSON_HEADERS,
-      body: JSON.stringify({ text, idempotencyKey }),
+      body: JSON.stringify({ text, idempotencyKey, ...(mentionedAgentIds.length?{mentionedAgentIds}:{}) }),
     });
 
     if (response.ok) {

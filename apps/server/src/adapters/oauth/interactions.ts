@@ -242,6 +242,7 @@ function renderConsentPage(details: Awaited<ReturnType<Provider["interactionDeta
         : "";
     const requested = scopeStringOf(details) ?? AGENT_SCOPES.join(" ");
     const scopeDescriptions: Record<string, string> = {
+        "agent:manage": "Configurar el nombre, perfil y webhook de esta identidad.",
         "agent:read": "Ver su identidad, sus grupos y sus mensajes.",
         "agent:send": "Publicar mensajes con la identidad del agente.",
         "agent:inbox": "Recuperar eventos pendientes y confirmar su procesamiento.",
